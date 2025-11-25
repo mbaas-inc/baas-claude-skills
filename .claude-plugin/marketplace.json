@@ -1,0 +1,26 @@
+{
+  "name": "baas-agent-skills",
+  "owner": {
+    "name": "jjunmo",
+    "email": "jjunmo@mbaas.kr"
+  },
+  "metadata": {
+    "description": "BaaS skills",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "account-skills",
+      "description": "BaaS account API",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./account/baas-account-info",
+        "./account/baas-common",
+        "./account/baas-login",
+        "./account/baas-logout",
+        "./account/baas-signup"
+      ]
+    }
+  ]
+}
