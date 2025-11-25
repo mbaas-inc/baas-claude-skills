@@ -1,29 +1,6 @@
 ---
 name: baas-account-info
-description: BaaS 계정 정보 조회 API 클라이언트
-category: account
-keywords:
-  - 내 정보
-  - 사용자 정보
-  - 프로필
-  - account info
-  - 유저 정보
-  - 계정 조회
-  - 현재 사용자
-  - 내 정보 조회
-  - user info
-  - profile
-  - 계정 정보
-templates:
-  - path: templates/account-info.ts
-    language: typescript
-    framework: vanilla
-  - path: templates/account-info.js
-    language: javascript
-    framework: vanilla
-  - path: templates/react/useAccountInfo.tsx
-    language: typescript
-    framework: react
+description: "(BaaS API) 계정정보 조회 API. 사용: 내 정보, 프로필 조회, user info"
 ---
 
 # BaaS 계정 정보 API

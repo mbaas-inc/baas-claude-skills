@@ -1,26 +1,6 @@
 ---
 name: baas-common
-description: BaaS API 공통 타입과 규칙 문서
-category: account
-keywords:
-  - BaaS 공통
-  - API 규칙
-  - 공통 타입
-  - 에러 코드
-  - BaaS API
-  - 응답 형식
-  - 인증 방식
-  - credentials include
-references:
-  - path: references/types.ts
-    type: typescript
-    description: 공통 TypeScript 타입 정의
-  - path: references/api-rules.md
-    type: markdown
-    description: API 통신 규칙 문서
-  - path: references/error-codes.md
-    type: markdown
-    description: 에러 코드 매핑 테이블
+description: "(BaaS API) 공통 타입과 API 규칙. 다른 BaaS 스킬과 함께 사용"
 ---
 
 # BaaS API 공통 규칙

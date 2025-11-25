@@ -1,26 +1,6 @@
 ---
 name: baas-logout
-description: BaaS 로그아웃 API 클라이언트
-category: account
-keywords:
-  - 로그아웃
-  - logout
-  - 로그아웃 기능
-  - sign out
-  - 로그아웃 코드
-  - 로그아웃 API
-  - 로그아웃 훅
-  - 인증 해제
-templates:
-  - path: templates/logout.ts
-    language: typescript
-    framework: vanilla
-  - path: templates/logout.js
-    language: javascript
-    framework: vanilla
-  - path: templates/react/useLogout.tsx
-    language: typescript
-    framework: react
+description: "(BaaS API) 로그아웃 API. 쿠키 삭제. 사용: 로그아웃 기능, sign out"
 ---
 
 # BaaS 로그아웃 API

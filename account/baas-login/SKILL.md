@@ -1,28 +1,6 @@
 ---
 name: baas-login
-description: BaaS 로그인 API 클라이언트
-category: account
-keywords:
-  - 로그인
-  - login
-  - 인증
-  - authentication
-  - JWT
-  - 로그인 기능
-  - 로그인 코드
-  - sign in
-  - 로그인 API
-  - 로그인 훅
-templates:
-  - path: templates/login.ts
-    language: typescript
-    framework: vanilla
-  - path: templates/login.js
-    language: javascript
-    framework: vanilla
-  - path: templates/react/useLogin.tsx
-    language: typescript
-    framework: react
+description: "(BaaS API) 로그인 API. JWT 쿠키 자동 설정. 사용: 로그인 기능, 로그인 코드, sign in"
 ---
 
 # BaaS 로그인 API

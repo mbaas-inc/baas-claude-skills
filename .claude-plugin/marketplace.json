@@ -21,6 +21,15 @@
         "./account/baas-logout",
         "./account/baas-signup"
       ]
+    },
+    {
+      "name": "account-integration-skills",
+      "description": "BaaS account API integration",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./account/baas-account-integrations"
+      ]
     }
   ]
 }
