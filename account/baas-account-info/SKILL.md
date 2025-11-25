@@ -1,6 +1,29 @@
 ---
 name: baas-account-info
-description: BaaS 계정 정보 API 클라이언트. "내 정보 조회", "계정 정보", "account info API", "React 유저 정보", "현재 사용자" 요청 시 활성화. 쿠키 기반 JWT 인증 필요. 순수 JS/TS와 React 훅 모두 제공.
+description: BaaS 계정 정보 조회 API 클라이언트
+category: account
+keywords:
+  - 내 정보
+  - 사용자 정보
+  - 프로필
+  - account info
+  - 유저 정보
+  - 계정 조회
+  - 현재 사용자
+  - 내 정보 조회
+  - user info
+  - profile
+  - 계정 정보
+templates:
+  - path: templates/account-info.ts
+    language: typescript
+    framework: vanilla
+  - path: templates/account-info.js
+    language: javascript
+    framework: vanilla
+  - path: templates/react/useAccountInfo.tsx
+    language: typescript
+    framework: react
 ---
 
 # BaaS 계정 정보 API

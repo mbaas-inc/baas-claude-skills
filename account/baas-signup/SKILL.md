@@ -1,6 +1,29 @@
 ---
 name: baas-signup
-description: BaaS 회원가입 API 클라이언트. "회원가입 기능", "회원가입 코드", "signup API", "React 회원가입" 요청 시 활성화. 이메일 형식 ID, 8자 이상 비밀번호 필수. 순수 JS/TS와 React 훅 모두 제공.
+description: BaaS 회원가입 API 클라이언트
+category: account
+keywords:
+  - 회원가입
+  - signup
+  - 가입
+  - 계정 생성
+  - register
+  - 회원 등록
+  - 회원가입 기능
+  - 회원가입 코드
+  - sign up
+  - 회원가입 API
+  - 회원가입 훅
+templates:
+  - path: templates/signup.ts
+    language: typescript
+    framework: vanilla
+  - path: templates/signup.js
+    language: javascript
+    framework: vanilla
+  - path: templates/react/useSignup.tsx
+    language: typescript
+    framework: react
 ---
 
 # BaaS 회원가입 API
