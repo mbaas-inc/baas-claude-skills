@@ -3,73 +3,66 @@
  *
  * 회원가입, 로그인, 로그아웃, 계정정보 조회를 모두 포함합니다.
  *
+ * 타입 정의: baas-common/references/types.ts 참조
+ *
  * 사용법:
  * import { signup, login, logout, getAccountInfo } from './auth';
+ *
+ * 환경변수 설정 필요:
+ * - BAAS_PROJECT_ID (Node.js)
+ * - REACT_APP_BAAS_PROJECT_ID (React CRA)
+ * - NEXT_PUBLIC_BAAS_PROJECT_ID (Next.js)
+ * - VITE_BAAS_PROJECT_ID (Vite)
  */
 
 // ============================================
 // 설정
 // ============================================
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = 'https://api.aiapp.link';
 
-// ============================================
-// 타입 정의
-// ============================================
+/**
+ * 환경변수에서 project_id를 가져옵니다.
+ */
+function getProjectId(): string {
+  const projectId =
+    process.env.BAAS_PROJECT_ID ||
+    process.env.REACT_APP_BAAS_PROJECT_ID ||
+    process.env.NEXT_PUBLIC_BAAS_PROJECT_ID ||
+    (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_BAAS_PROJECT_ID);
 
-/** 성공 응답 */
-interface SuccessResponse<T> {
-  result: 'SUCCESS';
-  data: T;
-  message?: string;
+  if (!projectId) {
+    throw new Error(
+      '[BaaS] project_id 환경변수 필요:\n' +
+      '  - BAAS_PROJECT_ID (Node.js)\n' +
+      '  - REACT_APP_BAAS_PROJECT_ID (React)\n' +
+      '  - NEXT_PUBLIC_BAAS_PROJECT_ID (Next.js)\n' +
+      '  - VITE_BAAS_PROJECT_ID (Vite)'
+    );
+  }
+  return projectId;
 }
 
-/** 에러 응답 */
-interface ErrorResponse {
-  result: 'FAIL';
-  errorCode: string;
-  message: string;
-}
+// ============================================
+// 타입 정의 (전체 타입은 baas-common/references/types.ts 참조)
+// ============================================
 
-type ApiResponse<T> = SuccessResponse<T> | ErrorResponse;
-
-/** 회원가입 요청 */
-export interface SignupRequest {
-  user_id: string;
-  user_pw: string;
-  name: string;
-  phone: string;
-  project_id?: string;
+/** 회원가입 추가 옵션 */
+interface SignupOptions {
   terms_agreed?: boolean;
   privacy_agreed?: boolean;
+  /** 추가 사용자 데이터 (확장 포인트) */
   data?: Record<string, unknown>;
 }
 
-/** 회원가입 응답 데이터 */
-export interface SignupResponse {
-  id: string;
-  user_id: string;
-  name: string;
-  phone: string;
-  is_profile_completed: boolean;
-  created_at: string;
-}
-
-/** 로그인 요청 */
-export interface LoginRequest {
-  user_id: string;
-  user_pw: string;
-  project_id?: string;
-}
-
 /** 토큰 응답 */
-export interface TokenResponse {
+interface TokenResponse {
   access_token: string;
   token_type: 'bearer';
 }
 
 /** 계정 정보 */
-export interface AccountInfo {
+interface AccountInfo {
   id: string;
   user_id: string;
   name: string;
@@ -87,29 +80,41 @@ export interface AccountInfo {
 /**
  * 회원가입
  *
- * @param data - 회원가입 정보
+ * @param userId - 로그인 ID (이메일 형식 권장)
+ * @param userPw - 비밀번호 (8자 이상)
+ * @param name - 이름
+ * @param phone - 전화번호
+ * @param options - 추가 옵션 (약관 동의, 확장 데이터)
  * @returns 생성된 계정 정보
  * @throws Error - 이미 존재하는 아이디, 유효성 검사 실패 등
  *
  * @example
- * const account = await signup({
- *   user_id: 'user@example.com',
- *   user_pw: 'password123',
- *   name: '홍길동',
- *   phone: '010-1234-5678'
- * });
+ * const account = await signup('user@example.com', 'password123', '홍길동', '010-1234-5678');
  */
-export async function signup(data: SignupRequest): Promise<SignupResponse> {
+export async function signup(
+  userId: string,
+  userPw: string,
+  name: string,
+  phone: string,
+  options: SignupOptions = {}
+): Promise<AccountInfo> {
   const response = await fetch(`${API_BASE_URL}/account/signup`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     credentials: 'include',
-    body: JSON.stringify(data),
+    body: JSON.stringify({
+      user_id: userId,
+      user_pw: userPw,
+      name,
+      phone,
+      project_id: getProjectId(),
+      ...options,
+    }),
   });
 
-  const result: ApiResponse<SignupResponse> = await response.json();
+  const result = await response.json();
 
   if (result.result !== 'SUCCESS') {
     throw new Error(result.message || '회원가입에 실패했습니다');
@@ -123,24 +128,29 @@ export async function signup(data: SignupRequest): Promise<SignupResponse> {
  *
  * 성공 시 서버가 쿠키에 JWT 토큰을 자동으로 설정합니다.
  *
- * @param data - 로그인 정보
+ * @param userId - 로그인 ID
+ * @param userPw - 비밀번호
  * @returns 토큰 정보
  * @throws Error - 아이디/비밀번호 불일치 등
  *
  * @example
- * await login({ user_id: 'user@example.com', user_pw: 'password123' });
+ * await login('user@example.com', 'password123');
  */
-export async function login(data: LoginRequest): Promise<TokenResponse> {
+export async function login(userId: string, userPw: string): Promise<TokenResponse> {
   const response = await fetch(`${API_BASE_URL}/account/login`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     credentials: 'include',
-    body: JSON.stringify(data),
+    body: JSON.stringify({
+      user_id: userId,
+      user_pw: userPw,
+      project_id: getProjectId(),
+    }),
   });
 
-  const result: ApiResponse<TokenResponse> = await response.json();
+  const result = await response.json();
 
   if (result.result !== 'SUCCESS') {
     throw new Error(result.message || '로그인에 실패했습니다');
@@ -168,7 +178,7 @@ export async function logout(): Promise<void> {
     credentials: 'include',
   });
 
-  const result: ApiResponse<null> = await response.json();
+  const result = await response.json();
 
   if (result.result !== 'SUCCESS') {
     throw new Error(result.message || '로그아웃에 실패했습니다');
@@ -191,10 +201,13 @@ export async function logout(): Promise<void> {
 export async function getAccountInfo(): Promise<AccountInfo> {
   const response = await fetch(`${API_BASE_URL}/account/info`, {
     method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
     credentials: 'include',
   });
 
-  const result: ApiResponse<AccountInfo> = await response.json();
+  const result = await response.json();
 
   if (result.result !== 'SUCCESS') {
     throw new Error(result.message || '계정 정보 조회에 실패했습니다');

@@ -1,6 +1,6 @@
 ---
 name: baas-account-integrations
-description: "(BaaS API) 회원 인증 통합 (회원가입, 로그인, 로그아웃, 계정정보). 사용: 인증 시스템, 로그인/회원가입 페이지, 회원관리, auth 구현"
+description: "(BaaS API) 회원 인증 통합 (회원가입, 로그인, 로그아웃, 계정정보). Use when: 인증 시스템 전체 구현, 로그인/회원가입 페이지 작성, 회원관리 기능, auth 모듈 필요 시"
 ---
 
 # BaaS 회원 인증 API
@@ -16,8 +16,13 @@ description: "(BaaS API) 회원 인증 통합 (회원가입, 로그인, 로그�
 
 ## 필수 설정
 
-- Base URL: `http://localhost:8000` (로컬) / `https://api.aiapp.link` (프로덕션)
+- Base URL: `https://api.aiapp.link`
 - 모든 요청에 `credentials: 'include'` 필수
+- **외부 에디터에서 project_id 환경변수 설정 필수**:
+  - `BAAS_PROJECT_ID` (Node.js)
+  - `REACT_APP_BAAS_PROJECT_ID` (React CRA)
+  - `NEXT_PUBLIC_BAAS_PROJECT_ID` (Next.js)
+  - `VITE_BAAS_PROJECT_ID` (Vite)
 
 ## 사용 예시
 
@@ -25,14 +30,14 @@ description: "(BaaS API) 회원 인증 통합 (회원가입, 로그인, 로그�
 ```typescript
 // templates/auth.ts 참조
 import { login } from './auth';
-await login({ user_id: 'user@example.com', user_pw: 'password123' });
+await login('user@example.com', 'password123');
 ```
 
 **요청: "React로 회원가입 폼 만들어줘"**
 ```tsx
 // templates/react/useSignup.tsx 참조
 const { signup, isLoading, error } = useSignup();
-await signup({ user_id, user_pw, name, phone });
+await signup('user@example.com', 'password123', '홍길동', '010-1234-5678');
 ```
 
 **요청: "인증 상태 확인하는 코드"**

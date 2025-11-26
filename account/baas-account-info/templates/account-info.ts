@@ -1,10 +1,19 @@
 /**
  * BaaS 계정 정보 API 클라이언트 (TypeScript)
  *
+ * 타입 정의: baas-common/references/types.ts 참조
+ * - AccountResponse, ApiResponse
+ *
  * 사용법:
  * const account = await getAccountInfo();
  * console.log(account.name);
  */
+
+// ============================================
+// 설정
+// ============================================
+
+const API_BASE_URL = 'https://api.aiapp.link';
 
 // ============================================
 // 타입 정의
@@ -20,26 +29,6 @@ interface AccountResponse {
   created_at: string;
   data: Record<string, unknown>;
 }
-
-interface SuccessResponse<T> {
-  result: 'SUCCESS';
-  data: T;
-  message?: string;
-}
-
-interface ErrorResponse {
-  result: 'FAIL';
-  errorCode: string;
-  message: string;
-}
-
-type ApiResponse<T> = SuccessResponse<T> | ErrorResponse;
-
-// ============================================
-// 설정
-// ============================================
-
-const API_BASE_URL = 'http://localhost:8000'; // 환경에 맞게 변경
 
 // ============================================
 // 계정 정보 조회 함수
@@ -70,7 +59,7 @@ export async function getAccountInfo(): Promise<AccountResponse> {
     credentials: 'include', // 쿠키 전송 (필수!)
   });
 
-  const result: ApiResponse<AccountResponse> = await response.json();
+  const result = await response.json();
 
   if (result.result !== 'SUCCESS') {
     throw new Error(result.message || '계정 정보를 가져올 수 없습니다');

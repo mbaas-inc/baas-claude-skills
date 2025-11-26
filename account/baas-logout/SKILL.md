@@ -1,6 +1,6 @@
 ---
 name: baas-logout
-description: "(BaaS API) 로그아웃 API. 쿠키 삭제. 사용: 로그아웃 기능, sign out"
+description: "(BaaS API) 로그아웃 API. 쿠키 삭제. Use when: 로그아웃 기능 구현, sign out 처리"
 ---
 
 # BaaS 로그아웃 API

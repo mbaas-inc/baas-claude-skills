@@ -1,12 +1,20 @@
 /**
  * BaaS 계정 정보 React Hook
  *
+ * 타입 정의: baas-common/references/types.ts 참조
+ *
  * 사용법:
  * const { data: account, isLoading, error, refetch } = useAccountInfo();
  * // account?.name
  */
 
 import { useState, useEffect, useCallback } from 'react';
+
+// ============================================
+// 설정
+// ============================================
+
+const API_BASE_URL = 'https://api.aiapp.link';
 
 // ============================================
 // 타입 정의
@@ -22,20 +30,6 @@ interface AccountResponse {
   created_at: string;
   data: Record<string, unknown>;
 }
-
-interface SuccessResponse<T> {
-  result: 'SUCCESS';
-  data: T;
-  message?: string;
-}
-
-interface ErrorResponse {
-  result: 'FAIL';
-  errorCode: string;
-  message: string;
-}
-
-type ApiResponse<T> = SuccessResponse<T> | ErrorResponse;
 
 interface UseAccountInfoOptions {
   /** 자동 조회 여부 (기본: true) */
@@ -60,12 +54,6 @@ interface UseAccountInfoReturn {
 }
 
 // ============================================
-// 설정
-// ============================================
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
-// ============================================
 // Hook 구현
 // ============================================
 
@@ -76,6 +64,7 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || process.env.NEXT_PUBLIC_AP
  * @returns {UseAccountInfoReturn} 계정 정보와 상태
  *
  * @example
+ * // 기본 사용법 - 마운트 시 자동 조회
  * function ProfilePage() {
  *   const { data: account, isLoading, error } = useAccountInfo();
  *
@@ -87,18 +76,42 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || process.env.NEXT_PUBLIC_AP
  *     <div>
  *       <h1>안녕하세요, {account.name}님!</h1>
  *       <p>이메일: {account.user_id}</p>
+ *       <p>가입일: {new Date(account.created_at).toLocaleDateString()}</p>
  *     </div>
  *   );
  * }
  *
  * @example
- * // 인증 실패 시 리다이렉트
+ * // 옵션 사용
  * function Dashboard() {
- *   const { data: account } = useAccountInfo({
- *     redirectOnUnauthorized: '/login'
+ *   const { data: account, isLoading, refetch } = useAccountInfo({
+ *     redirectOnUnauthorized: '/login',
+ *     onError: (error) => console.error('계정 조회 실패:', error)
  *   });
  *
- *   return <div>환영합니다, {account?.name}님</div>;
+ *   return (
+ *     <div>
+ *       {account && <span>환영합니다, {account.name}님</span>}
+ *       <button onClick={refetch}>새로고침</button>
+ *     </div>
+ *   );
+ * }
+ *
+ * @example
+ * // 수동 조회 (enabled: false)
+ * function ConditionalProfile() {
+ *   const { data: account, refetch } = useAccountInfo({ enabled: false });
+ *
+ *   const handleLoadProfile = async () => {
+ *     await refetch();
+ *   };
+ *
+ *   return (
+ *     <div>
+ *       <button onClick={handleLoadProfile}>프로필 불러오기</button>
+ *       {account && <p>이름: {account.name}</p>}
+ *     </div>
+ *   );
  * }
  */
 export function useAccountInfo(options: UseAccountInfoOptions = {}): UseAccountInfoReturn {
@@ -114,12 +127,16 @@ export function useAccountInfo(options: UseAccountInfoOptions = {}): UseAccountI
     try {
       const response = await fetch(`${API_BASE_URL}/account/info`, {
         method: 'GET',
-        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include', // 쿠키 전송 (필수!)
       });
 
-      const result: ApiResponse<AccountResponse> = await response.json();
+      const result = await response.json();
 
       if (result.result !== 'SUCCESS') {
+        // UNAUTHORIZED 에러 시 리다이렉트
         if (result.errorCode === 'UNAUTHORIZED' && redirectOnUnauthorized) {
           window.location.href = redirectOnUnauthorized;
           return null;
@@ -145,6 +162,7 @@ export function useAccountInfo(options: UseAccountInfoOptions = {}): UseAccountI
     setError(null);
   }, []);
 
+  // 마운트 시 자동 조회
   useEffect(() => {
     if (enabled) {
       fetchAccountInfo();

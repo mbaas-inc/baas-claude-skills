@@ -1,5 +1,7 @@
 # BaaS 회원 인증 API 스펙
 
+> **백엔드 동기화**: 2025-11-26 (예외 핸들링 리팩토링 반영)
+
 ## 목차
 
 1. [공통 설정](#공통-설정)
@@ -15,8 +17,7 @@
 
 ### Base URL
 ```
-로컬:      http://localhost:8000
-프로덕션:  https://api.aiapp.link
+https://api.aiapp.link
 ```
 
 ### 인증 방식
@@ -25,13 +26,53 @@
 - 쿠키명: `access_token` (관리자) / `access_token_{project_id}` (프로젝트 사용자)
 
 ### 응답 형식
-```typescript
-// 성공
-{ result: "SUCCESS", data: T, message?: string }
 
-// 실패
-{ result: "FAIL", errorCode: string, message: string }
+**성공 응답:**
+```typescript
+{
+  result: "SUCCESS",
+  data: T,
+  message?: string
+}
 ```
+
+**에러 응답 (메타데이터 포함):**
+```typescript
+{
+  result: "FAIL",
+  errorCode: string,       // 에러 코드
+  message: string,         // 사용자 친화적 메시지
+  timestamp?: string,      // 에러 발생 시간 (ISO 8601, KST)
+  request_id?: string,     // 요청 추적 UUID (디버깅용)
+  path?: string            // 요청 경로
+}
+```
+
+**검증 에러 응답 (VALIDATION_ERROR):**
+```typescript
+{
+  result: "FAIL",
+  errorCode: "VALIDATION_ERROR",
+  message: "요청 값이 올바르지 않습니다.",
+  detail?: Array<{
+    field: string,         // 필드명
+    reason: string         // 에러 사유
+  }>,
+  timestamp?: string,
+  request_id?: string,
+  path?: string
+}
+```
+
+### 외부 프로젝트 필수 설정
+
+회원가입/로그인 시 `project_id` 환경변수 설정 필수:
+- `BAAS_PROJECT_ID` (Node.js)
+- `REACT_APP_BAAS_PROJECT_ID` (React CRA)
+- `NEXT_PUBLIC_BAAS_PROJECT_ID` (Next.js)
+- `VITE_BAAS_PROJECT_ID` (Vite)
+
+템플릿의 `getProjectId()` 함수가 자동으로 환경변수에서 주입합니다.
 
 ---
 
@@ -50,10 +91,10 @@ interface SignupRequest {
   user_pw: string;       // 비밀번호 (8자 이상 필수)
   name: string;          // 이름 (최대 32자)
   phone: string;         // 전화번호 (예: "010-1234-5678")
-  project_id?: string;   // 프로젝트 ID (선택)
+  project_id: string;    // 환경변수에서 getProjectId()로 자동 주입
   terms_agreed?: boolean;
   privacy_agreed?: boolean;
-  data?: Record<string, unknown>;
+  data?: Record<string, unknown>;  // 확장 포인트
 }
 ```
 
@@ -81,6 +122,21 @@ interface SignupRequest {
 | `name` | 필수, 32자 이하 |
 | `phone` | 필수, 64자 이하 |
 
+### 에러 응답 예시
+```json
+{
+  "result": "FAIL",
+  "errorCode": "VALIDATION_ERROR",
+  "message": "요청 값이 올바르지 않습니다.",
+  "detail": [
+    { "field": "user_pw", "reason": "user_pw 필드는 최소 8자 이상이어야 합니다." }
+  ],
+  "timestamp": "2025-11-26T14:30:45.123456+09:00",
+  "request_id": "a1b2c3d4-e5f6-47g8-h9i0-j1k2l3m4n5o6",
+  "path": "/account/signup"
+}
+```
+
 ---
 
 ## 2. 로그인 API
@@ -96,7 +152,7 @@ interface SignupRequest {
 interface LoginRequest {
   user_id: string;
   user_pw: string;
-  project_id?: string;
+  project_id: string;    // 환경변수에서 getProjectId()로 자동 주입
 }
 ```
 
@@ -110,6 +166,18 @@ interface LoginRequest {
     token_type: "bearer"
   },
   message: "로그인 완료"
+}
+```
+
+### 에러 응답 예시
+```json
+{
+  "result": "FAIL",
+  "errorCode": "INVALID_USER",
+  "message": "비밀번호가 올바르지 않습니다.",
+  "timestamp": "2025-11-26T14:30:45.123456+09:00",
+  "request_id": "a1b2c3d4-e5f6-47g8-h9i0-j1k2l3m4n5o6",
+  "path": "/account/login"
 }
 ```
 
@@ -162,14 +230,53 @@ interface LoginRequest {
 }
 ```
 
+### 에러 응답 예시
+```json
+{
+  "result": "FAIL",
+  "errorCode": "UNAUTHORIZED",
+  "message": "로그인이 필요합니다.",
+  "timestamp": "2025-11-26T14:30:45.123456+09:00",
+  "request_id": "a1b2c3d4-e5f6-47g8-h9i0-j1k2l3m4n5o6",
+  "path": "/account/info"
+}
+```
+
 ---
 
 ## 에러 코드
 
-| ErrorCode | 설명 | 대응 |
-|-----------|------|------|
-| `INVALID_USER` | ID/PW 불일치 | 입력값 확인 안내 |
-| `UNAUTHORIZED` | 로그인 필요 | 로그인 페이지로 이동 |
-| `ALREADY_EXISTS` | 이미 존재하는 ID | 다른 아이디 입력 안내 |
-| `VALIDATION_ERROR` | 유효성 검사 실패 | 필드별 에러 메시지 표시 |
-| `NOT_FOUND` | 계정 없음 | 회원가입 안내 |
+### 회원 인증 관련
+
+| ErrorCode | HTTP | 설명 | 대응 |
+|-----------|------|------|------|
+| `INVALID_USER` | 400 | ID/PW 불일치 | 입력값 확인 안내 |
+| `UNAUTHORIZED` | 401 | 로그인 필요 | 로그인 페이지로 이동 |
+| `INVALID_TOKEN` | 401 | 잘못된 토큰 | 재로그인 |
+| `TOKEN_EXPIRED` | 401 | 토큰 만료 | 재로그인 |
+| `ALREADY_EXISTS` | 409 | 이미 존재하는 ID | 다른 아이디 입력 안내 |
+| `VALIDATION_ERROR` | 400 | 유효성 검사 실패 | 필드별 에러 메시지 표시 |
+| `NOT_FOUND` | 404 | 계정 없음 | 회원가입 안내 |
+| `INVALID_CODE` | 400 | 잘못된 인증 코드 | 코드 재입력 |
+| `MAX_ATTEMPTS_EXCEEDED` | 429 | 최대 시도 횟수 초과 | 일정 시간 대기 |
+| `EXPIRED` | 410 | 인증 만료 | 재시도 안내 |
+
+### 전체 에러 코드 참조
+
+상세한 에러 코드 목록과 처리 패턴은 [error-codes.md](../../baas-common/references/error-codes.md)를 참조하세요.
+
+---
+
+## 디버깅
+
+에러 발생 시 응답의 `request_id`를 활용하여 서버 로그를 추적할 수 있습니다:
+
+```typescript
+// 에러 처리 예시
+catch (error) {
+  if (error.request_id) {
+    console.error(`[${error.request_id}] ${error.errorCode}: ${error.message}`);
+    // 사용자에게 request_id 표시 (고객 지원용)
+  }
+}
+```

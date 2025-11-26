@@ -1,33 +1,17 @@
 /**
  * BaaS 로그아웃 API 클라이언트 (TypeScript)
  *
+ * 타입 정의: baas-common/references/types.ts 참조
+ *
  * 사용법:
  * await logout();
  */
 
 // ============================================
-// 타입 정의
-// ============================================
-
-interface SuccessResponse<T> {
-  result: 'SUCCESS';
-  data: T;
-  message?: string;
-}
-
-interface ErrorResponse {
-  result: 'FAIL';
-  errorCode: string;
-  message: string;
-}
-
-type ApiResponse<T> = SuccessResponse<T> | ErrorResponse;
-
-// ============================================
 // 설정
 // ============================================
 
-const API_BASE_URL = 'http://localhost:8000'; // 환경에 맞게 변경
+const API_BASE_URL = 'https://api.aiapp.link';
 
 // ============================================
 // 로그아웃 함수
@@ -53,7 +37,7 @@ export async function logout(): Promise<void> {
     credentials: 'include', // 쿠키 전송 (필수!)
   });
 
-  const result: ApiResponse<null> = await response.json();
+  const result = await response.json();
 
   if (result.result !== 'SUCCESS') {
     throw new Error(result.message || '로그아웃에 실패했습니다');

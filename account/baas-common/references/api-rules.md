@@ -4,10 +4,11 @@ BaaS(aiapp-service) API와 통신할 때 반드시 따라야 할 규칙입니다
 
 ## 1. Base URL
 
-| 환경 | URL |
-|------|-----|
-| 로컬 개발 | `http://localhost:8000` |
-| 프로덕션 | `https://api.aiapp.link` |
+```
+https://api.aiapp.link
+```
+
+**⚠️ 외부 에디터에서는 프로덕션 URL만 사용**
 
 ## 2. 인증 방식
 
@@ -75,12 +76,12 @@ headers: {
 
 ### TypeScript
 ```typescript
+const API_BASE_URL = 'https://api.aiapp.link';
+
 async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const API_BASE_URL = 'http://localhost:8000'; // 환경에 맞게 변경
-
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     credentials: 'include',
@@ -102,9 +103,9 @@ async function apiRequest<T>(
 
 ### JavaScript
 ```javascript
-async function apiRequest(endpoint, options = {}) {
-  const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = 'https://api.aiapp.link';
 
+async function apiRequest(endpoint, options = {}) {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     credentials: 'include',
@@ -124,16 +125,32 @@ async function apiRequest(endpoint, options = {}) {
 }
 ```
 
-## 7. 환경 변수 권장
+## 7. 외부 프로젝트 필수 설정
 
+**⚠️ 외부 에디터에서 BaaS API 사용 시 project_id 환경변수 설정 필수:**
+
+```bash
+# .env 파일
+BAAS_PROJECT_ID=your-project-uuid           # Node.js
+REACT_APP_BAAS_PROJECT_ID=your-project-uuid # React (CRA)
+NEXT_PUBLIC_BAAS_PROJECT_ID=your-project-uuid # Next.js
+VITE_BAAS_PROJECT_ID=your-project-uuid      # Vite
+```
+
+**getProjectId() 패턴:**
 ```javascript
-// .env 또는 환경 설정
-REACT_APP_API_URL=http://localhost:8000  // React
-NEXT_PUBLIC_API_URL=http://localhost:8000  // Next.js
-VITE_API_URL=http://localhost:8000  // Vite
+function getProjectId() {
+  const projectId =
+    process.env.BAAS_PROJECT_ID ||
+    process.env.REACT_APP_BAAS_PROJECT_ID ||
+    process.env.NEXT_PUBLIC_BAAS_PROJECT_ID ||
+    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_BAAS_PROJECT_ID);
 
-// 사용
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+  if (!projectId) {
+    throw new Error('[BaaS] project_id 환경변수 필요');
+  }
+  return projectId;
+}
 ```
 
 ## 8. CORS 주의사항

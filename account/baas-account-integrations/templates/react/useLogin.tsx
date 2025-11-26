@@ -1,45 +1,58 @@
 /**
  * BaaS 로그인 React Hook
  *
+ * 타입 정의: baas-common/references/types.ts 참조
+ *
  * 사용법:
  * const { login, isLoading, error, data } = useLogin();
- * await login({ user_id: 'user@example.com', user_pw: 'password123' });
+ * await login('user@example.com', 'password123');
+ *
+ * 환경변수 설정 필요:
+ * - REACT_APP_BAAS_PROJECT_ID (React CRA)
+ * - NEXT_PUBLIC_BAAS_PROJECT_ID (Next.js)
+ * - VITE_BAAS_PROJECT_ID (Vite)
  */
 
 import { useState, useCallback } from 'react';
 
 // ============================================
-// 타입 정의
+// 설정
 // ============================================
 
-interface LoginRequest {
-  user_id: string;
-  user_pw: string;
-  project_id?: string;
+const API_BASE_URL = 'https://api.aiapp.link';
+
+/**
+ * 환경변수에서 project_id를 가져옵니다.
+ */
+function getProjectId(): string {
+  const projectId =
+    process.env.REACT_APP_BAAS_PROJECT_ID ||
+    process.env.NEXT_PUBLIC_BAAS_PROJECT_ID ||
+    (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_BAAS_PROJECT_ID);
+
+  if (!projectId) {
+    throw new Error(
+      '[BaaS] project_id 환경변수 필요:\n' +
+      '  - REACT_APP_BAAS_PROJECT_ID (React)\n' +
+      '  - NEXT_PUBLIC_BAAS_PROJECT_ID (Next.js)\n' +
+      '  - VITE_BAAS_PROJECT_ID (Vite)'
+    );
+  }
+  return projectId;
 }
+
+// ============================================
+// 타입 정의
+// ============================================
 
 interface TokenResponse {
   access_token: string;
   token_type: 'bearer';
 }
 
-interface SuccessResponse<T> {
-  result: 'SUCCESS';
-  data: T;
-  message?: string;
-}
-
-interface ErrorResponse {
-  result: 'FAIL';
-  errorCode: string;
-  message: string;
-}
-
-type ApiResponse<T> = SuccessResponse<T> | ErrorResponse;
-
 interface UseLoginReturn {
   /** 로그인 함수 */
-  login: (data: LoginRequest) => Promise<TokenResponse>;
+  login: (userId: string, userPw: string) => Promise<TokenResponse>;
   /** 로딩 상태 */
   isLoading: boolean;
   /** 에러 메시지 */
@@ -51,17 +64,12 @@ interface UseLoginReturn {
 }
 
 // ============================================
-// 설정
-// ============================================
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
-// ============================================
 // Hook 구현
 // ============================================
 
 /**
  * BaaS 로그인 Hook
+ * project_id는 환경변수에서 자동 주입됩니다.
  *
  * @returns {UseLoginReturn} 로그인 함수와 상태
  *
@@ -74,7 +82,7 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || process.env.NEXT_PUBLIC_AP
  *   const handleSubmit = async (e: React.FormEvent) => {
  *     e.preventDefault();
  *     try {
- *       await login({ user_id: userId, user_pw: userPw });
+ *       await login(userId, userPw);
  *       window.location.href = '/dashboard';
  *     } catch (err) {
  *       // 에러는 error 상태로 자동 관리됨
@@ -98,7 +106,7 @@ export function useLogin(): UseLoginReturn {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<TokenResponse | null>(null);
 
-  const login = useCallback(async (loginData: LoginRequest): Promise<TokenResponse> => {
+  const login = useCallback(async (userId: string, userPw: string): Promise<TokenResponse> => {
     setIsLoading(true);
     setError(null);
 
@@ -108,11 +116,15 @@ export function useLogin(): UseLoginReturn {
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
-        body: JSON.stringify(loginData),
+        credentials: 'include', // 쿠키 자동 저장 (필수!)
+        body: JSON.stringify({
+          user_id: userId,
+          user_pw: userPw,
+          project_id: getProjectId(),
+        }),
       });
 
-      const result: ApiResponse<TokenResponse> = await response.json();
+      const result = await response.json();
 
       if (result.result !== 'SUCCESS') {
         throw new Error(result.message || '로그인에 실패했습니다');
@@ -138,4 +150,4 @@ export function useLogin(): UseLoginReturn {
   return { login, isLoading, error, data, reset };
 }
 
-export type { LoginRequest, TokenResponse, UseLoginReturn };
+export type { TokenResponse, UseLoginReturn };

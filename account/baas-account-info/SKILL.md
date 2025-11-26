@@ -1,6 +1,6 @@
 ---
 name: baas-account-info
-description: "(BaaS API) 계정정보 조회 API. 사용: 내 정보, 프로필 조회, user info"
+description: "(BaaS API) 계정정보 조회 API. Use when: 내 정보 조회, 프로필 표시, user info 필요 시"
 ---
 
 # BaaS 계정 정보 API

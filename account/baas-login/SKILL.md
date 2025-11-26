@@ -1,6 +1,6 @@
 ---
 name: baas-login
-description: "(BaaS API) 로그인 API. JWT 쿠키 자동 설정. 사용: 로그인 기능, 로그인 코드, sign in"
+description: "(BaaS API) 로그인 API. JWT 쿠키 자동 설정. Use when: 로그인 기능 구현, sign in 코드 작성, 인증 처리"
 ---
 
 # BaaS 로그인 API

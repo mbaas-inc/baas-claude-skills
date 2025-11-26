@@ -1,12 +1,20 @@
 /**
  * BaaS 계정 정보 React Hook
  *
+ * 타입 정의: baas-common/references/types.ts 참조
+ *
  * 사용법:
  * const { data: account, isLoading, error, refetch } = useAccountInfo();
  * // account?.name
  */
 
 import { useState, useEffect, useCallback } from 'react';
+
+// ============================================
+// 설정
+// ============================================
+
+const API_BASE_URL = 'https://api.aiapp.link';
 
 // ============================================
 // 타입 정의
@@ -22,20 +30,6 @@ interface AccountResponse {
   created_at: string;
   data: Record<string, unknown>;
 }
-
-interface SuccessResponse<T> {
-  result: 'SUCCESS';
-  data: T;
-  message?: string;
-}
-
-interface ErrorResponse {
-  result: 'FAIL';
-  errorCode: string;
-  message: string;
-}
-
-type ApiResponse<T> = SuccessResponse<T> | ErrorResponse;
 
 interface UseAccountInfoOptions {
   /** 자동 조회 여부 (기본: true) */
@@ -58,12 +52,6 @@ interface UseAccountInfoReturn {
   /** 상태 초기화 */
   reset: () => void;
 }
-
-// ============================================
-// 설정
-// ============================================
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 // ============================================
 // Hook 구현
@@ -145,7 +133,7 @@ export function useAccountInfo(options: UseAccountInfoOptions = {}): UseAccountI
         credentials: 'include', // 쿠키 전송 (필수!)
       });
 
-      const result: ApiResponse<AccountResponse> = await response.json();
+      const result = await response.json();
 
       if (result.result !== 'SUCCESS') {
         // UNAUTHORIZED 에러 시 리다이렉트

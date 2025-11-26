@@ -1,6 +1,8 @@
 /**
  * BaaS 로그아웃 React Hook
  *
+ * 타입 정의: baas-common/references/types.ts 참조
+ *
  * 사용법:
  * const { logout, isLoading } = useLogout();
  * await logout();
@@ -9,22 +11,14 @@
 import { useState, useCallback } from 'react';
 
 // ============================================
-// 타입 정의
+// 설정
 // ============================================
 
-interface SuccessResponse<T> {
-  result: 'SUCCESS';
-  data: T;
-  message?: string;
-}
+const API_BASE_URL = 'https://api.aiapp.link';
 
-interface ErrorResponse {
-  result: 'FAIL';
-  errorCode: string;
-  message: string;
-}
-
-type ApiResponse<T> = SuccessResponse<T> | ErrorResponse;
+// ============================================
+// 타입 정의
+// ============================================
 
 interface UseLogoutOptions {
   /** 로그아웃 성공 후 리다이렉트 URL */
@@ -47,12 +41,6 @@ interface UseLogoutReturn {
 }
 
 // ============================================
-// 설정
-// ============================================
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
-// ============================================
 // Hook 구현
 // ============================================
 
@@ -63,6 +51,7 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || process.env.NEXT_PUBLIC_AP
  * @returns {UseLogoutReturn} 로그아웃 함수와 상태
  *
  * @example
+ * // 기본 사용법
  * function LogoutButton() {
  *   const { logout, isLoading } = useLogout();
  *
@@ -84,7 +73,12 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || process.env.NEXT_PUBLIC_AP
  *   const { logout, isLoading } = useLogout({
  *     redirectTo: '/login',
  *     onSuccess: () => {
+ *       // 로컬 상태 정리
  *       localStorage.clear();
+ *       sessionStorage.clear();
+ *     },
+ *     onError: (error) => {
+ *       console.error('로그아웃 실패:', error);
  *     }
  *   });
  *
@@ -110,10 +104,10 @@ export function useLogout(options: UseLogoutOptions = {}): UseLogoutReturn {
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
+        credentials: 'include', // 쿠키 전송 (필수!)
       });
 
-      const result: ApiResponse<null> = await response.json();
+      const result = await response.json();
 
       if (result.result !== 'SUCCESS') {
         throw new Error(result.message || '로그아웃에 실패했습니다');

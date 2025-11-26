@@ -1,6 +1,6 @@
 ---
 name: baas-common
-description: "(BaaS API) 공통 타입과 API 규칙. 다른 BaaS 스킬과 함께 사용"
+description: "(BaaS API) 공통 타입과 API 규칙. 다른 BaaS 스킬과 함께 사용. Use when: BaaS API 통신 코드 작성, 에러 처리 구현, TypeScript 타입 필요 시"
 ---
 
 # BaaS API 공통 규칙
@@ -23,12 +23,36 @@ BaaS(aiapp-service) API와 통신할 때 반드시 따라야 할 공통 규칙�
   - 프로젝트 사용자: `access_token_{project_id}`
 
 ### 2. Base URL
+
 ```
-로컬:      http://localhost:8000
-프로덕션:  https://api.aiapp.link
+https://api.aiapp.link
 ```
 
-### 3. 응답 형식
+### 3. 외부 프로젝트 필수 설정
+
+**⚠️ 외부 에디터에서 BaaS API 사용 시 project_id 환경변수 설정 필수:**
+
+- `BAAS_PROJECT_ID` (Node.js)
+- `REACT_APP_BAAS_PROJECT_ID` (React CRA)
+- `NEXT_PUBLIC_BAAS_PROJECT_ID` (Next.js)
+- `VITE_BAAS_PROJECT_ID` (Vite)
+
+```javascript
+function getProjectId() {
+  const projectId =
+    process.env.BAAS_PROJECT_ID ||
+    process.env.REACT_APP_BAAS_PROJECT_ID ||
+    process.env.NEXT_PUBLIC_BAAS_PROJECT_ID ||
+    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_BAAS_PROJECT_ID);
+
+  if (!projectId) {
+    throw new Error('[BaaS] project_id 환경변수 필요');
+  }
+  return projectId;
+}
+```
+
+### 4. 응답 형식
 ```typescript
 // 성공
 { result: "SUCCESS", data: T, message?: string }
@@ -37,13 +61,15 @@ BaaS(aiapp-service) API와 통신할 때 반드시 따라야 할 공통 규칙�
 { result: "FAIL", errorCode: string, message: string }
 ```
 
-### 4. 공통 fetch 패턴
+### 5. 공통 fetch 패턴
 ```javascript
+const API_BASE_URL = 'https://api.aiapp.link';
+
 const response = await fetch(`${API_BASE_URL}/endpoint`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   credentials: 'include',  // 필수!
-  body: JSON.stringify(data)
+  body: JSON.stringify({ ...data, project_id: getProjectId() })
 });
 const result = await response.json();
 if (result.result !== 'SUCCESS') {

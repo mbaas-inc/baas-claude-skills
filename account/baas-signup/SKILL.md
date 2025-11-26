@@ -1,6 +1,6 @@
 ---
 name: baas-signup
-description: "(BaaS API) 회원가입 API. 사용: 회원가입 기능, 가입 폼, register, sign up"
+description: "(BaaS API) 회원가입 API. Use when: 회원가입 기능 구현, 가입 폼 작성, register, sign up"
 ---
 
 # BaaS 회원가입 API
