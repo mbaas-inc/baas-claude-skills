@@ -47,61 +47,6 @@ export interface ValidationErrorResponse extends Omit<ErrorResponse, 'errorCode'
 export type ApiResponse<T> = SuccessResponse<T> | ErrorResponse;
 
 // ============================================
-// 공통 엔티티 타입
-// ============================================
-
-/** 계정 정보 응답 */
-export interface AccountResponse {
-  id: string;                       // UUID
-  user_id: string;                  // 로그인 ID
-  name: string;                     // 이름
-  phone: string;                    // 전화번호
-  is_profile_completed: boolean;    // 프로필 완성 여부
-  last_logged_at: string | null;    // 마지막 로그인 (ISO 8601)
-  created_at: string;               // 생성일시 (ISO 8601)
-  data: Record<string, unknown>;    // 추가 데이터
-}
-
-/** 토큰 응답 */
-export interface TokenResponse {
-  access_token: string;
-  token_type: 'bearer';
-}
-
-// ============================================
-// 요청 타입
-// ============================================
-
-/** 로그인 요청 */
-export interface LoginRequest {
-  user_id: string;
-  user_pw: string;
-  /**
-   * 프로젝트 ID - 외부 에디터에서는 환경변수로 자동 주입 필수
-   * getProjectId() 함수 사용 권장
-   */
-  project_id: string;
-}
-
-/** 회원가입 요청 */
-export interface SignupRequest {
-  user_id: string;      // 이메일 형식 권장
-  user_pw: string;      // 8자 이상 필수
-  name: string;         // 최대 32자
-  phone: string;        // 예: "010-1234-5678", 최대 64자
-  /**
-   * 프로젝트 ID - 외부 에디터에서는 환경변수로 자동 주입 필수
-   * getProjectId() 함수 사용 권장
-   */
-  project_id: string;
-  is_reserved?: boolean;
-  terms_agreed?: boolean;
-  privacy_agreed?: boolean;
-  /** 추가 사용자 데이터 (확장 포인트) */
-  data?: Record<string, unknown>;
-}
-
-// ============================================
 // 에러 코드 (백엔드 동기화)
 // ============================================
 
