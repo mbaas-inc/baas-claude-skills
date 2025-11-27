@@ -263,7 +263,7 @@ interface LoginRequest {
 
 ### 전체 에러 코드 참조
 
-상세한 에러 코드 목록과 처리 패턴은 [error-codes.md](../../baas-common/references/error-codes.md)를 참조하세요.
+상세한 에러 코드 목록과 처리 패턴은 [error-codes.md](../../../baas-common/references/error-codes.md)를 참조하세요.
 
 ---
 
