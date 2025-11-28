@@ -11,7 +11,7 @@
   "plugins": [
     {
       "name": "baas-integration-skills",
-      "description": "BaaS API account integration",
+      "description": "BaaS API integration",
       "source": "./",
       "strict": false,
       "skills": [
