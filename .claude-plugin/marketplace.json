@@ -10,33 +10,12 @@
   },
   "plugins": [
     {
-      "name": "baas-common",
-      "description": "BaaS API common",
-      "source": "./",
-      "strict": false,
-      "skills": [
-        "./baas-common"
-      ]
-    },
-    {
-      "name": "baas-account-skills",
-      "description": "BaaS API account",
-      "source": "./",
-      "strict": false,
-      "skills": [
-        "./account/baas-account-info",
-        "./account/baas-login",
-        "./account/baas-logout",
-        "./account/baas-signup"
-      ]
-    },
-    {
-      "name": "baas-account-integration-skills",
+      "name": "baas-integration-skills",
       "description": "BaaS API account integration",
       "source": "./",
       "strict": false,
       "skills": [
-        "./account/baas-account-integrations"
+        "./baas-integration"
       ]
     }
   ]
