@@ -1,0 +1,9 @@
+{
+  "name": "baas-integration-skills",
+  "description": "BaaS API integration",
+  "source": "./",
+  "strict": false,
+  "skills": [
+    "./skills/baas-integration"
+  ]
+}

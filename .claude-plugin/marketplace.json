@@ -5,7 +5,7 @@
     "email": "jjunmo@mbaas.kr"
   },
   "metadata": {
-    "description": "BaaS skills",
+    "description": "BaaS API Skills for mBaaS AI Studio",
     "version": "1.0.0"
   },
   "plugins": [
@@ -15,7 +15,7 @@
       "source": "./",
       "strict": false,
       "skills": [
-        "./baas-integration"
+        "./skills/baas-integration"
       ]
     }
   ]
