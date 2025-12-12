@@ -275,3 +275,152 @@ export async function registerRecipient(request) {
 
   return result.data;
 }
+
+// ============================================
+// Board API 함수
+// ============================================
+
+/**
+ * 공지사항 목록 조회
+ *
+ * @param {Object} [options] - 조회 옵션
+ * @param {number} [options.offset=0] - 시작 위치
+ * @param {number} [options.limit=20] - 조회 개수
+ * @param {string} [options.keyword] - 검색어 (제목/내용)
+ * @returns {Promise<Object>} 공지사항 목록
+ *
+ * @example
+ * // 기본 조회
+ * const notices = await getNoticePosts();
+ *
+ * @example
+ * // 페이지네이션 및 검색
+ * const notices = await getNoticePosts({
+ *   offset: 0,
+ *   limit: 10,
+ *   keyword: '업데이트'
+ * });
+ */
+export async function getNoticePosts(options = {}) {
+  const params = new URLSearchParams();
+  if (options.offset !== undefined) params.append('offset', String(options.offset));
+  if (options.limit !== undefined) params.append('limit', String(options.limit));
+  if (options.keyword) params.append('keyword', options.keyword);
+
+  const queryString = params.toString();
+  const url = `${API_BASE_URL}/api/public/board/notice/${getProjectId()}/posts${queryString ? `?${queryString}` : ''}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '공지사항 목록 조회에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 공지사항 상세 조회
+ *
+ * @param {string} postId - 게시글 ID (UUID)
+ * @returns {Promise<Object>} 공지사항 상세 정보
+ *
+ * @example
+ * const notice = await getNoticePost('550e8400-e29b-41d4-a716-446655440000');
+ * console.log(notice.title, notice.content);
+ */
+export async function getNoticePost(postId) {
+  const response = await fetch(
+    `${API_BASE_URL}/api/public/board/notice/${getProjectId()}/posts/${postId}`,
+    {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    }
+  );
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '공지사항 조회에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * FAQ 목록 조회
+ *
+ * @param {Object} [options] - 조회 옵션
+ * @param {number} [options.offset=0] - 시작 위치
+ * @param {number} [options.limit=20] - 조회 개수
+ * @param {string} [options.keyword] - 검색어 (제목/내용)
+ * @returns {Promise<Object>} FAQ 목록 (title=질문)
+ *
+ * @example
+ * // 기본 조회
+ * const faqs = await getFaqPosts();
+ *
+ * @example
+ * // 검색
+ * const faqs = await getFaqPosts({ keyword: '배송' });
+ */
+export async function getFaqPosts(options = {}) {
+  const params = new URLSearchParams();
+  if (options.offset !== undefined) params.append('offset', String(options.offset));
+  if (options.limit !== undefined) params.append('limit', String(options.limit));
+  if (options.keyword) params.append('keyword', options.keyword);
+
+  const queryString = params.toString();
+  const url = `${API_BASE_URL}/api/public/board/faq/${getProjectId()}/posts${queryString ? `?${queryString}` : ''}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || 'FAQ 목록 조회에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * FAQ 상세 조회
+ *
+ * @param {string} postId - 게시글 ID (UUID)
+ * @returns {Promise<Object>} FAQ 상세 정보 (title=질문, content=답변)
+ *
+ * @example
+ * const faq = await getFaqPost('550e8400-e29b-41d4-a716-446655440000');
+ * console.log(`Q: ${faq.title}`);
+ * console.log(`A: ${faq.content}`);
+ */
+export async function getFaqPost(postId) {
+  const response = await fetch(
+    `${API_BASE_URL}/api/public/board/faq/${getProjectId()}/posts/${postId}`,
+    {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    }
+  );
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || 'FAQ 조회에 실패했습니다');
+  }
+
+  return result.data;
+}

@@ -1,11 +1,11 @@
 ---
 name: baas-integration
-description: "(BaaS API) 회원 인증 + 발송대상 통합. 제공 기능: 회원가입, 로그인, 로그아웃, 계정정보 조회, 발송대상(연락처) 등록. Use when: 로그인/회원가입 구현, 인증 시스템, 연락처 등록 폼, 예약 접수, 문의 등록, 뉴스레터 구독"
+description: "(BaaS API) 회원 인증 + 발송대상 + 게시판 통합. 제공 기능: 회원가입, 로그인, 로그아웃, 계정정보 조회, 발송대상(연락처) 등록, 공지사항/FAQ 조회. Use when: 로그인/회원가입 구현, 인증 시스템, 연락처 등록 폼, 예약 접수, 문의 등록, 뉴스레터 구독, 공지사항 페이지, FAQ 페이지"
 ---
 
 # BaaS API 통합 스킬
 
-회원 인증(Account)과 발송대상(Messaging) API를 모두 포함하는 통합 스킬입니다.
+회원 인증(Account), 발송대상(Messaging), 게시판(Board) API를 모두 포함하는 통합 스킬입니다.
 
 ## 제공 기능
 
@@ -16,6 +16,8 @@ description: "(BaaS API) 회원 인증 + 발송대상 통합. 제공 기능: 회
 | 로그아웃 | 인증 쿠키 삭제 |
 | 계정정보 조회 | 로그인된 사용자 정보 |
 | 발송대상 등록 | 연락처(이름, 전화번호) 등록 |
+| 공지사항 조회 | 공지사항 목록/상세 (인증 불필요) |
+| FAQ 조회 | FAQ 목록/상세 (인증 불필요) |
 
 ---
 
@@ -30,6 +32,7 @@ description: "(BaaS API) 회원 인증 + 발송대상 통합. 제공 기능: 회
 |------------|---------------|--------------|
 | 회원가입, 로그인, 로그아웃, 인증 | [references/account.md](references/account.md) | `templates/baas.ts` 또는 `react/useLogin.tsx` 등 |
 | 연락처 등록, 예약, 문의, 뉴스레터 | [references/messaging.md](references/messaging.md) | `templates/baas.ts` 또는 `react/useRecipient.tsx` |
+| 공지사항, FAQ, 게시판 | [references/board.md](references/board.md) | `templates/baas.ts` 또는 `react/useNotice.tsx`, `react/useFaq.tsx` |
 
 ---
 
@@ -46,6 +49,12 @@ description: "(BaaS API) 회원 인증 + 발송대상 통합. 제공 기능: 회
 2. 전화번호 형식 검증 (`010-XXXX-XXXX`)
 3. **발송대상 등록** (`POST /recipient/{project_id}`)
 4. 등록 완료 응답 처리
+
+### 게시판 조회 흐름 (공지사항/FAQ)
+1. **목록 조회** (`GET /api/public/board/notice/{project_id}/posts`) - 인증 불필요
+2. 목록에서 게시글 선택
+3. **상세 조회** (`GET /api/public/board/notice/{project_id}/posts/{post_id}`) - 조회수 자동 증가
+4. 게시글 내용 렌더링
 
 ---
 
@@ -82,6 +91,14 @@ await login('user@example.com', 'password123');
 // 연락처 등록 폼
 const { register, isLoading, error } = useRecipient();
 await register({ name: '홍길동', phone: '010-1234-5678' });
+
+// 공지사항 목록
+const { posts, fetchPosts } = useNotice();
+await fetchPosts({ limit: 10 });
+
+// FAQ 상세 조회
+const { post, fetchPost } = useFaq();
+await fetchPost('post-uuid');
 ```
 
 ---
@@ -97,6 +114,8 @@ await register({ name: '홍길동', phone: '010-1234-5678' });
 | React 로그아웃 | `templates/react/useLogout.tsx` |
 | React 계정정보 | `templates/react/useAccountInfo.tsx` |
 | React 발송대상 | `templates/react/useRecipient.tsx` |
+| React 공지사항 | `templates/react/useNotice.tsx` |
+| React FAQ | `templates/react/useFaq.tsx` |
 | React 통합 export | `templates/react/index.tsx` |
 
 ---
@@ -106,3 +125,4 @@ await register({ name: '홍길동', phone: '010-1234-5678' });
 - [공통 설정](references/common.md) - Base URL, 인증, 응답형식, 에러코드
 - [Account API](references/account.md) - 회원가입, 로그인, 로그아웃, 계정정보
 - [Messaging API](references/messaging.md) - 발송대상 등록
+- [Board API](references/board.md) - 공지사항, FAQ 조회

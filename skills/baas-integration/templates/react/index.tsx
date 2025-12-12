@@ -28,3 +28,23 @@ export type { UseAccountInfoOptions, UseAccountInfoReturn } from './useAccountIn
 // Messaging Hooks
 export { useRecipient } from './useRecipient';
 export type { RecipientCreateRequest, RecipientResponse, UseRecipientReturn } from './useRecipient';
+
+// Board Hooks
+export { useNotice } from './useNotice';
+export type {
+  FileResponse,
+  PostListItem,
+  PostListResponse,
+  PostResponse,
+  PostFetchOptions,
+  UseNoticeReturn
+} from './useNotice';
+
+export { useFaq } from './useFaq';
+export type {
+  FaqListItem,
+  FaqListResponse,
+  FaqResponse,
+  FaqFetchOptions,
+  UseFaqReturn
+} from './useFaq';

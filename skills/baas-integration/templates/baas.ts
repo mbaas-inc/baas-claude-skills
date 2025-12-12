@@ -71,6 +71,58 @@ interface AccountInfo {
 }
 
 // ============================================
+// 타입 정의 - Board
+// ============================================
+
+/** 첨부파일 응답 */
+interface FileResponse {
+  id: number;
+  file_name: string;
+  url: string;
+}
+
+/** 게시글 목록 아이템 */
+interface PostListItem {
+  id: string;
+  title: string;
+  views: number;
+  recommends: number;
+  author_name: string;
+  is_hidden: boolean;
+  created_at: string;
+}
+
+/** 게시글 목록 응답 */
+interface PostListResponse {
+  items: PostListItem[];
+  total_count: number;
+  offset: number;
+  limit: number;
+}
+
+/** 게시글 상세 응답 */
+interface PostResponse {
+  id: string;
+  board_id: string;
+  title: string;
+  content: string;
+  views: number;
+  recommends: number;
+  author_id: string;
+  author_name: string;
+  created_at: string;
+  updated_at: string | null;
+  attachments: FileResponse[];
+}
+
+/** 게시글 조회 옵션 */
+interface PostFetchOptions {
+  offset?: number;
+  limit?: number;
+  keyword?: string;
+}
+
+// ============================================
 // 타입 정의 - Messaging
 // ============================================
 
@@ -329,6 +381,149 @@ export async function registerRecipient(request: RecipientCreateRequest): Promis
 }
 
 // ============================================
+// Board API 함수
+// ============================================
+
+/**
+ * 공지사항 목록 조회
+ *
+ * @param options - 조회 옵션 (페이지네이션, 검색)
+ * @returns 공지사항 목록
+ *
+ * @example
+ * // 기본 조회
+ * const notices = await getNoticePosts();
+ *
+ * @example
+ * // 페이지네이션 및 검색
+ * const notices = await getNoticePosts({
+ *   offset: 0,
+ *   limit: 10,
+ *   keyword: '업데이트'
+ * });
+ */
+export async function getNoticePosts(options: PostFetchOptions = {}): Promise<PostListResponse> {
+  const params = new URLSearchParams();
+  if (options.offset !== undefined) params.append('offset', String(options.offset));
+  if (options.limit !== undefined) params.append('limit', String(options.limit));
+  if (options.keyword) params.append('keyword', options.keyword);
+
+  const queryString = params.toString();
+  const url = `${API_BASE_URL}/api/public/board/notice/${getProjectId()}/posts${queryString ? `?${queryString}` : ''}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '공지사항 목록 조회에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 공지사항 상세 조회
+ *
+ * @param postId - 게시글 ID (UUID)
+ * @returns 공지사항 상세 정보
+ *
+ * @example
+ * const notice = await getNoticePost('550e8400-e29b-41d4-a716-446655440000');
+ * console.log(notice.title, notice.content);
+ */
+export async function getNoticePost(postId: string): Promise<PostResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/public/board/notice/${getProjectId()}/posts/${postId}`,
+    {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    }
+  );
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '공지사항 조회에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * FAQ 목록 조회
+ *
+ * @param options - 조회 옵션 (페이지네이션, 검색)
+ * @returns FAQ 목록 (title=질문)
+ *
+ * @example
+ * // 기본 조회
+ * const faqs = await getFaqPosts();
+ *
+ * @example
+ * // 검색
+ * const faqs = await getFaqPosts({ keyword: '배송' });
+ */
+export async function getFaqPosts(options: PostFetchOptions = {}): Promise<PostListResponse> {
+  const params = new URLSearchParams();
+  if (options.offset !== undefined) params.append('offset', String(options.offset));
+  if (options.limit !== undefined) params.append('limit', String(options.limit));
+  if (options.keyword) params.append('keyword', options.keyword);
+
+  const queryString = params.toString();
+  const url = `${API_BASE_URL}/api/public/board/faq/${getProjectId()}/posts${queryString ? `?${queryString}` : ''}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || 'FAQ 목록 조회에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * FAQ 상세 조회
+ *
+ * @param postId - 게시글 ID (UUID)
+ * @returns FAQ 상세 정보 (title=질문, content=답변)
+ *
+ * @example
+ * const faq = await getFaqPost('550e8400-e29b-41d4-a716-446655440000');
+ * console.log(`Q: ${faq.title}`);
+ * console.log(`A: ${faq.content}`);
+ */
+export async function getFaqPost(postId: string): Promise<PostResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/public/board/faq/${getProjectId()}/posts/${postId}`,
+    {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    }
+  );
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || 'FAQ 조회에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+// ============================================
 // 타입 export
 // ============================================
 
@@ -337,5 +532,10 @@ export type {
   TokenResponse,
   AccountInfo,
   RecipientCreateRequest,
-  RecipientResponse
+  RecipientResponse,
+  FileResponse,
+  PostListItem,
+  PostListResponse,
+  PostResponse,
+  PostFetchOptions
 };
