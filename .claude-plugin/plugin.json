@@ -1,8 +1,7 @@
 {
   "name": "baas-integration-skills",
   "description": "BaaS API integration",
-  "source": "./",
-  "strict": false,
+  "version": "1.0.0",
   "skills": [
     "./skills/baas-integration"
   ]
