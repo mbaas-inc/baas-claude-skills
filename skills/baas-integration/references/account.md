@@ -165,15 +165,9 @@ interface LoginRequest {
 
 ---
 
-## 에러 응답 요약
+## 에러 코드
 
-| 상황 | errorCode | message |
-|------|-----------|---------|
-| 이메일 중복 | `ALREADY_EXISTS` | "이미 가입된 이메일입니다" |
-| 로그인 실패 | `INVALID_USER` | "아이디 또는 비밀번호가 일치하지 않습니다" |
-| 미가입 계정 | `NOT_FOUND` | "가입되지 않은 계정입니다" |
-| 토큰 만료 | `TOKEN_EXPIRED` | "세션이 만료되었습니다. 다시 로그인해주세요" |
-| 인증 필요 | `UNAUTHORIZED` | "로그인이 필요합니다" |
+> 에러 코드 전체 목록은 [common.md](common.md#에러-코드)를 참조하세요.
 
 ---
 

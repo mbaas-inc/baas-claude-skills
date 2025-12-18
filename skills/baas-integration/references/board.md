@@ -135,6 +135,27 @@ interface NoticeDetailParams {
 }
 ```
 
+### 응답 JSON 예시
+```json
+{
+  "result": "SUCCESS",
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "board_id": "660e8400-e29b-41d4-a716-446655440000",
+    "title": "시스템 점검 안내",
+    "content": "<p>2024년 1월 20일 02:00 ~ 06:00 시스템 점검이 예정되어 있습니다.</p>",
+    "views": 151,
+    "recommends": 5,
+    "author_id": "770e8400-e29b-41d4-a716-446655440000",
+    "author_name": "관리자",
+    "created_at": "2024-01-15T09:00:00Z",
+    "updated_at": null,
+    "attachments": []
+  },
+  "message": "공지사항 상세 조회"
+}
+```
+
 ### 에러 응답 예시
 ```json
 {
@@ -184,6 +205,39 @@ interface FaqListParams {
     limit: number
   },
   message: "FAQ 목록 조회"
+}
+```
+
+### 응답 JSON 예시
+```json
+{
+  "result": "SUCCESS",
+  "data": {
+    "items": [
+      {
+        "id": "880e8400-e29b-41d4-a716-446655440000",
+        "title": "배송은 얼마나 걸리나요?",
+        "views": 230,
+        "recommends": 12,
+        "author_name": "관리자",
+        "is_hidden": false,
+        "created_at": "2024-01-05T10:00:00Z"
+      },
+      {
+        "id": "880e8400-e29b-41d4-a716-446655440001",
+        "title": "교환/환불은 어떻게 하나요?",
+        "views": 185,
+        "recommends": 8,
+        "author_name": "관리자",
+        "is_hidden": false,
+        "created_at": "2024-01-03T14:00:00Z"
+      }
+    ],
+    "total_count": 15,
+    "offset": 0,
+    "limit": 20
+  },
+  "message": "FAQ 목록 조회"
 }
 ```
 
@@ -238,6 +292,27 @@ interface FaqDetailParams {
     }>
   },
   message: "FAQ 상세 조회"
+}
+```
+
+### 응답 JSON 예시
+```json
+{
+  "result": "SUCCESS",
+  "data": {
+    "id": "880e8400-e29b-41d4-a716-446655440000",
+    "board_id": "990e8400-e29b-41d4-a716-446655440000",
+    "title": "배송은 얼마나 걸리나요?",
+    "content": "<p>주문 후 영업일 기준 2~3일 내에 배송됩니다. 도서산간 지역은 1~2일 추가 소요될 수 있습니다.</p>",
+    "views": 231,
+    "recommends": 12,
+    "author_id": "770e8400-e29b-41d4-a716-446655440000",
+    "author_name": "관리자",
+    "created_at": "2024-01-05T10:00:00Z",
+    "updated_at": "2024-01-10T15:30:00Z",
+    "attachments": []
+  },
+  "message": "FAQ 상세 조회"
 }
 ```
 
