@@ -1,11 +1,55 @@
 ---
 name: baas-integration
 description: "(BaaS API) 회원 인증 + 발송대상 + 게시판 통합. 제공 기능: 회원가입, 로그인, 로그아웃, 계정정보 조회, 발송대상(연락처) 등록, 공지사항/FAQ 조회. Use when: 로그인/회원가입 구현, 인증 시스템, 연락처 등록 폼, 예약 접수, 문의 등록, 뉴스레터 구독, 공지사항 페이지, FAQ 페이지"
+version: 5.1
 ---
 
 # BaaS API 통합 스킬
 
 회원 인증(Account), 발송대상(Messaging), 게시판(Board) API를 모두 포함하는 통합 스킬입니다.
+
+---
+
+## 빠른 시작
+
+### 필수 설정
+- **Base URL**: `https://api.aiapp.link`
+- **인증 방식**: 쿠키 기반 JWT (`credentials: 'include'` 필수)
+- **환경변수**: 프레임워크에 맞게 설정
+  - React CRA: `REACT_APP_BAAS_PROJECT_ID`
+  - Next.js: `NEXT_PUBLIC_BAAS_PROJECT_ID`
+  - Vite: `VITE_BAAS_PROJECT_ID`
+
+### 템플릿 사용법
+
+1. `templates/react/` 폴더를 프로젝트에 복사
+2. 환경변수 설정 (`.env` 파일)
+3. 훅을 import해서 컴포넌트 로직 작성
+
+> **중요**: 훅은 **API 호출 + 상태관리**만 제공합니다.
+> UI 컴포넌트와 연결 로직은 직접 작성하세요.
+
+```tsx
+import { useLogin } from './hooks/baas';
+
+function LoginPage() {
+  const { login, isLoading, error } = useLogin();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    await login({ email, password });
+  };
+
+  // UI는 직접 작성
+  return (
+    <form onSubmit={handleSubmit}>
+      {/* 폼 UI */}
+    </form>
+  );
+}
+```
+
+---
 
 ## 제공 기능
 

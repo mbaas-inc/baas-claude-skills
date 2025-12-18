@@ -7,12 +7,7 @@
  */
 
 import { useState, useCallback } from 'react';
-
-// ============================================
-// 설정
-// ============================================
-
-const API_BASE_URL = 'https://api.aiapp.link';
+import { BASE_URL } from './config';
 
 // ============================================
 // 타입 정의
@@ -93,7 +88,7 @@ export function useLogout(options: UseLogoutOptions = {}): UseLogoutReturn {
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/account/logout`, {
+      const response = await fetch(`${BASE_URL}/account/logout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

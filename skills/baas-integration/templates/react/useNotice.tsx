@@ -11,32 +11,7 @@
  */
 
 import { useState, useCallback } from 'react';
-
-// ============================================
-// 설정
-// ============================================
-
-const API_BASE_URL = 'https://api.aiapp.link';
-
-/**
- * 환경변수에서 project_id를 가져옵니다.
- */
-function getProjectId(): string {
-  const projectId =
-    process.env.REACT_APP_BAAS_PROJECT_ID ||
-    process.env.NEXT_PUBLIC_BAAS_PROJECT_ID ||
-    (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_BAAS_PROJECT_ID);
-
-  if (!projectId) {
-    throw new Error(
-      '[BaaS] project_id 환경변수 필요:\n' +
-      '  - REACT_APP_BAAS_PROJECT_ID (React)\n' +
-      '  - NEXT_PUBLIC_BAAS_PROJECT_ID (Next.js)\n' +
-      '  - VITE_BAAS_PROJECT_ID (Vite)'
-    );
-  }
-  return projectId;
-}
+import { BASE_URL, getProjectId } from './config';
 
 // ============================================
 // 타입 정의
@@ -176,7 +151,7 @@ export function useNotice(): UseNoticeReturn {
       if (options.keyword) params.append('keyword', options.keyword);
 
       const queryString = params.toString();
-      const url = `${API_BASE_URL}/public/board/notice/${getProjectId()}/posts${queryString ? `?${queryString}` : ''}`;
+      const url = `${BASE_URL}/public/board/notice/${getProjectId()}/posts${queryString ? `?${queryString}` : ''}`;
 
       const response = await fetch(url, {
         method: 'GET',
@@ -207,7 +182,7 @@ export function useNotice(): UseNoticeReturn {
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/public/board/notice/${getProjectId()}/posts/${postId}`,
+        `${BASE_URL}/public/board/notice/${getProjectId()}/posts/${postId}`,
         {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },

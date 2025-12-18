@@ -7,12 +7,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-
-// ============================================
-// 설정
-// ============================================
-
-const API_BASE_URL = 'https://api.aiapp.link';
+import { BASE_URL } from './config';
 
 // ============================================
 // 타입 정의
@@ -104,7 +99,7 @@ export function useAccountInfo(options: UseAccountInfoOptions = {}): UseAccountI
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/account/info`, {
+      const response = await fetch(`${BASE_URL}/account/info`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

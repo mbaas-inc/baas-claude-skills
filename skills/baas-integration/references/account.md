@@ -162,3 +162,29 @@ interface LoginRequest {
   "message": "로그인이 필요합니다."
 }
 ```
+
+---
+
+## 에러 코드
+
+> 에러 코드 전체 목록은 [common.md](common.md#에러-코드)를 참조하세요.
+
+---
+
+## phone 필드 검증
+
+전화번호는 `010-XXXX-XXXX` 형식이어야 합니다.
+
+검증 함수는 `templates/react/utils.ts`의 `validatePhone()`을 참고하세요.
+
+```typescript
+import { validatePhone, formatPhone } from './utils';
+
+// 검증
+if (!validatePhone(phone)) {
+  alert('전화번호 형식을 확인해주세요.');
+}
+
+// 포맷팅 (입력 시 자동 하이픈)
+const formatted = formatPhone('01012345678'); // "010-1234-5678"
+```

@@ -12,6 +12,10 @@
  * - VITE_BAAS_PROJECT_ID (Vite)
  */
 
+// Config & Utils
+export { BASE_URL, getProjectId } from './config';
+export { validatePhone, formatPhone } from './utils';
+
 // Account Hooks
 export { useLogin } from './useLogin';
 export type { TokenResponse, UseLoginReturn } from './useLogin';
