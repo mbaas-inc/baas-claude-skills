@@ -49,6 +49,39 @@ interface NoticeListParams {
 }
 ```
 
+### 응답 JSON 예시
+```json
+{
+  "result": "SUCCESS",
+  "data": {
+    "items": [
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "title": "시스템 점검 안내",
+        "views": 150,
+        "recommends": 5,
+        "author_name": "관리자",
+        "is_hidden": false,
+        "created_at": "2024-01-15T09:00:00Z"
+      },
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440001",
+        "title": "서비스 이용약관 변경 안내",
+        "views": 89,
+        "recommends": 2,
+        "author_name": "관리자",
+        "is_hidden": false,
+        "created_at": "2024-01-10T14:30:00Z"
+      }
+    ],
+    "total_count": 25,
+    "offset": 0,
+    "limit": 20
+  },
+  "message": "공지사항 목록 조회"
+}
+```
+
 ### 에러 응답 예시
 ```json
 {

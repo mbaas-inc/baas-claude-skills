@@ -162,3 +162,35 @@ interface LoginRequest {
   "message": "로그인이 필요합니다."
 }
 ```
+
+---
+
+## 에러 응답 요약
+
+| 상황 | errorCode | message |
+|------|-----------|---------|
+| 이메일 중복 | `ALREADY_EXISTS` | "이미 가입된 이메일입니다" |
+| 로그인 실패 | `INVALID_USER` | "아이디 또는 비밀번호가 일치하지 않습니다" |
+| 미가입 계정 | `NOT_FOUND` | "가입되지 않은 계정입니다" |
+| 토큰 만료 | `TOKEN_EXPIRED` | "세션이 만료되었습니다. 다시 로그인해주세요" |
+| 인증 필요 | `UNAUTHORIZED` | "로그인이 필요합니다" |
+
+---
+
+## phone 필드 검증
+
+전화번호는 `010-XXXX-XXXX` 형식이어야 합니다.
+
+검증 함수는 `templates/react/utils.ts`의 `validatePhone()`을 참고하세요.
+
+```typescript
+import { validatePhone, formatPhone } from './utils';
+
+// 검증
+if (!validatePhone(phone)) {
+  alert('전화번호 형식을 확인해주세요.');
+}
+
+// 포맷팅 (입력 시 자동 하이픈)
+const formatted = formatPhone('01012345678'); // "010-1234-5678"
+```
