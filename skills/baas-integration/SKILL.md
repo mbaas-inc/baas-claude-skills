@@ -51,9 +51,9 @@ description: "(BaaS API) 회원 인증 + 발송대상 + 게시판 통합. 제공
 4. 등록 완료 응답 처리
 
 ### 게시판 조회 흐름 (공지사항/FAQ)
-1. **목록 조회** (`GET /api/public/board/notice/{project_id}/posts`) - 인증 불필요
+1. **목록 조회** (`GET /public/board/notice/{project_id}/posts`) - 인증 불필요
 2. 목록에서 게시글 선택
-3. **상세 조회** (`GET /api/public/board/notice/{project_id}/posts/{post_id}`) - 조회수 자동 증가
+3. **상세 조회** (`GET /public/board/notice/{project_id}/posts/{post_id}`) - 조회수 자동 증가
 4. 게시글 내용 렌더링
 
 ---

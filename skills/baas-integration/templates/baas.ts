@@ -409,7 +409,7 @@ export async function getNoticePosts(options: PostFetchOptions = {}): Promise<Po
   if (options.keyword) params.append('keyword', options.keyword);
 
   const queryString = params.toString();
-  const url = `${API_BASE_URL}/api/public/board/notice/${getProjectId()}/posts${queryString ? `?${queryString}` : ''}`;
+  const url = `${API_BASE_URL}/public/board/notice/${getProjectId()}/posts${queryString ? `?${queryString}` : ''}`;
 
   const response = await fetch(url, {
     method: 'GET',
@@ -438,7 +438,7 @@ export async function getNoticePosts(options: PostFetchOptions = {}): Promise<Po
  */
 export async function getNoticePost(postId: string): Promise<PostResponse> {
   const response = await fetch(
-    `${API_BASE_URL}/api/public/board/notice/${getProjectId()}/posts/${postId}`,
+    `${API_BASE_URL}/public/board/notice/${getProjectId()}/posts/${postId}`,
     {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
@@ -476,7 +476,7 @@ export async function getFaqPosts(options: PostFetchOptions = {}): Promise<PostL
   if (options.keyword) params.append('keyword', options.keyword);
 
   const queryString = params.toString();
-  const url = `${API_BASE_URL}/api/public/board/faq/${getProjectId()}/posts${queryString ? `?${queryString}` : ''}`;
+  const url = `${API_BASE_URL}/public/board/faq/${getProjectId()}/posts${queryString ? `?${queryString}` : ''}`;
 
   const response = await fetch(url, {
     method: 'GET',
@@ -506,7 +506,7 @@ export async function getFaqPosts(options: PostFetchOptions = {}): Promise<PostL
  */
 export async function getFaqPost(postId: string): Promise<PostResponse> {
   const response = await fetch(
-    `${API_BASE_URL}/api/public/board/faq/${getProjectId()}/posts/${postId}`,
+    `${API_BASE_URL}/public/board/faq/${getProjectId()}/posts/${postId}`,
     {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },

@@ -176,7 +176,7 @@ export function useNotice(): UseNoticeReturn {
       if (options.keyword) params.append('keyword', options.keyword);
 
       const queryString = params.toString();
-      const url = `${API_BASE_URL}/api/public/board/notice/${getProjectId()}/posts${queryString ? `?${queryString}` : ''}`;
+      const url = `${API_BASE_URL}/public/board/notice/${getProjectId()}/posts${queryString ? `?${queryString}` : ''}`;
 
       const response = await fetch(url, {
         method: 'GET',
@@ -207,7 +207,7 @@ export function useNotice(): UseNoticeReturn {
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/public/board/notice/${getProjectId()}/posts/${postId}`,
+        `${API_BASE_URL}/public/board/notice/${getProjectId()}/posts/${postId}`,
         {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
