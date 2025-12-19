@@ -64,7 +64,7 @@ function getProjectId() {
  * const account = await signup('user@example.com', 'password123', '홍길동', '010-1234-5678');
  */
 export async function signup(userId, userPw, name, phone, options = {}) {
-  const response = await fetch(`${API_BASE_URL}/account/signup`, {
+  const response = await fetch(`${API_BASE_URL}/account/signup-project`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',

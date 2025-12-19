@@ -170,7 +170,7 @@ export async function signup(
   phone: string,
   options: SignupOptions = {}
 ): Promise<AccountInfo> {
-  const response = await fetch(`${API_BASE_URL}/account/signup`, {
+  const response = await fetch(`${API_BASE_URL}/account/signup-project`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',

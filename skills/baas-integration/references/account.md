@@ -9,12 +9,13 @@
 
 ---
 
-## 1. 회원가입 API
+## 1. 회원가입 API (프로젝트 회원 전용)
 
 | 항목 | 값 |
 |------|-----|
-| Endpoint | `POST /account/signup` |
+| Endpoint | `POST /account/signup-project` |
 | 인증 | 불필요 |
+| 이메일 인증 | 불필요 |
 | Content-Type | `application/json` |
 
 ### 요청

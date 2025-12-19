@@ -108,7 +108,7 @@ export function useSignup(): UseSignupReturn {
     setError(null);
 
     try {
-      const response = await fetch(`${BASE_URL}/account/signup`, {
+      const response = await fetch(`${BASE_URL}/account/signup-project`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

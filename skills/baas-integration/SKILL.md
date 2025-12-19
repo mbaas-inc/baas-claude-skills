@@ -83,7 +83,7 @@ function LoginPage() {
 ## 워크플로우
 
 ### 회원 인증 흐름
-1. **회원가입** (`POST /account/signup`) - 계정 생성
+1. **회원가입** (`POST /account/signup-project`) - 프로젝트 회원 계정 생성 (이메일 인증 불필요)
 2. **로그인** (`POST /account/login`) - JWT 쿠키 자동 설정
 3. **인증 확인** (`GET /account/info`) - 로그인 상태 체크
 4. **로그아웃** (`POST /account/logout`) - 쿠키 삭제
