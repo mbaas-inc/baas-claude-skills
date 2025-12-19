@@ -28,13 +28,15 @@ import type {
  * project_id는 환경변수에서 자동 주입됩니다.
  *
  * FAQ는 title=질문, content=답변 구조입니다.
+ * 목록 조회 시 content가 포함되므로 별도 상세 조회 없이 아코디언 구현 가능합니다.
  *
  * @returns {UseFaqReturn} 조회 함수와 상태
  *
  * @example
+ * // FAQ 아코디언 (목록에서 바로 content 사용)
  * function FaqList() {
  *   const { posts, isLoading, error, fetchPosts } = useFaq();
- *   const [expandedId, setExpandedId] = useState(null);
+ *   const [expandedId, setExpandedId] = useState<string | null>(null);
  *
  *   useEffect(() => {
  *     fetchPosts();
@@ -50,26 +52,13 @@ import type {
  *           <button onClick={() => setExpandedId(expandedId === faq.id ? null : faq.id)}>
  *             Q: {faq.title}
  *           </button>
- *           {expandedId === faq.id && <FaqAnswer faqId={faq.id} />}
+ *           {expandedId === faq.id && (
+ *             <div className="faq-answer">
+ *               A: {faq.content}
+ *             </div>
+ *           )}
  *         </div>
  *       ))}
- *     </div>
- *   );
- * }
- *
- * @example
- * function FaqAnswer({ faqId }) {
- *   const { post, isLoading, fetchPost } = useFaq();
- *
- *   useEffect(() => {
- *     fetchPost(faqId);
- *   }, [faqId]);
- *
- *   if (isLoading) return <p>로딩 중...</p>;
- *
- *   return (
- *     <div className="faq-answer">
- *       <p>A: {post?.content}</p>
  *     </div>
  *   );
  * }
@@ -94,6 +83,36 @@ import type {
  *       <button onClick={handleSearch} disabled={isLoading}>
  *         검색
  *       </button>
+ *     </div>
+ *   );
+ * }
+ *
+ * @example
+ * // 카테고리별 필터링
+ * function FaqByCategory() {
+ *   const { posts, fetchPosts } = useFaq();
+ *
+ *   useEffect(() => {
+ *     fetchPosts();
+ *   }, []);
+ *
+ *   const categories = [...new Set(posts?.items.map(faq => faq.category_name) || [])];
+ *
+ *   return (
+ *     <div>
+ *       {categories.map(category => (
+ *         <section key={category}>
+ *           <h2>{category}</h2>
+ *           {posts?.items
+ *             .filter(faq => faq.category_name === category)
+ *             .map(faq => (
+ *               <div key={faq.id}>
+ *                 <strong>Q: {faq.title}</strong>
+ *                 <p>A: {faq.content}</p>
+ *               </div>
+ *             ))}
+ *         </section>
+ *       ))}
  *     </div>
  *   );
  * }

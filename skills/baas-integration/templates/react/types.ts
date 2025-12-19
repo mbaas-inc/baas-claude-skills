@@ -239,13 +239,16 @@ export interface UseNoticeReturn {
 // useFaq 타입
 // ============================================
 
-/** FAQ 목록 아이템 (title=질문) */
+/** FAQ 목록 아이템 (title=질문, content=답변) */
 export interface FaqListItem {
   id: string;
   title: string;
+  content: string;
   views: number;
   recommends: number;
   author_name: string;
+  category_id: string;
+  category_name: string;
   is_hidden: boolean;
   created_at: string;
 }

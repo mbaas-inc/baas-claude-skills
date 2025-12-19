@@ -141,9 +141,10 @@ await register({ name: '홍길동', phone: '010-1234-5678' });
 const { posts, fetchPosts } = useNotice();
 await fetchPosts({ limit: 10 });
 
-// FAQ 상세 조회
-const { post, fetchPost } = useFaq();
-await fetchPost('post-uuid');
+// FAQ 목록 (content 포함, 별도 상세 조회 불필요)
+const { posts, fetchPosts } = useFaq();
+await fetchPosts();
+// posts.items[].content 에서 답변 바로 접근 가능
 ```
 
 ---
