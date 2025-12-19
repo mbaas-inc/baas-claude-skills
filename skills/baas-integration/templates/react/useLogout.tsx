@@ -6,7 +6,7 @@
  * await logout();
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { BASE_URL } from './config';
 
 // ============================================
@@ -83,6 +83,14 @@ export function useLogout(options: UseLogoutOptions = {}): UseLogoutReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 콜백 refs - 최신 참조 유지 (불필요한 함수 재생성 방지)
+  const onSuccessRef = useRef(onSuccess);
+  const onErrorRef = useRef(onError);
+  useEffect(() => {
+    onSuccessRef.current = onSuccess;
+    onErrorRef.current = onError;
+  });
+
   const logout = useCallback(async (): Promise<void> => {
     setIsLoading(true);
     setError(null);
@@ -100,7 +108,7 @@ export function useLogout(options: UseLogoutOptions = {}): UseLogoutReturn {
         throw new Error(result.message || '로그아웃에 실패했습니다');
       }
 
-      onSuccess?.();
+      onSuccessRef.current?.();
 
       if (redirectTo) {
         window.location.href = redirectTo;
@@ -108,12 +116,12 @@ export function useLogout(options: UseLogoutOptions = {}): UseLogoutReturn {
     } catch (err) {
       const message = err instanceof Error ? err.message : '로그아웃에 실패했습니다';
       setError(message);
-      onError?.(err instanceof Error ? err : new Error(message));
+      onErrorRef.current?.(err instanceof Error ? err : new Error(message));
       throw err;
     } finally {
       setIsLoading(false);
     }
-  }, [redirectTo, onSuccess, onError]);
+  }, [redirectTo]);
 
   const reset = useCallback(() => {
     setIsLoading(false);

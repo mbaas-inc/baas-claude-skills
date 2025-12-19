@@ -6,7 +6,7 @@
  * // account?.name
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { BASE_URL } from './config';
 
 // ============================================
@@ -94,6 +94,12 @@ export function useAccountInfo(options: UseAccountInfoOptions = {}): UseAccountI
   const [isLoading, setIsLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
 
+  // 콜백 ref - 최신 참조 유지 (무한 루프 방지)
+  const onErrorRef = useRef(onError);
+  useEffect(() => {
+    onErrorRef.current = onError;
+  });
+
   const fetchAccountInfo = useCallback(async (): Promise<AccountResponse | null> => {
     setIsLoading(true);
     setError(null);
@@ -120,12 +126,12 @@ export function useAccountInfo(options: UseAccountInfoOptions = {}): UseAccountI
     } catch (err) {
       const message = err instanceof Error ? err.message : '계정 정보를 가져올 수 없습니다';
       setError(message);
-      onError?.(err instanceof Error ? err : new Error(message));
+      onErrorRef.current?.(err instanceof Error ? err : new Error(message));
       return null;
     } finally {
       setIsLoading(false);
     }
-  }, [redirectOnUnauthorized, onError]);
+  }, [redirectOnUnauthorized]);
 
   const reset = useCallback(() => {
     setData(null);
