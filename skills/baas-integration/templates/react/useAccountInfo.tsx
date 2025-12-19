@@ -8,43 +8,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { BASE_URL } from './config';
-
-// ============================================
-// 타입 정의
-// ============================================
-
-interface AccountResponse {
-  id: string;
-  user_id: string;
-  name: string;
-  phone: string;
-  is_profile_completed: boolean;
-  last_logged_at: string | null;
-  created_at: string;
-  data: Record<string, unknown>;
-}
-
-interface UseAccountInfoOptions {
-  /** 자동 조회 여부 (기본: true) */
-  enabled?: boolean;
-  /** 인증 실패 시 리다이렉트 URL */
-  redirectOnUnauthorized?: string;
-  /** 에러 발생 시 콜백 */
-  onError?: (error: Error) => void;
-}
-
-interface UseAccountInfoReturn {
-  /** 계정 데이터 */
-  data: AccountResponse | null;
-  /** 로딩 상태 */
-  isLoading: boolean;
-  /** 에러 메시지 */
-  error: string | null;
-  /** 데이터 재조회 */
-  refetch: () => Promise<AccountResponse | null>;
-  /** 상태 초기화 */
-  reset: () => void;
-}
+import type { AccountResponse, UseAccountInfoOptions, UseAccountInfoReturn } from './types';
 
 // ============================================
 // Hook 구현
@@ -147,5 +111,3 @@ export function useAccountInfo(options: UseAccountInfoOptions = {}): UseAccountI
 
   return { data, isLoading, error, refetch: fetchAccountInfo, reset };
 }
-
-export type { AccountResponse, UseAccountInfoOptions, UseAccountInfoReturn };

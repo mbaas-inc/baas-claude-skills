@@ -12,75 +12,13 @@
 
 import { useState, useCallback } from 'react';
 import { BASE_URL, getProjectId } from './config';
-
-// ============================================
-// 타입 정의
-// ============================================
-
-/** 첨부파일 응답 */
-interface FileResponse {
-  id: number;
-  file_name: string;
-  url: string;
-}
-
-/** 게시글 목록 아이템 */
-interface PostListItem {
-  id: string;
-  title: string;
-  views: number;
-  recommends: number;
-  author_name: string;
-  is_hidden: boolean;
-  created_at: string;
-}
-
-/** 게시글 목록 응답 */
-interface PostListResponse {
-  items: PostListItem[];
-  total_count: number;
-  offset: number;
-  limit: number;
-}
-
-/** 게시글 상세 응답 */
-interface PostResponse {
-  id: string;
-  board_id: string;
-  title: string;
-  content: string;
-  views: number;
-  recommends: number;
-  author_id: string;
-  author_name: string;
-  created_at: string;
-  updated_at: string | null;
-  attachments: FileResponse[];
-}
-
-/** 게시글 조회 옵션 */
-interface PostFetchOptions {
-  offset?: number;
-  limit?: number;
-  keyword?: string;
-}
-
-interface UseNoticeReturn {
-  /** 공지사항 목록 */
-  posts: PostListResponse | null;
-  /** 공지사항 상세 */
-  post: PostResponse | null;
-  /** 로딩 상태 */
-  isLoading: boolean;
-  /** 에러 메시지 */
-  error: string | null;
-  /** 공지사항 목록 조회 함수 */
-  fetchPosts: (options?: PostFetchOptions) => Promise<PostListResponse>;
-  /** 공지사항 상세 조회 함수 */
-  fetchPost: (postId: string) => Promise<PostResponse>;
-  /** 상태 초기화 */
-  reset: () => void;
-}
+import type {
+  PostListItem,
+  PostListResponse,
+  PostResponse,
+  PostFetchOptions,
+  UseNoticeReturn
+} from './types';
 
 // ============================================
 // Hook 구현
@@ -224,12 +162,3 @@ export function useNotice(): UseNoticeReturn {
     reset
   };
 }
-
-export type {
-  FileResponse,
-  PostListItem,
-  PostListResponse,
-  PostResponse,
-  PostFetchOptions,
-  UseNoticeReturn
-};

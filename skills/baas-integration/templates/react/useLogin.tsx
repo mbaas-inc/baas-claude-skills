@@ -13,28 +13,7 @@
 
 import { useState, useCallback } from 'react';
 import { BASE_URL, getProjectId } from './config';
-
-// ============================================
-// 타입 정의
-// ============================================
-
-interface TokenResponse {
-  access_token: string;
-  token_type: 'bearer';
-}
-
-interface UseLoginReturn {
-  /** 로그인 함수 */
-  login: (userId: string, userPw: string) => Promise<TokenResponse>;
-  /** 로딩 상태 */
-  isLoading: boolean;
-  /** 에러 메시지 */
-  error: string | null;
-  /** 토큰 데이터 */
-  data: TokenResponse | null;
-  /** 상태 초기화 */
-  reset: () => void;
-}
+import type { TokenResponse, UseLoginReturn } from './types';
 
 // ============================================
 // Hook 구현
@@ -120,5 +99,3 @@ export function useLogin(): UseLoginReturn {
 
   return { login, isLoading, error, data, reset };
 }
-
-export type { TokenResponse, UseLoginReturn };

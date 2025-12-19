@@ -12,75 +12,12 @@
 
 import { useState, useCallback } from 'react';
 import { BASE_URL, getProjectId } from './config';
-
-// ============================================
-// 타입 정의
-// ============================================
-
-/** 첨부파일 응답 */
-interface FileResponse {
-  id: number;
-  file_name: string;
-  url: string;
-}
-
-/** FAQ 목록 아이템 (title=질문) */
-interface FaqListItem {
-  id: string;
-  title: string;        // 질문
-  views: number;
-  recommends: number;
-  author_name: string;
-  is_hidden: boolean;
-  created_at: string;
-}
-
-/** FAQ 목록 응답 */
-interface FaqListResponse {
-  items: FaqListItem[];
-  total_count: number;
-  offset: number;
-  limit: number;
-}
-
-/** FAQ 상세 응답 (title=질문, content=답변) */
-interface FaqResponse {
-  id: string;
-  board_id: string;
-  title: string;        // 질문
-  content: string;      // 답변
-  views: number;
-  recommends: number;
-  author_id: string;
-  author_name: string;
-  created_at: string;
-  updated_at: string | null;
-  attachments: FileResponse[];
-}
-
-/** FAQ 조회 옵션 */
-interface FaqFetchOptions {
-  offset?: number;
-  limit?: number;
-  keyword?: string;
-}
-
-interface UseFaqReturn {
-  /** FAQ 목록 */
-  posts: FaqListResponse | null;
-  /** FAQ 상세 */
-  post: FaqResponse | null;
-  /** 로딩 상태 */
-  isLoading: boolean;
-  /** 에러 메시지 */
-  error: string | null;
-  /** FAQ 목록 조회 함수 */
-  fetchPosts: (options?: FaqFetchOptions) => Promise<FaqListResponse>;
-  /** FAQ 상세 조회 함수 */
-  fetchPost: (postId: string) => Promise<FaqResponse>;
-  /** 상태 초기화 */
-  reset: () => void;
-}
+import type {
+  FaqListResponse,
+  FaqResponse,
+  FaqFetchOptions,
+  UseFaqReturn
+} from './types';
 
 // ============================================
 // Hook 구현
@@ -251,12 +188,3 @@ export function useFaq(): UseFaqReturn {
     reset
   };
 }
-
-export type {
-  FileResponse,
-  FaqListItem,
-  FaqListResponse,
-  FaqResponse,
-  FaqFetchOptions,
-  UseFaqReturn
-};

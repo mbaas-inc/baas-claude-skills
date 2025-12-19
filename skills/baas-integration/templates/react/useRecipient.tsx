@@ -14,47 +14,7 @@
 import { useState, useCallback } from 'react';
 import { BASE_URL, getProjectId } from './config';
 import { validatePhone, formatPhone } from './utils';
-
-// ============================================
-// 타입 정의
-// ============================================
-
-/** 발송대상 등록 요청 */
-interface RecipientCreateRequest {
-  name: string;
-  phone: string;
-  description?: string;
-  metadata?: Record<string, unknown>;
-}
-
-/** 발송대상 응답 */
-interface RecipientResponse {
-  id: string;
-  project_id: string;
-  name: string;
-  phone: string;
-  description: string | null;
-  data: string;
-  created_at: string;
-  removed_at: string | null;
-}
-
-interface UseRecipientReturn {
-  /** 발송대상 등록 함수 */
-  register: (request: RecipientCreateRequest) => Promise<RecipientResponse>;
-  /** 로딩 상태 */
-  isLoading: boolean;
-  /** 에러 메시지 */
-  error: string | null;
-  /** 등록된 발송대상 데이터 */
-  data: RecipientResponse | null;
-  /** 상태 초기화 */
-  reset: () => void;
-  /** 전화번호 검증 */
-  validatePhone: (phone: string) => boolean;
-  /** 전화번호 포맷팅 */
-  formatPhone: (value: string) => string;
-}
+import type { RecipientCreateRequest, RecipientResponse, UseRecipientReturn } from './types';
 
 // ============================================
 // Hook 구현
@@ -184,5 +144,3 @@ export function useRecipient(): UseRecipientReturn {
     formatPhone
   };
 }
-
-export type { RecipientCreateRequest, RecipientResponse, UseRecipientReturn };

@@ -13,41 +13,7 @@
 
 import { useState, useCallback } from 'react';
 import { BASE_URL, getProjectId } from './config';
-
-// ============================================
-// 타입 정의
-// ============================================
-
-/** 회원가입 추가 옵션 */
-interface SignupOptions {
-  terms_agreed?: boolean;
-  privacy_agreed?: boolean;
-  data?: Record<string, unknown>;
-}
-
-interface AccountResponse {
-  id: string;
-  user_id: string;
-  name: string;
-  phone: string;
-  is_profile_completed: boolean;
-  last_logged_at: string | null;
-  created_at: string;
-  data: Record<string, unknown>;
-}
-
-interface UseSignupReturn {
-  /** 회원가입 함수 */
-  signup: (userId: string, userPw: string, name: string, phone: string, options?: SignupOptions) => Promise<AccountResponse>;
-  /** 로딩 상태 */
-  isLoading: boolean;
-  /** 에러 메시지 */
-  error: string | null;
-  /** 생성된 계정 데이터 */
-  data: AccountResponse | null;
-  /** 상태 초기화 */
-  reset: () => void;
-}
+import type { AccountResponse, SignupOptions, UseSignupReturn } from './types';
 
 // ============================================
 // Hook 구현
@@ -147,5 +113,3 @@ export function useSignup(): UseSignupReturn {
 
   return { signup, isLoading, error, data, reset };
 }
-
-export type { SignupOptions, AccountResponse, UseSignupReturn };

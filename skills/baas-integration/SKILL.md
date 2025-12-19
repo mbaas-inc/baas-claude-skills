@@ -1,5 +1,5 @@
 ---
-name: baas-integration
+name: baas-integration-type
 description: "(BaaS API) 회원 인증 + 발송대상 + 게시판 통합. 제공 기능: 회원가입, 로그인, 로그아웃, 계정정보 조회, 발송대상(연락처) 등록, 공지사항/FAQ 조회. Use when: 로그인/회원가입 구현, 인증 시스템, 연락처 등록 폼, 예약 접수, 문의 등록, 뉴스레터 구독, 공지사항 페이지, FAQ 페이지"
 metadata:
   version: "5.3"
@@ -154,6 +154,9 @@ await fetchPost('post-uuid');
 |------|------|
 | Vanilla TS | `templates/baas.ts` |
 | Vanilla JS | `templates/baas.js` |
+| React 타입 정의 | `templates/react/types.ts` |
+| React 설정 | `templates/react/config.ts` |
+| React 유틸리티 | `templates/react/utils.ts` |
 | React 로그인 | `templates/react/useLogin.tsx` |
 | React 회원가입 | `templates/react/useSignup.tsx` |
 | React 로그아웃 | `templates/react/useLogout.tsx` |
@@ -162,6 +165,26 @@ await fetchPost('post-uuid');
 | React 공지사항 | `templates/react/useNotice.tsx` |
 | React FAQ | `templates/react/useFaq.tsx` |
 | React 통합 export | `templates/react/index.tsx` |
+
+### React 템플릿 구조
+
+```
+templates/react/
+├── types.ts          # 모든 타입 정의 (중앙 집중식)
+├── config.ts         # BASE_URL, getProjectId 설정
+├── utils.ts          # 유틸리티 함수 (validatePhone, formatPhone)
+├── useLogin.tsx      # 로그인 훅
+├── useSignup.tsx     # 회원가입 훅
+├── useLogout.tsx     # 로그아웃 훅
+├── useAccountInfo.tsx # 계정정보 조회 훅
+├── useRecipient.tsx  # 발송대상 등록 훅
+├── useNotice.tsx     # 공지사항 조회 훅
+├── useFaq.tsx        # FAQ 조회 훅
+└── index.tsx         # 통합 export
+```
+
+> **타입 관리**: 모든 TypeScript 타입은 `types.ts`에 중앙 집중식으로 정의되어 있습니다.
+> 각 훅 파일은 `import type { ... } from './types'` 형태로 필요한 타입만 import합니다.
 
 ---
 

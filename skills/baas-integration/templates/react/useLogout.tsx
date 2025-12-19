@@ -8,30 +8,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { BASE_URL } from './config';
-
-// ============================================
-// 타입 정의
-// ============================================
-
-interface UseLogoutOptions {
-  /** 로그아웃 성공 후 리다이렉트 URL */
-  redirectTo?: string;
-  /** 로그아웃 성공 후 콜백 */
-  onSuccess?: () => void;
-  /** 로그아웃 실패 후 콜백 */
-  onError?: (error: Error) => void;
-}
-
-interface UseLogoutReturn {
-  /** 로그아웃 함수 */
-  logout: () => Promise<void>;
-  /** 로딩 상태 */
-  isLoading: boolean;
-  /** 에러 메시지 */
-  error: string | null;
-  /** 상태 초기화 */
-  reset: () => void;
-}
+import type { UseLogoutOptions, UseLogoutReturn } from './types';
 
 // ============================================
 // Hook 구현
@@ -130,5 +107,3 @@ export function useLogout(options: UseLogoutOptions = {}): UseLogoutReturn {
 
   return { logout, isLoading, error, reset };
 }
-
-export type { UseLogoutOptions, UseLogoutReturn };

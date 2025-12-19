@@ -16,39 +16,45 @@
 export { BASE_URL, getProjectId } from './config';
 export { validatePhone, formatPhone } from './utils';
 
-// Account Hooks
-export { useLogin } from './useLogin';
-export type { TokenResponse, UseLoginReturn } from './useLogin';
-
-export { useSignup } from './useSignup';
-export type { SignupOptions, AccountResponse, UseSignupReturn } from './useSignup';
-
-export { useLogout } from './useLogout';
-export type { UseLogoutOptions, UseLogoutReturn } from './useLogout';
-
-export { useAccountInfo } from './useAccountInfo';
-export type { UseAccountInfoOptions, UseAccountInfoReturn } from './useAccountInfo';
-
-// Messaging Hooks
-export { useRecipient } from './useRecipient';
-export type { RecipientCreateRequest, RecipientResponse, UseRecipientReturn } from './useRecipient';
-
-// Board Hooks
-export { useNotice } from './useNotice';
+// Types (중앙 집중식 타입 관리)
 export type {
+  // Account Types
+  TokenResponse,
+  AccountResponse,
+  SignupOptions,
+  UseLoginReturn,
+  UseSignupReturn,
+  UseLogoutOptions,
+  UseLogoutReturn,
+  UseAccountInfoOptions,
+  UseAccountInfoReturn,
+  // Messaging Types
+  RecipientCreateRequest,
+  RecipientResponse,
+  UseRecipientReturn,
+  // Board Types
   FileResponse,
   PostListItem,
   PostListResponse,
   PostResponse,
   PostFetchOptions,
-  UseNoticeReturn
-} from './useNotice';
-
-export { useFaq } from './useFaq';
-export type {
+  UseNoticeReturn,
   FaqListItem,
   FaqListResponse,
   FaqResponse,
   FaqFetchOptions,
   UseFaqReturn
-} from './useFaq';
+} from './types';
+
+// Account Hooks
+export { useLogin } from './useLogin';
+export { useSignup } from './useSignup';
+export { useLogout } from './useLogout';
+export { useAccountInfo } from './useAccountInfo';
+
+// Messaging Hooks
+export { useRecipient } from './useRecipient';
+
+// Board Hooks
+export { useNotice } from './useNotice';
+export { useFaq } from './useFaq';
