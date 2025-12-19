@@ -1,7 +1,8 @@
 ---
 name: baas-integration
 description: "(BaaS API) 회원 인증 + 발송대상 + 게시판 통합. 제공 기능: 회원가입, 로그인, 로그아웃, 계정정보 조회, 발송대상(연락처) 등록, 공지사항/FAQ 조회. Use when: 로그인/회원가입 구현, 인증 시스템, 연락처 등록 폼, 예약 접수, 문의 등록, 뉴스레터 구독, 공지사항 페이지, FAQ 페이지"
-version: 5.3
+metadata:
+  version: "5.3"
 ---
 
 # BaaS API 통합 스킬

@@ -141,7 +141,7 @@ export function useAccountInfo(options: UseAccountInfoOptions = {}): UseAccountI
 
   useEffect(() => {
     if (enabled) {
-      fetchAccountInfo();
+      void fetchAccountInfo();
     }
   }, [enabled, fetchAccountInfo]);
 
