@@ -32,7 +32,7 @@ export type {
   RecipientCreateRequest,
   RecipientResponse,
   UseRecipientReturn,
-  // Board Types
+  // Board Types (공지사항/FAQ)
   FileResponse,
   PostListItem,
   PostListResponse,
@@ -43,7 +43,24 @@ export type {
   FaqListResponse,
   FaqResponse,
   FaqFetchOptions,
-  UseFaqReturn
+  UseFaqReturn,
+  // Dynamic Board Types (FREE/REVIEW)
+  BoardPostListItem,
+  BoardPostListResponse,
+  BoardPostDetail,
+  BoardPostCreateRequest,
+  BoardPostUpdateRequest,
+  BoardPostFetchOptions,
+  BoardFileUploadResponse,
+  BoardReportCreateRequest,
+  BoardReportResponse,
+  UseBoardReturn,
+  BoardComment,
+  BoardCommentWithReplies,
+  BoardCommentListResponse,
+  BoardCommentCreateRequest,
+  BoardCommentUpdateRequest,
+  UseCommentsReturn
 } from './types';
 
 // Account Hooks
@@ -55,6 +72,10 @@ export { useAccountInfo } from './useAccountInfo';
 // Messaging Hooks
 export { useRecipient } from './useRecipient';
 
-// Board Hooks
+// Board Hooks (공지사항/FAQ)
 export { useNotice } from './useNotice';
 export { useFaq } from './useFaq';
+
+// Dynamic Board Hooks (FREE/REVIEW)
+export { useBoard } from './useBoard';
+export { useComments } from './useComments';

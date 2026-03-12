@@ -424,3 +424,388 @@ export async function getFaqPost(postId) {
 
   return result.data;
 }
+
+// ============================================
+// Dynamic Board API 함수 (FREE/REVIEW)
+// ============================================
+
+/**
+ * 동적 게시판 게시글 목록 조회 (인증 불필요)
+ *
+ * @param {string} boardId - 게시판 UUID (게시판 정보 JSON의 id)
+ * @param {Object} [options] - 조회 옵션
+ * @param {number} [options.offset=0] - 시작 위치
+ * @param {number} [options.limit=20] - 조회 개수
+ * @param {string} [options.keyword] - 검색어 (제목/내용)
+ * @returns {Promise<Object>} 게시글 목록
+ *
+ * @example
+ * const posts = await getBoardPosts('board-uuid', { limit: 10 });
+ */
+export async function getBoardPosts(boardId, options = {}) {
+  const params = new URLSearchParams();
+  if (options.offset !== undefined) params.append('offset', String(options.offset));
+  if (options.limit !== undefined) params.append('limit', String(options.limit));
+  if (options.keyword) params.append('keyword', options.keyword);
+
+  const queryString = params.toString();
+  const url = `${API_BASE_URL}/api/public/board/${getProjectId()}/${boardId}/posts${queryString ? `?${queryString}` : ''}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '게시글 목록 조회에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 게시글 상세 조회 (조회수 자동 증가)
+ *
+ * @param {string} postId - 게시글 UUID
+ * @returns {Promise<Object>} 게시글 상세 정보
+ *
+ * @example
+ * const post = await getBoardPostDetail('post-uuid');
+ */
+export async function getBoardPostDetail(postId) {
+  const response = await fetch(`${API_BASE_URL}/api/boards/posts/${postId}`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '게시글 조회에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 게시글 작성 (로그인 필수)
+ *
+ * @param {string} boardType - 게시판 타입 ('FREE' | 'REVIEW')
+ * @param {Object} data - 게시글 데이터
+ * @param {string} data.title - 제목
+ * @param {string} data.content - 내용
+ * @param {number[]} [data.file_ids] - 첨부파일 ID 목록
+ * @param {boolean} [data.is_hidden] - 숨김 여부
+ * @returns {Promise<Object>} 생성된 게시글
+ *
+ * @example
+ * const post = await createBoardPost('FREE', { title: '제목', content: '내용' });
+ */
+export async function createBoardPost(boardType, data) {
+  const response = await fetch(`${API_BASE_URL}/api/boards/${getProjectId()}/posts?type=${boardType}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(data),
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '게시글 작성에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 게시글 수정 (작성자만)
+ *
+ * @param {string} postId - 게시글 UUID
+ * @param {Object} data - 수정할 데이터
+ * @returns {Promise<Object>} 수정된 게시글
+ */
+export async function updateBoardPost(postId, data) {
+  const response = await fetch(`${API_BASE_URL}/api/boards/posts/${postId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(data),
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '게시글 수정에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 게시글 삭제 (작성자 또는 프로젝트 소유자)
+ *
+ * @param {string} postId - 게시글 UUID
+ * @returns {Promise<boolean>} 삭제 성공 여부
+ */
+export async function deleteBoardPost(postId) {
+  const response = await fetch(`${API_BASE_URL}/api/boards/posts/${postId}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '게시글 삭제에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 게시글 숨김 토글
+ *
+ * @param {string} postId - 게시글 UUID
+ * @param {boolean} isHidden - true=숨김, false=해제
+ * @returns {Promise<Object>} 숨김 처리된 게시글
+ */
+export async function toggleBoardPostHidden(postId, isHidden) {
+  const response = await fetch(`${API_BASE_URL}/api/boards/posts/${postId}/hidden`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ is_hidden: isHidden }),
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '숨김 처리에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 댓글 목록 조회
+ *
+ * @param {string} postId - 게시글 UUID
+ * @param {string} [sort='oldest'] - 정렬 ('oldest' | 'newest')
+ * @returns {Promise<Object>} 댓글 목록 (계층 구조)
+ *
+ * @example
+ * const comments = await getBoardComments('post-uuid');
+ * comments.items.forEach(c => {
+ *   console.log(c.author_name, c.content);
+ *   c.replies.forEach(r => console.log('  ↳', r.author_name, r.content));
+ * });
+ */
+export async function getBoardComments(postId, sort = 'oldest') {
+  const response = await fetch(`${API_BASE_URL}/api/boards/posts/${postId}/comments?sort=${sort}`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '댓글 목록 조회에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 댓글 작성 (로그인 필수)
+ *
+ * @param {string} postId - 게시글 UUID
+ * @param {Object} data - 댓글 데이터
+ * @param {string} data.content - 댓글 내용
+ * @param {string} [data.parent_id] - 부모 댓글 ID (대댓글인 경우)
+ * @returns {Promise<Object>} 생성된 댓글
+ *
+ * @example
+ * // 루트 댓글
+ * await createBoardComment('post-uuid', { content: '댓글 내용' });
+ *
+ * // 대댓글 (1레벨만 지원)
+ * await createBoardComment('post-uuid', { content: '답글', parent_id: 'comment-uuid' });
+ */
+export async function createBoardComment(postId, data) {
+  const response = await fetch(`${API_BASE_URL}/api/boards/posts/${postId}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(data),
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '댓글 작성에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 댓글 수정 (작성자만)
+ *
+ * @param {string} postId - 게시글 UUID
+ * @param {string} commentId - 댓글 UUID
+ * @param {Object} data - 수정할 내용
+ * @param {string} data.content - 수정할 댓글 내용
+ * @returns {Promise<Object>} 수정된 댓글
+ */
+export async function updateBoardComment(postId, commentId, data) {
+  const response = await fetch(`${API_BASE_URL}/api/boards/posts/${postId}/comments/${commentId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(data),
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '댓글 수정에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 댓글 삭제 (작성자 또는 프로젝트 소유자)
+ *
+ * @param {string} postId - 게시글 UUID
+ * @param {string} commentId - 댓글 UUID
+ * @returns {Promise<boolean>} 삭제 성공 여부
+ */
+export async function deleteBoardComment(postId, commentId) {
+  const response = await fetch(`${API_BASE_URL}/api/boards/posts/${postId}/comments/${commentId}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '댓글 삭제에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 댓글 숨김 토글
+ *
+ * @param {string} commentId - 댓글 UUID
+ * @param {boolean} isHidden - true=숨김, false=해제
+ * @returns {Promise<Object>} 숨김 처리된 댓글
+ */
+export async function toggleBoardCommentHidden(commentId, isHidden) {
+  const response = await fetch(`${API_BASE_URL}/api/boards/comments/${commentId}/hidden`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ is_hidden: isHidden }),
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '숨김 처리에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 게시판 파일 업로드 (로그인 필수, 10MB 제한)
+ *
+ * @param {File[]} files - 업로드할 파일 배열
+ * @returns {Promise<Object>} 업로드된 파일 정보
+ *
+ * @example
+ * const uploaded = await uploadBoardFiles([file1, file2]);
+ * const fileIds = uploaded.files.map(f => f.id);
+ * await createBoardPost('FREE', { title: '제목', content: '내용', file_ids: fileIds });
+ */
+export async function uploadBoardFiles(files) {
+  const formData = new FormData();
+  files.forEach(file => formData.append('files', file));
+
+  const response = await fetch(`${API_BASE_URL}/api/boards/files?project_id=${getProjectId()}`, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '파일 업로드에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 게시글 신고 (로그인 필수)
+ *
+ * @param {string} postId - 게시글 UUID
+ * @param {Object} data - 신고 데이터
+ * @param {string} data.reason - 신고 사유 ('SPAM'|'ABUSE'|'HARASSMENT'|'INAPPROPRIATE'|'OTHER')
+ * @param {string} [data.description] - 상세 사유
+ * @returns {Promise<Object>} 신고 응답
+ */
+export async function reportBoardPost(postId, data) {
+  const response = await fetch(`${API_BASE_URL}/api/boards/posts/${postId}/report`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(data),
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '신고 접수에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 댓글 신고 (로그인 필수)
+ *
+ * @param {string} commentId - 댓글 UUID
+ * @param {Object} data - 신고 데이터
+ * @param {string} data.reason - 신고 사유 ('SPAM'|'ABUSE'|'HARASSMENT'|'INAPPROPRIATE'|'OTHER')
+ * @param {string} [data.description] - 상세 사유
+ * @returns {Promise<Object>} 신고 응답
+ */
+export async function reportBoardComment(commentId, data) {
+  const response = await fetch(`${API_BASE_URL}/api/boards/comments/${commentId}/report`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(data),
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '신고 접수에 실패했습니다');
+  }
+
+  return result.data;
+}

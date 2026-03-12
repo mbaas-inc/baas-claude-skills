@@ -524,6 +524,471 @@ export async function getFaqPost(postId: string): Promise<PostResponse> {
 }
 
 // ============================================
+// Dynamic Board API 함수 (FREE/REVIEW)
+// ============================================
+
+/** 동적 게시판 게시글 목록 아이템 */
+interface BoardPostListItem {
+  id: string;
+  title: string;
+  content?: string;
+  views: number;
+  author_name: string;
+  is_hidden: boolean;
+  created_at: string;
+}
+
+/** 동적 게시판 게시글 목록 응답 */
+interface BoardPostListResponse {
+  items: BoardPostListItem[];
+  total_count: number;
+  offset: number;
+  limit: number;
+}
+
+/** 동적 게시판 게시글 상세 응답 */
+interface BoardPostDetail {
+  id: string;
+  board_id: string;
+  title: string;
+  content: string;
+  views: number;
+  author_id: string;
+  author_name: string;
+  created_at: string;
+  updated_at: string | null;
+  attachments: FileResponse[];
+}
+
+/** 게시글 작성 요청 */
+interface BoardPostCreateRequest {
+  title: string;
+  content: string;
+  file_ids?: number[];
+  is_hidden?: boolean;
+}
+
+/** 게시글 수정 요청 */
+interface BoardPostUpdateRequest {
+  title?: string;
+  content?: string;
+  file_ids?: number[];
+}
+
+/** 댓글 응답 */
+interface BoardComment {
+  id: string;
+  post_id: string;
+  author_id: string;
+  author_name: string;
+  parent_id: string | null;
+  content: string;
+  is_hidden: boolean;
+  created_at: string;
+  updated_at: string | null;
+}
+
+/** 루트 댓글 + 대댓글 */
+interface BoardCommentWithReplies extends Omit<BoardComment, 'parent_id'> {
+  replies: BoardComment[];
+}
+
+/** 댓글 목록 응답 */
+interface BoardCommentListResponse {
+  items: BoardCommentWithReplies[];
+  total_count: number;
+}
+
+/** 댓글 작성 요청 */
+interface BoardCommentCreateRequest {
+  content: string;
+  parent_id?: string;
+}
+
+/** 댓글 수정 요청 */
+interface BoardCommentUpdateRequest {
+  content: string;
+}
+
+/** 파일 업로드 응답 */
+interface BoardFileUploadResponse {
+  files: FileResponse[];
+}
+
+/** 신고 접수 요청 */
+interface BoardReportCreateRequest {
+  reason: 'SPAM' | 'ABUSE' | 'HARASSMENT' | 'INAPPROPRIATE' | 'OTHER';
+  description?: string;
+}
+
+/** 신고 응답 */
+interface BoardReportResponse {
+  id: string;
+  project_id: string;
+  target_type: 'POST' | 'COMMENT';
+  target_id: string;
+  reporter_id: string;
+  reason: string;
+  description: string | null;
+  status: string;
+  created_at: string;
+}
+
+/**
+ * 동적 게시판 게시글 목록 조회 (인증 불필요)
+ *
+ * @param boardId - 게시판 UUID (게시판 정보 JSON의 id)
+ * @param options - 조회 옵션 (페이지네이션, 검색)
+ *
+ * @example
+ * const posts = await getBoardPosts('board-uuid', { limit: 10 });
+ */
+export async function getBoardPosts(boardId: string, options: PostFetchOptions = {}): Promise<BoardPostListResponse> {
+  const params = new URLSearchParams();
+  if (options.offset !== undefined) params.append('offset', String(options.offset));
+  if (options.limit !== undefined) params.append('limit', String(options.limit));
+  if (options.keyword) params.append('keyword', options.keyword);
+
+  const queryString = params.toString();
+  const url = `${API_BASE_URL}/public/board/${getProjectId()}/${boardId}/posts${queryString ? `?${queryString}` : ''}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '게시글 목록 조회에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 게시글 상세 조회 (조회수 자동 증가)
+ *
+ * @param postId - 게시글 UUID
+ *
+ * @example
+ * const post = await getBoardPostDetail('post-uuid');
+ */
+export async function getBoardPostDetail(postId: string): Promise<BoardPostDetail> {
+  const response = await fetch(`${API_BASE_URL}/boards/posts/${postId}`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '게시글 조회에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 게시글 작성 (로그인 필수)
+ *
+ * @param boardType - 게시판 타입 ('FREE' | 'REVIEW')
+ * @param data - 게시글 데이터
+ *
+ * @example
+ * const post = await createBoardPost('FREE', { title: '제목', content: '내용' });
+ */
+export async function createBoardPost(boardType: string, data: BoardPostCreateRequest): Promise<BoardPostDetail> {
+  const response = await fetch(`${API_BASE_URL}/boards/${getProjectId()}/posts?type=${boardType}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(data),
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '게시글 작성에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 게시글 수정 (작성자만)
+ *
+ * @param postId - 게시글 UUID
+ * @param data - 수정할 데이터
+ */
+export async function updateBoardPost(postId: string, data: BoardPostUpdateRequest): Promise<BoardPostDetail> {
+  const response = await fetch(`${API_BASE_URL}/boards/posts/${postId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(data),
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '게시글 수정에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 게시글 삭제 (작성자 또는 프로젝트 소유자)
+ *
+ * @param postId - 게시글 UUID
+ */
+export async function deleteBoardPost(postId: string): Promise<boolean> {
+  const response = await fetch(`${API_BASE_URL}/boards/posts/${postId}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '게시글 삭제에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 게시글 숨김 토글
+ *
+ * @param postId - 게시글 UUID
+ * @param isHidden - true=숨김, false=해제
+ */
+export async function toggleBoardPostHidden(postId: string, isHidden: boolean): Promise<BoardPostDetail> {
+  const response = await fetch(`${API_BASE_URL}/boards/posts/${postId}/hidden`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ is_hidden: isHidden }),
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '숨김 처리에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 댓글 목록 조회
+ *
+ * @param postId - 게시글 UUID
+ * @param sort - 정렬 ('oldest' | 'newest', 기본: oldest)
+ *
+ * @example
+ * const comments = await getBoardComments('post-uuid');
+ * comments.items.forEach(c => {
+ *   console.log(c.author_name, c.content);
+ *   c.replies.forEach(r => console.log('  ↳', r.author_name, r.content));
+ * });
+ */
+export async function getBoardComments(postId: string, sort: string = 'oldest'): Promise<BoardCommentListResponse> {
+  const response = await fetch(`${API_BASE_URL}/boards/posts/${postId}/comments?sort=${sort}`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '댓글 목록 조회에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 댓글 작성 (로그인 필수)
+ *
+ * @param postId - 게시글 UUID
+ * @param data - 댓글 데이터 (parent_id 포함 시 대댓글)
+ *
+ * @example
+ * // 루트 댓글
+ * await createBoardComment('post-uuid', { content: '댓글 내용' });
+ *
+ * // 대댓글
+ * await createBoardComment('post-uuid', { content: '답글', parent_id: 'comment-uuid' });
+ */
+export async function createBoardComment(postId: string, data: BoardCommentCreateRequest): Promise<BoardComment> {
+  const response = await fetch(`${API_BASE_URL}/boards/posts/${postId}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(data),
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '댓글 작성에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 댓글 수정 (작성자만)
+ *
+ * @param postId - 게시글 UUID
+ * @param commentId - 댓글 UUID
+ * @param data - 수정할 내용
+ */
+export async function updateBoardComment(postId: string, commentId: string, data: BoardCommentUpdateRequest): Promise<BoardComment> {
+  const response = await fetch(`${API_BASE_URL}/boards/posts/${postId}/comments/${commentId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(data),
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '댓글 수정에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 댓글 삭제 (작성자 또는 프로젝트 소유자)
+ *
+ * @param postId - 게시글 UUID
+ * @param commentId - 댓글 UUID
+ */
+export async function deleteBoardComment(postId: string, commentId: string): Promise<boolean> {
+  const response = await fetch(`${API_BASE_URL}/boards/posts/${postId}/comments/${commentId}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '댓글 삭제에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 댓글 숨김 토글
+ *
+ * @param commentId - 댓글 UUID
+ * @param isHidden - true=숨김, false=해제
+ */
+export async function toggleBoardCommentHidden(commentId: string, isHidden: boolean): Promise<BoardComment> {
+  const response = await fetch(`${API_BASE_URL}/boards/comments/${commentId}/hidden`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ is_hidden: isHidden }),
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '숨김 처리에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 게시판 파일 업로드 (로그인 필수, 10MB 제한)
+ *
+ * @param files - 업로드할 파일 배열
+ * @returns 업로드된 파일 정보 (id를 게시글 생성 시 file_ids로 사용)
+ *
+ * @example
+ * const uploaded = await uploadBoardFiles([file1, file2]);
+ * const fileIds = uploaded.files.map(f => f.id);
+ * await createBoardPost('FREE', { title: '제목', content: '내용', file_ids: fileIds });
+ */
+export async function uploadBoardFiles(files: File[]): Promise<BoardFileUploadResponse> {
+  const formData = new FormData();
+  files.forEach(file => formData.append('files', file));
+
+  const response = await fetch(`${API_BASE_URL}/boards/files?project_id=${getProjectId()}`, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '파일 업로드에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 게시글 신고 (로그인 필수)
+ *
+ * @param postId - 게시글 UUID
+ * @param data - 신고 사유
+ */
+export async function reportBoardPost(postId: string, data: BoardReportCreateRequest): Promise<BoardReportResponse> {
+  const response = await fetch(`${API_BASE_URL}/boards/posts/${postId}/report`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(data),
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '신고 접수에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+/**
+ * 댓글 신고 (로그인 필수)
+ *
+ * @param commentId - 댓글 UUID
+ * @param data - 신고 사유
+ */
+export async function reportBoardComment(commentId: string, data: BoardReportCreateRequest): Promise<BoardReportResponse> {
+  const response = await fetch(`${API_BASE_URL}/boards/comments/${commentId}/report`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(data),
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '신고 접수에 실패했습니다');
+  }
+
+  return result.data;
+}
+
+// ============================================
 // 타입 export
 // ============================================
 
@@ -537,5 +1002,18 @@ export type {
   PostListItem,
   PostListResponse,
   PostResponse,
-  PostFetchOptions
+  PostFetchOptions,
+  BoardPostListItem,
+  BoardPostListResponse,
+  BoardPostDetail,
+  BoardPostCreateRequest,
+  BoardPostUpdateRequest,
+  BoardComment,
+  BoardCommentWithReplies,
+  BoardCommentListResponse,
+  BoardCommentCreateRequest,
+  BoardCommentUpdateRequest,
+  BoardFileUploadResponse,
+  BoardReportCreateRequest,
+  BoardReportResponse
 };

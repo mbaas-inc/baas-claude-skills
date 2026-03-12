@@ -300,3 +300,187 @@ export interface UseFaqReturn {
   /** 상태 초기화 */
   reset: () => void;
 }
+
+// ============================================
+// useBoard 타입 (동적 게시판 — FREE/REVIEW)
+// ============================================
+
+/** 동적 게시판 게시글 목록 아이템 */
+export interface BoardPostListItem {
+  id: string;
+  title: string;
+  content?: string;
+  views: number;
+  author_name: string;
+  is_hidden: boolean;
+  created_at: string;
+}
+
+/** 동적 게시판 게시글 목록 응답 */
+export interface BoardPostListResponse {
+  items: BoardPostListItem[];
+  total_count: number;
+  offset: number;
+  limit: number;
+}
+
+/** 동적 게시판 게시글 상세 응답 */
+export interface BoardPostDetail {
+  id: string;
+  board_id: string;
+  title: string;
+  content: string;
+  views: number;
+  author_id: string;
+  author_name: string;
+  created_at: string;
+  updated_at: string | null;
+  attachments: FileResponse[];
+}
+
+/** 게시글 작성 요청 */
+export interface BoardPostCreateRequest {
+  title: string;
+  content: string;
+  file_ids?: number[];
+  is_hidden?: boolean;
+}
+
+/** 게시글 수정 요청 */
+export interface BoardPostUpdateRequest {
+  title?: string;
+  content?: string;
+  file_ids?: number[];
+}
+
+/** 게시글 목록 조회 옵션 */
+export interface BoardPostFetchOptions {
+  offset?: number;
+  limit?: number;
+  keyword?: string;
+}
+
+/** 첨부파일 업로드 응답 */
+export interface BoardFileUploadResponse {
+  files: FileResponse[];
+}
+
+/** 신고 접수 요청 */
+export interface BoardReportCreateRequest {
+  reason: 'SPAM' | 'ABUSE' | 'HARASSMENT' | 'INAPPROPRIATE' | 'OTHER';
+  description?: string;
+}
+
+/** 신고 응답 */
+export interface BoardReportResponse {
+  id: string;
+  project_id: string;
+  target_type: 'POST' | 'COMMENT';
+  target_id: string;
+  reporter_id: string;
+  reason: string;
+  description: string | null;
+  status: string;
+  created_at: string;
+}
+
+/** useBoard 반환 타입 */
+export interface UseBoardReturn {
+  /** 게시글 목록 */
+  posts: BoardPostListResponse | null;
+  /** 게시글 상세 */
+  post: BoardPostDetail | null;
+  /** 로딩 상태 */
+  isLoading: boolean;
+  /** 에러 메시지 */
+  error: string | null;
+  /** 게시글 목록 조회 (공개 API, 인증 불필요) */
+  fetchPosts: (boardId: string, options?: BoardPostFetchOptions) => Promise<BoardPostListResponse>;
+  /** 게시글 상세 조회 (선택적 인증) */
+  fetchPost: (postId: string) => Promise<BoardPostDetail>;
+  /** 게시글 작성 (인증 필수) */
+  createPost: (boardType: 'FREE' | 'REVIEW', data: BoardPostCreateRequest) => Promise<BoardPostDetail>;
+  /** 게시글 수정 (작성자만) */
+  updatePost: (postId: string, data: BoardPostUpdateRequest) => Promise<BoardPostDetail>;
+  /** 게시글 삭제 (작성자 또는 소유자) */
+  deletePost: (postId: string) => Promise<boolean>;
+  /** 게시글 숨김 토글 */
+  toggleHidden: (postId: string, isHidden: boolean) => Promise<BoardPostDetail>;
+  /** 파일 업로드 */
+  uploadFiles: (files: File[]) => Promise<BoardFileUploadResponse>;
+  /** 게시글 신고 */
+  reportPost: (postId: string, data: BoardReportCreateRequest) => Promise<BoardReportResponse>;
+  /** 상태 초기화 */
+  reset: () => void;
+}
+
+// ============================================
+// useComments 타입 (동적 게시판 댓글)
+// ============================================
+
+/** 댓글 응답 */
+export interface BoardComment {
+  id: string;
+  post_id: string;
+  author_id: string;
+  author_name: string;
+  parent_id: string | null;
+  content: string;
+  is_hidden: boolean;
+  created_at: string;
+  updated_at: string | null;
+}
+
+/** 루트 댓글 + 대댓글 목록 */
+export interface BoardCommentWithReplies {
+  id: string;
+  post_id: string;
+  author_id: string;
+  author_name: string;
+  content: string;
+  is_hidden: boolean;
+  created_at: string;
+  updated_at: string | null;
+  replies: BoardComment[];
+}
+
+/** 댓글 목록 응답 */
+export interface BoardCommentListResponse {
+  items: BoardCommentWithReplies[];
+  total_count: number;
+}
+
+/** 댓글 작성 요청 */
+export interface BoardCommentCreateRequest {
+  content: string;
+  parent_id?: string;
+}
+
+/** 댓글 수정 요청 */
+export interface BoardCommentUpdateRequest {
+  content: string;
+}
+
+/** useComments 반환 타입 */
+export interface UseCommentsReturn {
+  /** 댓글 목록 */
+  comments: BoardCommentListResponse | null;
+  /** 로딩 상태 */
+  isLoading: boolean;
+  /** 에러 메시지 */
+  error: string | null;
+  /** 댓글 목록 조회 */
+  fetchComments: (postId: string, sort?: 'oldest' | 'newest') => Promise<BoardCommentListResponse>;
+  /** 댓글 작성 (인증 필수) */
+  createComment: (postId: string, data: BoardCommentCreateRequest) => Promise<BoardComment>;
+  /** 댓글 수정 (작성자만) */
+  updateComment: (postId: string, commentId: string, data: BoardCommentUpdateRequest) => Promise<BoardComment>;
+  /** 댓글 삭제 (작성자 또는 소유자) */
+  deleteComment: (postId: string, commentId: string) => Promise<boolean>;
+  /** 댓글 숨김 토글 */
+  toggleHidden: (commentId: string, isHidden: boolean) => Promise<BoardComment>;
+  /** 댓글 신고 */
+  reportComment: (commentId: string, data: BoardReportCreateRequest) => Promise<BoardReportResponse>;
+  /** 상태 초기화 */
+  reset: () => void;
+}
