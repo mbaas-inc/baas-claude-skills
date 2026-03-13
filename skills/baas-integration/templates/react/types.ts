@@ -187,12 +187,20 @@ export interface PostListItem {
   created_at: string;
 }
 
+/** 게시판 설정 (런타임) */
+export interface BoardSettings {
+  is_comment_enabled: boolean;
+  is_board_enabled: boolean;
+  allow_attachment: boolean;
+}
+
 /** 게시글 목록 응답 */
 export interface PostListResponse {
   items: PostListItem[];
   total_count: number;
   offset: number;
   limit: number;
+  board_settings: BoardSettings | null;
 }
 
 /** 게시글 상세 응답 */
@@ -208,6 +216,7 @@ export interface PostResponse {
   created_at: string;
   updated_at: string | null;
   attachments: FileResponse[];
+  board_settings: BoardSettings | null;
 }
 
 /** 게시글 조회 옵션 */
@@ -259,6 +268,7 @@ export interface FaqListResponse {
   total_count: number;
   offset: number;
   limit: number;
+  board_settings: BoardSettings | null;
 }
 
 /** FAQ 상세 응답 (title=질문, content=답변) */
@@ -274,6 +284,7 @@ export interface FaqResponse {
   created_at: string;
   updated_at: string | null;
   attachments: FileResponse[];
+  board_settings: BoardSettings | null;
 }
 
 /** FAQ 조회 옵션 */
@@ -322,6 +333,7 @@ export interface BoardPostListResponse {
   total_count: number;
   offset: number;
   limit: number;
+  board_settings: BoardSettings | null;
 }
 
 /** 동적 게시판 게시글 상세 응답 */
@@ -336,6 +348,7 @@ export interface BoardPostDetail {
   created_at: string;
   updated_at: string | null;
   attachments: FileResponse[];
+  board_settings: BoardSettings | null;
 }
 
 /** 게시글 작성 요청 */

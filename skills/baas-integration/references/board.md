@@ -5,6 +5,7 @@
 1. [공지사항 목록 조회 API](#1-공지사항-목록-조회-api)
 2. [공지사항 상세 조회 API](#2-공지사항-상세-조회-api)
 3. [FAQ 목록 조회 API](#3-faq-목록-조회-api)
+4. [FAQ 상세 조회 API](#4-faq-상세-조회-api)
 
 ---
 
@@ -42,7 +43,12 @@ interface NoticeListParams {
     }>,
     total_count: number,    // 전체 개수
     offset: number,         // 시작 위치
-    limit: number           // 조회 개수
+    limit: number,          // 조회 개수
+    board_settings: {       // 게시판 설정 (런타임)
+      is_comment_enabled: boolean,
+      is_board_enabled: boolean,
+      allow_attachment: boolean
+    } | null
   },
   message: "공지사항 목록 조회"
 }
@@ -75,7 +81,12 @@ interface NoticeListParams {
     ],
     "total_count": 25,
     "offset": 0,
-    "limit": 20
+    "limit": 20,
+    "board_settings": {
+      "is_comment_enabled": false,
+      "is_board_enabled": true,
+      "allow_attachment": false
+    }
   },
   "message": "공지사항 목록 조회"
 }
@@ -128,7 +139,12 @@ interface NoticeDetailParams {
       id: number,
       file_name: string,
       url: string
-    }>
+    }>,
+    board_settings: {       // 게시판 설정 (런타임)
+      is_comment_enabled: boolean,
+      is_board_enabled: boolean,
+      allow_attachment: boolean
+    } | null
   },
   message: "공지사항 상세 조회"
 }
@@ -149,7 +165,12 @@ interface NoticeDetailParams {
     "author_name": "관리자",
     "created_at": "2024-01-15T09:00:00Z",
     "updated_at": null,
-    "attachments": []
+    "attachments": [],
+    "board_settings": {
+      "is_comment_enabled": false,
+      "is_board_enabled": true,
+      "allow_attachment": false
+    }
   },
   "message": "공지사항 상세 조회"
 }
@@ -201,7 +222,12 @@ interface FaqListParams {
     }>,
     total_count: number,
     offset: number,
-    limit: number
+    limit: number,
+    board_settings: {       // 게시판 설정 (런타임)
+      is_comment_enabled: boolean,
+      is_board_enabled: boolean,
+      allow_attachment: boolean
+    } | null
   },
   message: "FAQ 목록 조회"
 }
@@ -234,7 +260,12 @@ interface FaqListParams {
     ],
     "total_count": 15,
     "offset": 0,
-    "limit": 20
+    "limit": 20,
+    "board_settings": {
+      "is_comment_enabled": false,
+      "is_board_enabled": true,
+      "allow_attachment": false
+    }
   },
   "message": "FAQ 목록 조회"
 }
@@ -246,5 +277,90 @@ interface FaqListParams {
   "result": "FAIL",
   "errorCode": "NOT_FOUND",
   "message": "FAQ 게시판을 찾을 수 없습니다."
+}
+```
+
+---
+
+## 4. FAQ 상세 조회 API
+
+| 항목 | 값 |
+|------|-----|
+| Endpoint | `GET /public/board/faq/{project_id}/posts/{post_id}` |
+| 인증 | 불필요 (공개 API) |
+| Content-Type | `application/json` |
+
+### 요청
+```typescript
+interface FaqDetailParams {
+  project_id: string;  // URL path (필수) - 환경변수에서 getProjectId()로 자동 주입
+  post_id: string;     // URL path (필수) - 게시글 UUID
+}
+```
+
+### 응답
+```typescript
+// 조회 시 조회수(views) 자동 증가
+// FAQ: title=질문, content=답변
+{
+  result: "SUCCESS",
+  data: {
+    id: string,
+    board_id: string,
+    title: string,                 // 질문
+    content: string,               // 답변
+    views: number,
+    recommends: number,
+    author_id: string,
+    author_name: string,
+    created_at: string,
+    updated_at: string | null,
+    attachments: Array<{
+      id: number,
+      file_name: string,
+      url: string
+    }>,
+    board_settings: {       // 게시판 설정 (런타임)
+      is_comment_enabled: boolean,
+      is_board_enabled: boolean,
+      allow_attachment: boolean
+    } | null
+  },
+  message: "FAQ 상세 조회"
+}
+```
+
+### 응답 JSON 예시
+```json
+{
+  "result": "SUCCESS",
+  "data": {
+    "id": "880e8400-e29b-41d4-a716-446655440000",
+    "board_id": "990e8400-e29b-41d4-a716-446655440000",
+    "title": "배송은 얼마나 걸리나요?",
+    "content": "<p>주문 후 영업일 기준 2~3일 내에 배송됩니다. 도서산간 지역은 1~2일 추가 소요될 수 있습니다.</p>",
+    "views": 231,
+    "recommends": 12,
+    "author_id": "770e8400-e29b-41d4-a716-446655440000",
+    "author_name": "관리자",
+    "created_at": "2024-01-05T10:00:00Z",
+    "updated_at": "2024-01-10T15:30:00Z",
+    "attachments": [],
+    "board_settings": {
+      "is_comment_enabled": false,
+      "is_board_enabled": true,
+      "allow_attachment": false
+    }
+  },
+  "message": "FAQ 상세 조회"
+}
+```
+
+### 에러 응답 예시
+```json
+{
+  "result": "FAIL",
+  "errorCode": "NOT_FOUND",
+  "message": "게시글을 찾을 수 없습니다."
 }
 ```
