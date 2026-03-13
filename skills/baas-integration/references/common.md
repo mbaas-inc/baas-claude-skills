@@ -3,7 +3,7 @@
 ## Base URL
 
 ```
-https://api.aiapp.link
+https://www.aiapp.link
 ```
 
 ---
