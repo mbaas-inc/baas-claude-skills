@@ -14,7 +14,7 @@ metadata:
 ## 빠른 시작
 
 ### 필수 설정
-- **Base URL**: `https://www.aiapp.link`
+- **Base URL**: `https://api.aiapp.link`
 - **인증 방식**: 쿠키 기반 JWT (`credentials: 'include'` 필수)
 - **환경변수**: 프레임워크에 맞게 설정
   - React CRA: `REACT_APP_BAAS_PROJECT_ID`
