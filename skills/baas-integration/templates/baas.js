@@ -308,7 +308,7 @@ export async function getNoticePosts(options = {}) {
   if (options.keyword) params.append('keyword', options.keyword);
 
   const queryString = params.toString();
-  const url = `${API_BASE_URL}/api/public/board/notice/${getProjectId()}/posts${queryString ? `?${queryString}` : ''}`;
+  const url = `${API_BASE_URL}/public/board/notice/${getProjectId()}/posts${queryString ? `?${queryString}` : ''}`;
 
   const response = await fetch(url, {
     method: 'GET',
@@ -337,7 +337,7 @@ export async function getNoticePosts(options = {}) {
  */
 export async function getNoticePost(postId) {
   const response = await fetch(
-    `${API_BASE_URL}/api/public/board/notice/${getProjectId()}/posts/${postId}`,
+    `${API_BASE_URL}/public/board/notice/${getProjectId()}/posts/${postId}`,
     {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
@@ -378,7 +378,7 @@ export async function getFaqPosts(options = {}) {
   if (options.keyword) params.append('keyword', options.keyword);
 
   const queryString = params.toString();
-  const url = `${API_BASE_URL}/api/public/board/faq/${getProjectId()}/posts${queryString ? `?${queryString}` : ''}`;
+  const url = `${API_BASE_URL}/public/board/faq/${getProjectId()}/posts${queryString ? `?${queryString}` : ''}`;
 
   const response = await fetch(url, {
     method: 'GET',
@@ -408,7 +408,7 @@ export async function getFaqPosts(options = {}) {
  */
 export async function getFaqPost(postId) {
   const response = await fetch(
-    `${API_BASE_URL}/api/public/board/faq/${getProjectId()}/posts/${postId}`,
+    `${API_BASE_URL}/public/board/faq/${getProjectId()}/posts/${postId}`,
     {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
@@ -449,7 +449,7 @@ export async function getBoardPosts(boardId, options = {}) {
   if (options.keyword) params.append('keyword', options.keyword);
 
   const queryString = params.toString();
-  const url = `${API_BASE_URL}/api/public/board/${getProjectId()}/${boardId}/posts${queryString ? `?${queryString}` : ''}`;
+  const url = `${API_BASE_URL}/public/board/${getProjectId()}/${boardId}/posts${queryString ? `?${queryString}` : ''}`;
 
   const response = await fetch(url, {
     method: 'GET',
@@ -476,7 +476,7 @@ export async function getBoardPosts(boardId, options = {}) {
  * const post = await getBoardPostDetail('post-uuid');
  */
 export async function getBoardPostDetail(postId) {
-  const response = await fetch(`${API_BASE_URL}/api/boards/posts/${postId}`, {
+  const response = await fetch(`${API_BASE_URL}/boards/posts/${postId}`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -506,7 +506,7 @@ export async function getBoardPostDetail(postId) {
  * const post = await createBoardPost('FREE', { title: '제목', content: '내용' });
  */
 export async function createBoardPost(boardType, data) {
-  const response = await fetch(`${API_BASE_URL}/api/boards/${getProjectId()}/posts?type=${boardType}`, {
+  const response = await fetch(`${API_BASE_URL}/boards/${getProjectId()}/posts?type=${boardType}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -530,7 +530,7 @@ export async function createBoardPost(boardType, data) {
  * @returns {Promise<Object>} 수정된 게시글
  */
 export async function updateBoardPost(postId, data) {
-  const response = await fetch(`${API_BASE_URL}/api/boards/posts/${postId}`, {
+  const response = await fetch(`${API_BASE_URL}/boards/posts/${postId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -553,7 +553,7 @@ export async function updateBoardPost(postId, data) {
  * @returns {Promise<boolean>} 삭제 성공 여부
  */
 export async function deleteBoardPost(postId) {
-  const response = await fetch(`${API_BASE_URL}/api/boards/posts/${postId}`, {
+  const response = await fetch(`${API_BASE_URL}/boards/posts/${postId}`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -576,7 +576,7 @@ export async function deleteBoardPost(postId) {
  * @returns {Promise<Object>} 숨김 처리된 게시글
  */
 export async function toggleBoardPostHidden(postId, isHidden) {
-  const response = await fetch(`${API_BASE_URL}/api/boards/posts/${postId}/hidden`, {
+  const response = await fetch(`${API_BASE_URL}/boards/posts/${postId}/hidden`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -607,7 +607,7 @@ export async function toggleBoardPostHidden(postId, isHidden) {
  * });
  */
 export async function getBoardComments(postId, sort = 'oldest') {
-  const response = await fetch(`${API_BASE_URL}/api/boards/posts/${postId}/comments?sort=${sort}`, {
+  const response = await fetch(`${API_BASE_URL}/boards/posts/${postId}/comments?sort=${sort}`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -639,7 +639,7 @@ export async function getBoardComments(postId, sort = 'oldest') {
  * await createBoardComment('post-uuid', { content: '답글', parent_id: 'comment-uuid' });
  */
 export async function createBoardComment(postId, data) {
-  const response = await fetch(`${API_BASE_URL}/api/boards/posts/${postId}/comments`, {
+  const response = await fetch(`${API_BASE_URL}/boards/posts/${postId}/comments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -665,7 +665,7 @@ export async function createBoardComment(postId, data) {
  * @returns {Promise<Object>} 수정된 댓글
  */
 export async function updateBoardComment(postId, commentId, data) {
-  const response = await fetch(`${API_BASE_URL}/api/boards/posts/${postId}/comments/${commentId}`, {
+  const response = await fetch(`${API_BASE_URL}/boards/posts/${postId}/comments/${commentId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -689,7 +689,7 @@ export async function updateBoardComment(postId, commentId, data) {
  * @returns {Promise<boolean>} 삭제 성공 여부
  */
 export async function deleteBoardComment(postId, commentId) {
-  const response = await fetch(`${API_BASE_URL}/api/boards/posts/${postId}/comments/${commentId}`, {
+  const response = await fetch(`${API_BASE_URL}/boards/posts/${postId}/comments/${commentId}`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -712,7 +712,7 @@ export async function deleteBoardComment(postId, commentId) {
  * @returns {Promise<Object>} 숨김 처리된 댓글
  */
 export async function toggleBoardCommentHidden(commentId, isHidden) {
-  const response = await fetch(`${API_BASE_URL}/api/boards/comments/${commentId}/hidden`, {
+  const response = await fetch(`${API_BASE_URL}/boards/comments/${commentId}/hidden`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -743,7 +743,7 @@ export async function uploadBoardFiles(files) {
   const formData = new FormData();
   files.forEach(file => formData.append('files', file));
 
-  const response = await fetch(`${API_BASE_URL}/api/boards/files?project_id=${getProjectId()}`, {
+  const response = await fetch(`${API_BASE_URL}/boards/files?project_id=${getProjectId()}`, {
     method: 'POST',
     credentials: 'include',
     body: formData,
@@ -768,7 +768,7 @@ export async function uploadBoardFiles(files) {
  * @returns {Promise<Object>} 신고 응답
  */
 export async function reportBoardPost(postId, data) {
-  const response = await fetch(`${API_BASE_URL}/api/boards/posts/${postId}/report`, {
+  const response = await fetch(`${API_BASE_URL}/boards/posts/${postId}/report`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -794,7 +794,7 @@ export async function reportBoardPost(postId, data) {
  * @returns {Promise<Object>} 신고 응답
  */
 export async function reportBoardComment(commentId, data) {
-  const response = await fetch(`${API_BASE_URL}/api/boards/comments/${commentId}/report`, {
+  const response = await fetch(`${API_BASE_URL}/boards/comments/${commentId}/report`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',

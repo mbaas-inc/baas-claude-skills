@@ -44,7 +44,7 @@ interface NoticeListParams {
     total_count: number,    // 전체 개수
     offset: number,         // 시작 위치
     limit: number,          // 조회 개수
-    board_settings: {       // 게시판 설정 (런타임)
+    board_settings: {       // 게시판 설정 (런타임, 관리자가 변경 시 즉시 반영)
       is_comment_enabled: boolean,
       is_board_enabled: boolean,
       allow_attachment: boolean
@@ -53,6 +53,8 @@ interface NoticeListParams {
   message: "공지사항 목록 조회"
 }
 ```
+
+> **참고**: `board_settings`는 API 응답에서 실시간으로 반환되는 런타임 설정입니다. 관리자가 설정을 변경하면 즉시 반영됩니다. UI 조건부 렌더링(댓글 영역 표시, 첨부파일 버튼 등)에는 `board_settings`를 사용하세요.
 
 ### 응답 JSON 예시
 ```json
@@ -140,7 +142,7 @@ interface NoticeDetailParams {
       file_name: string,
       url: string
     }>,
-    board_settings: {       // 게시판 설정 (런타임)
+    board_settings: {       // 게시판 설정 (런타임, 관리자가 변경 시 즉시 반영)
       is_comment_enabled: boolean,
       is_board_enabled: boolean,
       allow_attachment: boolean
@@ -223,7 +225,7 @@ interface FaqListParams {
     total_count: number,
     offset: number,
     limit: number,
-    board_settings: {       // 게시판 설정 (런타임)
+    board_settings: {       // 게시판 설정 (런타임, 관리자가 변경 시 즉시 반영)
       is_comment_enabled: boolean,
       is_board_enabled: boolean,
       allow_attachment: boolean
@@ -320,7 +322,7 @@ interface FaqDetailParams {
       file_name: string,
       url: string
     }>,
-    board_settings: {       // 게시판 설정 (런타임)
+    board_settings: {       // 게시판 설정 (런타임, 관리자가 변경 시 즉시 반영)
       is_comment_enabled: boolean,
       is_board_enabled: boolean,
       allow_attachment: boolean
