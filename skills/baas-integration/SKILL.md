@@ -1,8 +1,6 @@
 ---
 name: baas-integration
-description: "(BaaS API) 회원 인증 + 발송대상 + 게시판 통합. 제공 기능: 회원가입, 로그인, 로그아웃, 계정정보 조회, 발송대상(연락처) 등록, 공지사항/FAQ 조회. Use when: 로그인/회원가입 구현, 인증 시스템, 연락처 등록 폼, 예약 접수, 문의 등록, 뉴스레터 구독, 공지사항 페이지, FAQ 페이지"
-metadata:
-  version: "5.3"
+description: "(BaaS API) 회원 인증 + 발송대상 + 게시판 통합. 제공 기능: 회원가입, 로그인, 로그아웃, 계정정보 조회, 발송대상(연락처) 등록, 공지사항/FAQ 조회, 동적 게시판, 게시글 작성, 댓글, 신고. Use when: 로그인/회원가입 구현, 인증 시스템, 연락처 등록 폼, 예약 접수, 문의 등록, 뉴스레터 구독, 공지사항 페이지, FAQ 페이지, 자유게시판, 리뷰 게시판, 커뮤니티"
 ---
 
 # BaaS API 통합 스킬
@@ -14,7 +12,7 @@ metadata:
 ## 빠른 시작
 
 ### 필수 설정
-- **Base URL**: `https://api.aiapp.link`
+- **Base URL**: `https://www.aiapp.link`
 - **인증 방식**: 쿠키 기반 JWT (`credentials: 'include'` 필수)
 - **환경변수**: 프레임워크에 맞게 설정
   - React CRA: `REACT_APP_BAAS_PROJECT_ID`
@@ -63,12 +61,16 @@ function LoginPage() {
 | 발송대상 등록 | 연락처(이름, 전화번호) 등록 |
 | 공지사항 조회 | 공지사항 목록/상세 (인증 불필요) |
 | FAQ 조회 | FAQ 목록/상세 (인증 불필요) |
+| 게시글 CRUD | 동적 게시판(FREE/REVIEW) 작성/조회/수정/삭제 |
+| 댓글 CRUD | 댓글/대댓글 작성/조회/수정/삭제 |
+| 파일 업로드 | 게시판 첨부파일 업로드 (10MB, 다중) |
+| 신고 | 게시글/댓글 신고 접수 |
 
 ---
 
 ## 필수 참조 문서
 
-> **⚠️ 모든 API 구현 전 반드시 먼저 참조하세요:**
+> **모든 API 구현 전 반드시 먼저 참조하세요:**
 > - [references/common.md](references/common.md) - Base URL, 인증방식, 응답형식, 에러코드
 
 ## 기능별 참조 가이드
@@ -77,7 +79,8 @@ function LoginPage() {
 |------------|---------------|--------------|
 | 회원가입, 로그인, 로그아웃, 인증 | [references/account.md](references/account.md) | `templates/baas.ts` 또는 `react/useLogin.tsx` 등 |
 | 연락처 등록, 예약, 문의, 뉴스레터 | [references/messaging.md](references/messaging.md) | `templates/baas.ts` 또는 `react/useRecipient.tsx` |
-| 공지사항, FAQ, 게시판 | [references/board.md](references/board.md) | `templates/baas.ts` 또는 `react/useNotice.tsx`, `react/useFaq.tsx` |
+| 공지사항, FAQ | [references/board.md](references/board.md) | `templates/baas.ts` 또는 `react/useNotice.tsx`, `react/useFaq.tsx` |
+| 동적 게시판, 게시글, 댓글 | [references/dynamic-board.md](references/dynamic-board.md) | `react/useBoard.tsx`, `react/useComments.tsx` |
 
 ---
 
@@ -100,6 +103,15 @@ function LoginPage() {
 2. 목록에서 게시글 선택
 3. **상세 조회** (`GET /public/board/notice/{project_id}/posts/{post_id}`) - 조회수 자동 증가
 4. 게시글 내용 렌더링
+
+### 동적 게시판 흐름 (FREE/REVIEW)
+1. 게시판 정보 JSON에서 `id`(board_id), `board_type` 확인
+2. **목록 조회** (`GET /public/board/{project_id}/{board_id}/posts`) — 인증 불필요
+3. **상세 조회** (`GET /boards/posts/{post_id}`) — 조회수 자동 증가
+4. **로그인** 후 게시글 작성 (`POST /boards/{project_id}/posts?type={board_type}`)
+5. 파일 첨부 시: 파일 업로드 (`POST /boards/files`) → file_ids로 게시글 생성
+6. 댓글 작성 (`POST /boards/posts/{post_id}/comments`) — parent_id로 대댓글
+7. 신고 접수 (`POST /boards/posts/{post_id}/report`)
 
 ---
 
@@ -147,6 +159,29 @@ await fetchPosts();
 // posts.items[].content 에서 답변 바로 접근 가능
 ```
 
+### 동적 게시판 (FREE/REVIEW)
+```tsx
+import { useBoard, useComments } from './react';
+
+// 게시글 목록 조회 (인증 불필요)
+const { posts, fetchPosts } = useBoard();
+await fetchPosts('board-uuid', { limit: 20 });
+
+// 게시글 작성 (로그인 필수)
+const { createPost, uploadFiles } = useBoard();
+const uploaded = await uploadFiles([file1]);
+await createPost('FREE', {
+  title: '자유게시판 글',
+  content: '내용입니다.',
+  file_ids: uploaded.files.map(f => f.id)
+});
+
+// 댓글 작성 + 대댓글
+const { fetchComments, createComment } = useComments();
+await createComment('post-uuid', { content: '댓글입니다' });
+await createComment('post-uuid', { content: '대댓글입니다', parent_id: 'comment-uuid' });
+```
+
 ---
 
 ## 템플릿 파일
@@ -165,6 +200,8 @@ await fetchPosts();
 | React 발송대상 | `templates/react/useRecipient.tsx` |
 | React 공지사항 | `templates/react/useNotice.tsx` |
 | React FAQ | `templates/react/useFaq.tsx` |
+| React 동적 게시판 | `templates/react/useBoard.tsx` |
+| React 댓글 | `templates/react/useComments.tsx` |
 | React 통합 export | `templates/react/index.tsx` |
 
 ### React 템플릿 구조
@@ -181,6 +218,8 @@ templates/react/
 ├── useRecipient.tsx  # 발송대상 등록 훅
 ├── useNotice.tsx     # 공지사항 조회 훅
 ├── useFaq.tsx        # FAQ 조회 훅
+├── useBoard.tsx      # 동적 게시판 CRUD 훅 (FREE/REVIEW)
+├── useComments.tsx   # 댓글 CRUD 훅
 └── index.tsx         # 통합 export
 ```
 
@@ -195,3 +234,4 @@ templates/react/
 - [Account API](references/account.md) - 회원가입, 로그인, 로그아웃, 계정정보
 - [Messaging API](references/messaging.md) - 발송대상 등록
 - [Board API](references/board.md) - 공지사항, FAQ 조회
+- [Dynamic Board API](references/dynamic-board.md) - 동적 게시판 CRUD, 댓글, 파일 업로드, 신고

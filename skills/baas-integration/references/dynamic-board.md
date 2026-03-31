@@ -80,11 +80,18 @@ interface BoardPostListParams {
     }>,
     total_count: number,    // 전체 개수
     offset: number,         // 시작 위치
-    limit: number           // 조회 개수
+    limit: number,          // 조회 개수
+    board_settings: {       // 게시판 설정 (런타임, 관리자가 변경 시 즉시 반영)
+      is_comment_enabled: boolean,
+      is_board_enabled: boolean,
+      allow_attachment: boolean
+    } | null
   },
   message: "게시글 목록 조회"
 }
 ```
+
+> **참고**: `board_settings`는 API 응답에서 실시간으로 반환되는 런타임 설정입니다. [게시판 정보 JSON](#게시판-정보-json)은 코드 생성 시점의 참조 설정이므로, 관리자가 설정을 변경하면 `board_settings`에만 반영됩니다. UI 조건부 렌더링에는 `board_settings`를 사용하세요.
 
 ### 응답 JSON 예시
 ```json
@@ -103,7 +110,12 @@ interface BoardPostListParams {
     ],
     "total_count": 1,
     "offset": 0,
-    "limit": 20
+    "limit": 20,
+    "board_settings": {
+      "is_comment_enabled": true,
+      "is_board_enabled": true,
+      "allow_attachment": true
+    }
   },
   "message": "게시글 목록 조회"
 }
@@ -203,7 +215,12 @@ interface BoardPostDetailParams {
       id: number,
       file_name: string,
       url: string
-    }>
+    }>,
+    board_settings: {       // 게시판 설정 (런타임)
+      is_comment_enabled: boolean,
+      is_board_enabled: boolean,
+      allow_attachment: boolean
+    } | null
   },
   message: "게시글 상세 조회"
 }
