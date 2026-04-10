@@ -3,8 +3,11 @@
 ## Base URL
 
 ```
-https://www.aiapp.link
+상대경로 사용 (Same-Origin 또는 프록시 환경)
 ```
+
+> API 호출 시 별도의 Base URL 없이 상대경로(`/account/login` 등)를 사용합니다.
+> 프론트엔드와 API가 같은 오리진에서 서빙되거나, 인프라 단에서 프록시 설정이 되어 있어야 합니다.
 
 ---
 

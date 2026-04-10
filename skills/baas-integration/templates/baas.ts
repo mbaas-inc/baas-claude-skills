@@ -17,7 +17,7 @@
 // 설정
 // ============================================
 
-const API_BASE_URL = 'https://www.aiapp.link';
+const API_BASE_URL = '';
 
 /**
  * 환경변수에서 project_id를 가져옵니다.
