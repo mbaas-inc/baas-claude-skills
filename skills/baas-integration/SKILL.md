@@ -99,15 +99,15 @@ function LoginPage() {
 4. 등록 완료 응답 처리
 
 ### 게시판 조회 흐름 (공지사항/FAQ)
-1. **목록 조회** (`GET /public/board/notice/{project_id}/posts`) - 인증 불필요
+1. **목록 조회** (`GET /public/boards/notice/{project_id}/posts`) - 인증 불필요
 2. 목록에서 게시글 선택
-3. **상세 조회** (`GET /public/board/notice/{project_id}/posts/{post_id}`) - 조회수 자동 증가
+3. **상세 조회** (`GET /public/boards/notice/{project_id}/posts/{post_id}`) - 조회수 자동 증가
 4. 게시글 내용 렌더링
 
 ### 동적 게시판 흐름 (FREE/REVIEW)
 1. 게시판 정보 JSON에서 `id`(board_id), `board_type` 확인
-2. **목록 조회** (`GET /public/board/{project_id}/{board_id}/posts`) — 인증 불필요
-3. **상세 조회** (`GET /public/board/posts/{post_id}`) — 조회수 자동 증가
+2. **목록 조회** (`GET /public/boards/{project_id}/{board_id}/posts`) — 인증 불필요
+3. **상세 조회** (`GET /public/boards/posts/{post_id}`) — 조회수 자동 증가
 4. **로그인** 후 게시글 작성 (`POST /boards/{project_id}/posts?type={board_type}`)
 5. 파일 첨부 시: 파일 업로드 (`POST /boards/files`) → file_ids로 게시글 생성
 6. 댓글 작성 (`POST /boards/posts/{post_id}/comments`) — parent_id로 대댓글

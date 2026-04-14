@@ -134,7 +134,7 @@ export function useFaq(): UseFaqReturn {
       if (options.keyword) params.append('keyword', options.keyword);
 
       const queryString = params.toString();
-      const url = `${BASE_URL}/public/board/faq/${getProjectId()}/posts${queryString ? `?${queryString}` : ''}`;
+      const url = `${BASE_URL}/public/boards/faq/${getProjectId()}/posts${queryString ? `?${queryString}` : ''}`;
 
       const response = await fetch(url, {
         method: 'GET',
@@ -165,7 +165,7 @@ export function useFaq(): UseFaqReturn {
 
     try {
       const response = await fetch(
-        `${BASE_URL}/public/board/faq/${getProjectId()}/posts/${postId}`,
+        `${BASE_URL}/public/boards/faq/${getProjectId()}/posts/${postId}`,
         {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
