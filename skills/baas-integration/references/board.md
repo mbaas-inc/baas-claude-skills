@@ -13,7 +13,7 @@
 
 | 항목 | 값 |
 |------|-----|
-| Endpoint | `GET /public/board/notice/{project_id}/posts` |
+| Endpoint | `GET /public/boards/notice/{project_id}/posts` |
 | 인증 | 불필요 (공개 API) |
 | Content-Type | `application/json` |
 
@@ -111,7 +111,7 @@ interface NoticeListParams {
 
 | 항목 | 값 |
 |------|-----|
-| Endpoint | `GET /public/board/notice/{project_id}/posts/{post_id}` |
+| Endpoint | `GET /public/boards/notice/{project_id}/posts/{post_id}` |
 | 인증 | 불필요 (공개 API) |
 | Content-Type | `application/json` |
 
@@ -197,7 +197,7 @@ interface NoticeDetailParams {
 
 | 항목 | 값 |
 |------|-----|
-| Endpoint | `GET /public/board/faq/{project_id}/posts` |
+| Endpoint | `GET /public/boards/faq/{project_id}/posts` |
 | 인증 | 불필요 (공개 API) |
 | Content-Type | `application/json` |
 
@@ -294,7 +294,7 @@ interface FaqListParams {
 
 | 항목 | 값 |
 |------|-----|
-| Endpoint | `GET /public/board/faq/{project_id}/posts/{post_id}` |
+| Endpoint | `GET /public/boards/faq/{project_id}/posts/{post_id}` |
 | 인증 | 불필요 (공개 API) |
 | Content-Type | `application/json` |
 

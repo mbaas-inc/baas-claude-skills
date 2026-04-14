@@ -82,7 +82,7 @@ export function useComments(): UseCommentsReturn {
 
     try {
       const response = await fetch(
-        `${BASE_URL}/public/board/posts/${postId}/comments?sort=${sort}`,
+        `${BASE_URL}/public/boards/posts/${postId}/comments?sort=${sort}`,
         {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },

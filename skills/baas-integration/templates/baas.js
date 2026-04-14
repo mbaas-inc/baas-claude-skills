@@ -308,7 +308,7 @@ export async function getNoticePosts(options = {}) {
   if (options.keyword) params.append('keyword', options.keyword);
 
   const queryString = params.toString();
-  const url = `${API_BASE_URL}/public/board/notice/${getProjectId()}/posts${queryString ? `?${queryString}` : ''}`;
+  const url = `${API_BASE_URL}/public/boards/notice/${getProjectId()}/posts${queryString ? `?${queryString}` : ''}`;
 
   const response = await fetch(url, {
     method: 'GET',
@@ -337,7 +337,7 @@ export async function getNoticePosts(options = {}) {
  */
 export async function getNoticePost(postId) {
   const response = await fetch(
-    `${API_BASE_URL}/public/board/notice/${getProjectId()}/posts/${postId}`,
+    `${API_BASE_URL}/public/boards/notice/${getProjectId()}/posts/${postId}`,
     {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
@@ -378,7 +378,7 @@ export async function getFaqPosts(options = {}) {
   if (options.keyword) params.append('keyword', options.keyword);
 
   const queryString = params.toString();
-  const url = `${API_BASE_URL}/public/board/faq/${getProjectId()}/posts${queryString ? `?${queryString}` : ''}`;
+  const url = `${API_BASE_URL}/public/boards/faq/${getProjectId()}/posts${queryString ? `?${queryString}` : ''}`;
 
   const response = await fetch(url, {
     method: 'GET',
@@ -408,7 +408,7 @@ export async function getFaqPosts(options = {}) {
  */
 export async function getFaqPost(postId) {
   const response = await fetch(
-    `${API_BASE_URL}/public/board/faq/${getProjectId()}/posts/${postId}`,
+    `${API_BASE_URL}/public/boards/faq/${getProjectId()}/posts/${postId}`,
     {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
@@ -449,7 +449,7 @@ export async function getBoardPosts(boardId, options = {}) {
   if (options.keyword) params.append('keyword', options.keyword);
 
   const queryString = params.toString();
-  const url = `${API_BASE_URL}/public/board/${getProjectId()}/${boardId}/posts${queryString ? `?${queryString}` : ''}`;
+  const url = `${API_BASE_URL}/public/boards/${getProjectId()}/${boardId}/posts${queryString ? `?${queryString}` : ''}`;
 
   const response = await fetch(url, {
     method: 'GET',
@@ -476,7 +476,7 @@ export async function getBoardPosts(boardId, options = {}) {
  * const post = await getBoardPostDetail('post-uuid');
  */
 export async function getBoardPostDetail(postId) {
-  const response = await fetch(`${API_BASE_URL}/public/board/posts/${postId}`, {
+  const response = await fetch(`${API_BASE_URL}/public/boards/posts/${postId}`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -607,7 +607,7 @@ export async function toggleBoardPostHidden(postId, isHidden) {
  * });
  */
 export async function getBoardComments(postId, sort = 'oldest') {
-  const response = await fetch(`${API_BASE_URL}/public/board/posts/${postId}/comments?sort=${sort}`, {
+  const response = await fetch(`${API_BASE_URL}/public/boards/posts/${postId}/comments?sort=${sort}`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',

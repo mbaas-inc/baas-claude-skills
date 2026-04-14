@@ -2,7 +2,7 @@
  * BaaS 동적 게시판 React Hook (FREE/REVIEW)
  *
  * 게시글 CRUD + 파일 업로드 + 신고 기능을 제공합니다.
- * 읽기는 인증 불필요(/public/board/), 쓰기는 로그인 필수(/boards/).
+ * 읽기는 인증 불필요(/public/boards/), 쓰기는 로그인 필수(/boards/).
  *
  * 사용법:
  * const { posts, post, fetchPosts, createPost, uploadFiles } = useBoard();
@@ -91,7 +91,7 @@ export function useBoard(): UseBoardReturn {
       if (options.keyword) params.append('keyword', options.keyword);
 
       const queryString = params.toString();
-      const url = `${BASE_URL}/public/board/${getProjectId()}/${boardId}/posts${queryString ? `?${queryString}` : ''}`;
+      const url = `${BASE_URL}/public/boards/${getProjectId()}/${boardId}/posts${queryString ? `?${queryString}` : ''}`;
 
       const response = await fetch(url, {
         method: 'GET',
@@ -122,7 +122,7 @@ export function useBoard(): UseBoardReturn {
 
     try {
       const response = await fetch(
-        `${BASE_URL}/public/board/posts/${postId}`,
+        `${BASE_URL}/public/boards/posts/${postId}`,
         {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },

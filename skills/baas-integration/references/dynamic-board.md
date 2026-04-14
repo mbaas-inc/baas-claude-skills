@@ -50,7 +50,7 @@
 
 | 항목 | 값 |
 |------|-----|
-| Endpoint | `GET /public/board/{project_id}/{board_id}/posts` |
+| Endpoint | `GET /public/boards/{project_id}/{board_id}/posts` |
 | 인증 | 불필요 (공개 API) |
 | Content-Type | `application/json` |
 
@@ -188,7 +188,7 @@ interface BoardPostCreateRequest {
 
 | 항목 | 값 |
 |------|-----|
-| Endpoint | `GET /public/board/posts/{post_id}` |
+| Endpoint | `GET /public/boards/posts/{post_id}` |
 | 인증 | 선택적 (숨김 게시글은 작성자/소유자만) |
 | Content-Type | `application/json` |
 
@@ -326,7 +326,7 @@ interface PostHiddenUpdate {
 
 | 항목 | 값 |
 |------|-----|
-| Endpoint | `GET /public/board/posts/{post_id}/comments` |
+| Endpoint | `GET /public/boards/posts/{post_id}/comments` |
 | 인증 | 불필요 |
 | Content-Type | `application/json` |
 
