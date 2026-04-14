@@ -17,7 +17,7 @@
 // 설정
 // ============================================
 
-const API_BASE_URL = '';
+const API_BASE_URL = 'https://www.aiapp.link';
 
 /**
  * 환경변수에서 project_id를 가져옵니다.
@@ -476,7 +476,7 @@ export async function getBoardPosts(boardId, options = {}) {
  * const post = await getBoardPostDetail('post-uuid');
  */
 export async function getBoardPostDetail(postId) {
-  const response = await fetch(`${API_BASE_URL}/boards/posts/${postId}`, {
+  const response = await fetch(`${API_BASE_URL}/public/board/posts/${postId}`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -607,7 +607,7 @@ export async function toggleBoardPostHidden(postId, isHidden) {
  * });
  */
 export async function getBoardComments(postId, sort = 'oldest') {
-  const response = await fetch(`${API_BASE_URL}/boards/posts/${postId}/comments?sort=${sort}`, {
+  const response = await fetch(`${API_BASE_URL}/public/board/posts/${postId}/comments?sort=${sort}`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',

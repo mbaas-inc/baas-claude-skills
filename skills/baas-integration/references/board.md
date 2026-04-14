@@ -45,8 +45,9 @@ interface NoticeListParams {
     offset: number,         // 시작 위치
     limit: number,          // 조회 개수
     board_settings: {       // 게시판 설정 (런타임, 관리자가 변경 시 즉시 반영)
-      is_comment_enabled: boolean,
+      allow_comment: boolean,
       is_board_enabled: boolean,
+      require_login: boolean,
       allow_attachment: boolean
     } | null
   },
@@ -85,8 +86,9 @@ interface NoticeListParams {
     "offset": 0,
     "limit": 20,
     "board_settings": {
-      "is_comment_enabled": false,
+      "allow_comment": false,
       "is_board_enabled": true,
+      "require_login": false,
       "allow_attachment": false
     }
   },
@@ -143,8 +145,9 @@ interface NoticeDetailParams {
       url: string
     }>,
     board_settings: {       // 게시판 설정 (런타임, 관리자가 변경 시 즉시 반영)
-      is_comment_enabled: boolean,
+      allow_comment: boolean,
       is_board_enabled: boolean,
+      require_login: boolean,
       allow_attachment: boolean
     } | null
   },
@@ -169,8 +172,9 @@ interface NoticeDetailParams {
     "updated_at": null,
     "attachments": [],
     "board_settings": {
-      "is_comment_enabled": false,
+      "allow_comment": false,
       "is_board_enabled": true,
+      "require_login": false,
       "allow_attachment": false
     }
   },
@@ -226,8 +230,9 @@ interface FaqListParams {
     offset: number,
     limit: number,
     board_settings: {       // 게시판 설정 (런타임, 관리자가 변경 시 즉시 반영)
-      is_comment_enabled: boolean,
+      allow_comment: boolean,
       is_board_enabled: boolean,
+      require_login: boolean,
       allow_attachment: boolean
     } | null
   },
@@ -264,8 +269,9 @@ interface FaqListParams {
     "offset": 0,
     "limit": 20,
     "board_settings": {
-      "is_comment_enabled": false,
+      "allow_comment": false,
       "is_board_enabled": true,
+      "require_login": false,
       "allow_attachment": false
     }
   },
@@ -323,8 +329,9 @@ interface FaqDetailParams {
       url: string
     }>,
     board_settings: {       // 게시판 설정 (런타임, 관리자가 변경 시 즉시 반영)
-      is_comment_enabled: boolean,
+      allow_comment: boolean,
       is_board_enabled: boolean,
+      require_login: boolean,
       allow_attachment: boolean
     } | null
   },
@@ -349,8 +356,9 @@ interface FaqDetailParams {
     "updated_at": "2024-01-10T15:30:00Z",
     "attachments": [],
     "board_settings": {
-      "is_comment_enabled": false,
+      "allow_comment": false,
       "is_board_enabled": true,
+      "require_login": false,
       "allow_attachment": false
     }
   },

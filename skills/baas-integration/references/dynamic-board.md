@@ -34,9 +34,10 @@
   "name": "자유게시판",
   "description": "자유롭게 소통하는 공간입니다.",
   "board_type": "FREE",           // FREE | REVIEW
-  "is_board_enabled": true,       // false면 모든 쓰기 API 403
-  "is_comment_enabled": true,     // false면 댓글 API 사용 불가
-  "allow_attachment": true         // false면 file_ids 포함 시 400
+  "is_board_enabled": true,         // false면 모든 쓰기 API 403
+  "allow_comment": true,            // false면 댓글 API 사용 불가
+  "require_login": false,           // true면 비로그인 상세조회 401
+  "allow_attachment": true           // false면 file_ids 포함 시 400
 }
 ```
 
@@ -82,8 +83,9 @@ interface BoardPostListParams {
     offset: number,         // 시작 위치
     limit: number,          // 조회 개수
     board_settings: {       // 게시판 설정 (런타임, 관리자가 변경 시 즉시 반영)
-      is_comment_enabled: boolean,
+      allow_comment: boolean,
       is_board_enabled: boolean,
+      require_login: boolean,
       allow_attachment: boolean
     } | null
   },
@@ -112,8 +114,9 @@ interface BoardPostListParams {
     "offset": 0,
     "limit": 20,
     "board_settings": {
-      "is_comment_enabled": true,
+      "allow_comment": true,
       "is_board_enabled": true,
+      "require_login": false,
       "allow_attachment": true
     }
   },
@@ -185,7 +188,7 @@ interface BoardPostCreateRequest {
 
 | 항목 | 값 |
 |------|-----|
-| Endpoint | `GET /boards/posts/{post_id}` |
+| Endpoint | `GET /public/board/posts/{post_id}` |
 | 인증 | 선택적 (숨김 게시글은 작성자/소유자만) |
 | Content-Type | `application/json` |
 
@@ -217,8 +220,9 @@ interface BoardPostDetailParams {
       url: string
     }>,
     board_settings: {       // 게시판 설정 (런타임)
-      is_comment_enabled: boolean,
+      allow_comment: boolean,
       is_board_enabled: boolean,
+      require_login: boolean,
       allow_attachment: boolean
     } | null
   },
@@ -322,7 +326,7 @@ interface PostHiddenUpdate {
 
 | 항목 | 값 |
 |------|-----|
-| Endpoint | `GET /boards/posts/{post_id}/comments` |
+| Endpoint | `GET /public/board/posts/{post_id}/comments` |
 | 인증 | 불필요 |
 | Content-Type | `application/json` |
 

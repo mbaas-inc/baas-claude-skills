@@ -189,8 +189,9 @@ export interface PostListItem {
 
 /** 게시판 설정 (런타임) */
 export interface BoardSettings {
-  is_comment_enabled: boolean;
+  allow_comment: boolean;
   is_board_enabled: boolean;
+  require_login: boolean;
   allow_attachment: boolean;
 }
 
