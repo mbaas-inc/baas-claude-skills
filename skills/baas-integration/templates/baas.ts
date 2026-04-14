@@ -94,8 +94,9 @@ interface PostListItem {
 
 /** 게시판 설정 (런타임) */
 interface BoardSettings {
-  is_comment_enabled: boolean;
+  allow_comment: boolean;
   is_board_enabled: boolean;
+  require_login: boolean;
   allow_attachment: boolean;
 }
 
@@ -687,7 +688,7 @@ export async function getBoardPosts(boardId: string, options: PostFetchOptions =
  * const post = await getBoardPostDetail('post-uuid');
  */
 export async function getBoardPostDetail(postId: string): Promise<BoardPostDetail> {
-  const response = await fetch(`${API_BASE_URL}/boards/posts/${postId}`, {
+  const response = await fetch(`${API_BASE_URL}/public/board/posts/${postId}`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -809,7 +810,7 @@ export async function toggleBoardPostHidden(postId: string, isHidden: boolean): 
  * });
  */
 export async function getBoardComments(postId: string, sort: string = 'oldest'): Promise<BoardCommentListResponse> {
-  const response = await fetch(`${API_BASE_URL}/boards/posts/${postId}/comments?sort=${sort}`, {
+  const response = await fetch(`${API_BASE_URL}/public/board/posts/${postId}/comments?sort=${sort}`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',

@@ -122,7 +122,7 @@ export function useBoard(): UseBoardReturn {
 
     try {
       const response = await fetch(
-        `${BASE_URL}/boards/posts/${postId}`,
+        `${BASE_URL}/public/board/posts/${postId}`,
         {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },

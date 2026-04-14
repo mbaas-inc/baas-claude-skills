@@ -107,7 +107,7 @@ function LoginPage() {
 ### 동적 게시판 흐름 (FREE/REVIEW)
 1. 게시판 정보 JSON에서 `id`(board_id), `board_type` 확인
 2. **목록 조회** (`GET /public/board/{project_id}/{board_id}/posts`) — 인증 불필요
-3. **상세 조회** (`GET /boards/posts/{post_id}`) — 조회수 자동 증가
+3. **상세 조회** (`GET /public/board/posts/{post_id}`) — 조회수 자동 증가
 4. **로그인** 후 게시글 작성 (`POST /boards/{project_id}/posts?type={board_type}`)
 5. 파일 첨부 시: 파일 업로드 (`POST /boards/files`) → file_ids로 게시글 생성
 6. 댓글 작성 (`POST /boards/posts/{post_id}/comments`) — parent_id로 대댓글
