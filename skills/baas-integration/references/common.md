@@ -3,11 +3,18 @@
 ## Base URL
 
 ```
-상대경로 사용 (Same-Origin 또는 프록시 환경)
+/aiapp-baas
 ```
 
-> API 호출 시 별도의 Base URL 없이 상대경로(`/account/login` 등)를 사용합니다.
-> 프론트엔드와 API가 같은 오리진에서 서빙되거나, 인프라 단에서 프록시 설정이 되어 있어야 합니다.
+> CDN `/aiapp-baas/*` behavior → API Gateway → aiapp-service Lambda  
+> CloudFront Function이 `/aiapp-baas` prefix를 제거하므로 Lambda는 `/account/login` 형태로 수신합니다.  
+> 모든 API 호출은 `${BASE_URL}/account/login` 형태로 구성하세요 (config의 `BASE_URL` 사용).
+
+```typescript
+// 올바른 호출 패턴 (BASE_URL = '/aiapp-baas')
+fetch(`${BASE_URL}/account/login`, { credentials: 'include' });
+// → /aiapp-baas/account/login → CDN → API GW → Lambda(/account/login)
+```
 
 ---
 

@@ -1,29 +1,30 @@
-# BaaS Board API 스펙
+# BaaS Board API 스펙 — 기본 게시판 (NOTICE / FAQ)
 
-## 목차
-
-1. [공지사항 목록 조회 API](#1-공지사항-목록-조회-api)
-2. [공지사항 상세 조회 API](#2-공지사항-상세-조회-api)
-3. [FAQ 목록 조회 API](#3-faq-목록-조회-api)
-4. [FAQ 상세 조회 API](#4-faq-상세-조회-api)
+관리자가 작성하는 **읽기 전용** 게시판입니다. 일반 사용자는 작성·수정·삭제할 수 없습니다.
+동적 게시판(FREE / REVIEW / URL_LINK)은 [dynamic-board.md](dynamic-board.md)를 참조하세요.
 
 ---
 
-## 1. 공지사항 목록 조회 API
+## 1. 게시글 목록 조회 (통합 엔드포인트)
 
 | 항목 | 값 |
 |------|-----|
-| Endpoint | `GET /public/boards/notice/{project_id}/posts` |
-| 인증 | 불필요 (공개 API) |
-| Content-Type | `application/json` |
+| Endpoint | `GET /public/boards/{project_id}/{board_identifier}/posts` |
+| 인증 | 불필요 |
+
+`{board_identifier}` 값:
+- `NOTICE` → 공지사항
+- `FAQ` → 자주 묻는 질문
 
 ### 요청
 ```typescript
-interface NoticeListParams {
-  project_id: string;  // URL path (필수) - 환경변수에서 getProjectId()로 자동 주입
-  offset?: number;     // 시작 위치 (기본값: 0)
-  limit?: number;      // 조회 개수 (기본값: 20, 최대: 100)
-  keyword?: string;    // 검색어 (제목/내용)
+interface BoardListParams {
+  project_id: string;       // URL path — 환경변수 getProjectId()로 주입
+  board_identifier: string; // URL path — "NOTICE" | "FAQ" | "{board_uuid}"
+  offset?: number;          // 기본값 0
+  limit?: number;           // 기본값 20, 최대 100
+  keyword?: string;         // 검색어 (제목/내용)
+  category?: string;        // 카테고리 필터 (board_settings.categories 목록 중 하나)
 }
 ```
 
@@ -33,31 +34,35 @@ interface NoticeListParams {
   result: "SUCCESS",
   data: {
     items: Array<{
-      id: string,           // 게시글 UUID
-      title: string,        // 제목
-      views: number,        // 조회수
-      recommends: number,   // 추천수
-      author_name: string,  // 작성자 이름
-      is_hidden: boolean,   // 숨김 여부
-      created_at: string    // 생성일시 (ISO 8601)
+      id: string,                   // 게시글 UUID
+      title: string,                // 제목 (FAQ는 질문)
+      content?: string | null,      // FAQ 목록에서만 답변 미리보기 포함
+      views: number,                // 조회수
+      author_name: string,
+      is_hidden: boolean,
+      created_at: string,           // ISO 8601
+      categories: string[] | null,  // 선택된 카테고리 목록
+      link_url: null                // NOTICE/FAQ는 항상 null
     }>,
-    total_count: number,    // 전체 개수
-    offset: number,         // 시작 위치
-    limit: number,          // 조회 개수
-    board_settings: {       // 게시판 설정 (런타임, 관리자가 변경 시 즉시 반영)
+    total_count: number,
+    offset: number,
+    limit: number,
+    board_settings: {               // 게시판 설정 — UI 조건부 렌더링에 사용
       allow_comment: boolean,
       is_board_enabled: boolean,
+      allow_attachment: boolean,
       require_login: boolean,
-      allow_attachment: boolean
+      categories: string[] | null,  // 허용 카테고리 목록 (null이면 카테고리 없음)
+      board_type: string            // "NOTICE" | "FAQ"
     } | null
   },
-  message: "공지사항 목록 조회"
+  message: string
 }
 ```
 
-> **참고**: `board_settings`는 API 응답에서 실시간으로 반환되는 런타임 설정입니다. 관리자가 설정을 변경하면 즉시 반영됩니다. UI 조건부 렌더링(댓글 영역 표시, 첨부파일 버튼 등)에는 `board_settings`를 사용하세요.
+> **카테고리 필터 UI**: `board_settings.categories`가 null이 아닌 경우 목록 위에 카테고리 탭/칩 필터를 표시하세요. 선택한 값을 `?category=` 쿼리로 전달합니다.
 
-### 응답 JSON 예시
+### 응답 예시 (공지사항)
 ```json
 {
   "result": "SUCCESS",
@@ -66,20 +71,13 @@ interface NoticeListParams {
       {
         "id": "550e8400-e29b-41d4-a716-446655440000",
         "title": "시스템 점검 안내",
+        "content": null,
         "views": 150,
-        "recommends": 5,
         "author_name": "관리자",
         "is_hidden": false,
-        "created_at": "2024-01-15T09:00:00Z"
-      },
-      {
-        "id": "550e8400-e29b-41d4-a716-446655440001",
-        "title": "서비스 이용약관 변경 안내",
-        "views": 89,
-        "recommends": 2,
-        "author_name": "관리자",
-        "is_hidden": false,
-        "created_at": "2024-01-10T14:30:00Z"
+        "created_at": "2024-01-15T09:00:00",
+        "categories": ["공지"],
+        "link_url": null
       }
     ],
     "total_count": 25,
@@ -88,237 +86,35 @@ interface NoticeListParams {
     "board_settings": {
       "allow_comment": false,
       "is_board_enabled": true,
+      "allow_attachment": false,
       "require_login": false,
-      "allow_attachment": false
+      "categories": ["공지", "이벤트", "서비스"],
+      "board_type": "NOTICE"
     }
-  },
-  "message": "공지사항 목록 조회"
-}
-```
-
-### 에러 응답 예시
-```json
-{
-  "result": "FAIL",
-  "errorCode": "NOT_FOUND",
-  "message": "NOTICE 게시판을 찾을 수 없습니다."
+  }
 }
 ```
 
 ---
 
-## 2. 공지사항 상세 조회 API
+## 2. 게시글 상세 조회
 
 | 항목 | 값 |
 |------|-----|
-| Endpoint | `GET /public/boards/notice/{project_id}/posts/{post_id}` |
-| 인증 | 불필요 (공개 API) |
-| Content-Type | `application/json` |
-
-### 요청
-```typescript
-interface NoticeDetailParams {
-  project_id: string;  // URL path (필수) - 환경변수에서 getProjectId()로 자동 주입
-  post_id: string;     // URL path (필수) - 게시글 UUID
-}
-```
+| Endpoint | `GET /public/boards/posts/{post_id}` |
+| 인증 | 불필요 (require_login 설정 시 선택적 인증) |
+| 부수효과 | `views` 자동 증가 |
 
 ### 응답
 ```typescript
-// 조회 시 조회수(views) 자동 증가
-{
-  result: "SUCCESS",
-  data: {
-    id: string,                    // 게시글 UUID
-    board_id: string,              // 게시판 UUID
-    title: string,                 // 제목
-    content: string,               // 내용
-    views: number,                 // 조회수
-    recommends: number,            // 추천수
-    author_id: string,             // 작성자 UUID
-    author_name: string,           // 작성자 이름
-    created_at: string,            // 생성일시 (ISO 8601)
-    updated_at: string | null,     // 수정일시 (ISO 8601)
-    attachments: Array<{
-      id: number,
-      file_name: string,
-      url: string
-    }>,
-    board_settings: {       // 게시판 설정 (런타임, 관리자가 변경 시 즉시 반영)
-      allow_comment: boolean,
-      is_board_enabled: boolean,
-      require_login: boolean,
-      allow_attachment: boolean
-    } | null
-  },
-  message: "공지사항 상세 조회"
-}
-```
-
-### 응답 JSON 예시
-```json
-{
-  "result": "SUCCESS",
-  "data": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "board_id": "660e8400-e29b-41d4-a716-446655440000",
-    "title": "시스템 점검 안내",
-    "content": "<p>2024년 1월 20일 02:00 ~ 06:00 시스템 점검이 예정되어 있습니다.</p>",
-    "views": 151,
-    "recommends": 5,
-    "author_id": "770e8400-e29b-41d4-a716-446655440000",
-    "author_name": "관리자",
-    "created_at": "2024-01-15T09:00:00Z",
-    "updated_at": null,
-    "attachments": [],
-    "board_settings": {
-      "allow_comment": false,
-      "is_board_enabled": true,
-      "require_login": false,
-      "allow_attachment": false
-    }
-  },
-  "message": "공지사항 상세 조회"
-}
-```
-
-### 에러 응답 예시
-```json
-{
-  "result": "FAIL",
-  "errorCode": "NOT_FOUND",
-  "message": "게시글을 찾을 수 없습니다."
-}
-```
-
----
-
-## 3. FAQ 목록 조회 API
-
-| 항목 | 값 |
-|------|-----|
-| Endpoint | `GET /public/boards/faq/{project_id}/posts` |
-| 인증 | 불필요 (공개 API) |
-| Content-Type | `application/json` |
-
-### 요청
-```typescript
-interface FaqListParams {
-  project_id: string;  // URL path (필수) - 환경변수에서 getProjectId()로 자동 주입
-  offset?: number;     // 시작 위치 (기본값: 0)
-  limit?: number;      // 조회 개수 (기본값: 20, 최대: 100)
-  keyword?: string;    // 검색어 (제목/내용)
-}
-```
-
-### 응답
-```typescript
-// FAQ는 title=질문, content=답변 구조
-{
-  result: "SUCCESS",
-  data: {
-    items: Array<{
-      id: string,           // 게시글 UUID
-      title: string,        // 질문
-      views: number,        // 조회수
-      recommends: number,   // 추천수
-      author_name: string,  // 작성자 이름
-      is_hidden: boolean,   // 숨김 여부
-      created_at: string    // 생성일시 (ISO 8601)
-    }>,
-    total_count: number,
-    offset: number,
-    limit: number,
-    board_settings: {       // 게시판 설정 (런타임, 관리자가 변경 시 즉시 반영)
-      allow_comment: boolean,
-      is_board_enabled: boolean,
-      require_login: boolean,
-      allow_attachment: boolean
-    } | null
-  },
-  message: "FAQ 목록 조회"
-}
-```
-
-### 응답 JSON 예시
-```json
-{
-  "result": "SUCCESS",
-  "data": {
-    "items": [
-      {
-        "id": "880e8400-e29b-41d4-a716-446655440000",
-        "title": "배송은 얼마나 걸리나요?",
-        "views": 230,
-        "recommends": 12,
-        "author_name": "관리자",
-        "is_hidden": false,
-        "created_at": "2024-01-05T10:00:00Z"
-      },
-      {
-        "id": "880e8400-e29b-41d4-a716-446655440001",
-        "title": "교환/환불은 어떻게 하나요?",
-        "views": 185,
-        "recommends": 8,
-        "author_name": "관리자",
-        "is_hidden": false,
-        "created_at": "2024-01-03T14:00:00Z"
-      }
-    ],
-    "total_count": 15,
-    "offset": 0,
-    "limit": 20,
-    "board_settings": {
-      "allow_comment": false,
-      "is_board_enabled": true,
-      "require_login": false,
-      "allow_attachment": false
-    }
-  },
-  "message": "FAQ 목록 조회"
-}
-```
-
-### 에러 응답 예시
-```json
-{
-  "result": "FAIL",
-  "errorCode": "NOT_FOUND",
-  "message": "FAQ 게시판을 찾을 수 없습니다."
-}
-```
-
----
-
-## 4. FAQ 상세 조회 API
-
-| 항목 | 값 |
-|------|-----|
-| Endpoint | `GET /public/boards/faq/{project_id}/posts/{post_id}` |
-| 인증 | 불필요 (공개 API) |
-| Content-Type | `application/json` |
-
-### 요청
-```typescript
-interface FaqDetailParams {
-  project_id: string;  // URL path (필수) - 환경변수에서 getProjectId()로 자동 주입
-  post_id: string;     // URL path (필수) - 게시글 UUID
-}
-```
-
-### 응답
-```typescript
-// 조회 시 조회수(views) 자동 증가
-// FAQ: title=질문, content=답변
 {
   result: "SUCCESS",
   data: {
     id: string,
     board_id: string,
-    title: string,                 // 질문
-    content: string,               // 답변
+    title: string,
+    content: string,              // HTML 문자열 (FAQ는 답변)
     views: number,
-    recommends: number,
     author_id: string,
     author_name: string,
     created_at: string,
@@ -328,49 +124,20 @@ interface FaqDetailParams {
       file_name: string,
       url: string
     }>,
-    board_settings: {       // 게시판 설정 (런타임, 관리자가 변경 시 즉시 반영)
+    board_settings: {
       allow_comment: boolean,
       is_board_enabled: boolean,
+      allow_attachment: boolean,
       require_login: boolean,
-      allow_attachment: boolean
-    } | null
-  },
-  message: "FAQ 상세 조회"
+      categories: string[] | null,
+      board_type: string
+    } | null,
+    categories: string[] | null,  // 이 게시글에 선택된 카테고리
+    link_url: null                // NOTICE/FAQ는 항상 null
+  }
 }
 ```
 
-### 응답 JSON 예시
-```json
-{
-  "result": "SUCCESS",
-  "data": {
-    "id": "880e8400-e29b-41d4-a716-446655440000",
-    "board_id": "990e8400-e29b-41d4-a716-446655440000",
-    "title": "배송은 얼마나 걸리나요?",
-    "content": "<p>주문 후 영업일 기준 2~3일 내에 배송됩니다. 도서산간 지역은 1~2일 추가 소요될 수 있습니다.</p>",
-    "views": 231,
-    "recommends": 12,
-    "author_id": "770e8400-e29b-41d4-a716-446655440000",
-    "author_name": "관리자",
-    "created_at": "2024-01-05T10:00:00Z",
-    "updated_at": "2024-01-10T15:30:00Z",
-    "attachments": [],
-    "board_settings": {
-      "allow_comment": false,
-      "is_board_enabled": true,
-      "require_login": false,
-      "allow_attachment": false
-    }
-  },
-  "message": "FAQ 상세 조회"
-}
-```
+> **FAQ 패턴**: `title`=질문, `content`=답변. Accordion UI 구현 시 목록의 `content`(답변 미리보기) 또는 상세 API의 `content`를 사용하세요.
+> **content 렌더링**: `content`는 HTML 문자열입니다. 반드시 `dangerouslySetInnerHTML` 또는 sanitize 처리 후 렌더링하세요.
 
-### 에러 응답 예시
-```json
-{
-  "result": "FAIL",
-  "errorCode": "NOT_FOUND",
-  "message": "게시글을 찾을 수 없습니다."
-}
-```

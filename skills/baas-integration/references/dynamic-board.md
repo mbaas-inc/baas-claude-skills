@@ -33,16 +33,18 @@
   "project_id": "project-uuid",   // 환경변수의 project_id와 동일
   "name": "자유게시판",
   "description": "자유롭게 소통하는 공간입니다.",
-  "board_type": "FREE",           // FREE | REVIEW
-  "is_board_enabled": true,         // false면 모든 쓰기 API 403
-  "allow_comment": true,            // false면 댓글 API 사용 불가
-  "require_login": false,           // true면 비로그인 상세조회 401
-  "allow_attachment": true           // false면 file_ids 포함 시 400
+  "board_type": "FREE",           // FREE | REVIEW | URL_LINK
+  "is_board_enabled": true,       // false면 모든 쓰기 API 403
+  "allow_comment": true,          // false면 댓글 API 사용 불가
+  "require_login": false,         // true면 비로그인 상세조회 401
+  "allow_attachment": true,       // false면 file_ids 포함 시 400
+  "categories": ["질문", "자유", "리뷰"]  // null이면 카테고리 기능 비활성
 }
 ```
 
 > **board_id**: `id` 필드의 값을 목록 조회 API의 `{board_id}` path에 사용합니다.
 > **board_type**: 게시글 작성 API의 `?type=` 쿼리 파라미터에 사용합니다.
+> **URL_LINK 타입**: 게시글 `content`에 URL 문자열이 저장됩니다. 목록/상세 응답에 `link_url` 파생 필드가 포함되며 `content_preview`는 null입니다. 목록 아이템 클릭 시 `link_url`로 바로 이동하는 링크 목록 UI를 구성하세요.
 
 ---
 
@@ -54,14 +56,17 @@
 | 인증 | 불필요 (공개 API) |
 | Content-Type | `application/json` |
 
+> `{board_id}`는 게시판 정보 JSON의 `id` 값(UUID)입니다. board_type이 NOTICE/FAQ인 경우 타입 이름(`NOTICE`, `FAQ`)도 사용 가능합니다.
+
 ### 요청
 ```typescript
 interface BoardPostListParams {
-  project_id: string;    // URL path (필수) - 환경변수에서 getProjectId()로 자동 주입
-  board_id: string;      // URL path (필수) - 게시판 정보 JSON의 id
+  project_id: string;    // URL path — getProjectId()로 자동 주입
+  board_id: string;      // URL path — 게시판 정보 JSON의 id (UUID)
   offset?: number;       // 시작 위치 (기본값: 0)
   limit?: number;        // 조회 개수 (기본값: 20, 최대: 100)
   keyword?: string;      // 검색어 (제목/내용)
+  category?: string;     // 카테고리 필터 (board_settings.categories 목록 중 하나)
 }
 ```
 
@@ -71,29 +76,35 @@ interface BoardPostListParams {
   result: "SUCCESS",
   data: {
     items: Array<{
-      id: string,           // 게시글 UUID
-      title: string,        // 제목
-      content?: string,     // 내용 미리보기 (옵션)
-      views: number,        // 조회수
-      author_name: string,  // 작성자 이름
-      is_hidden: boolean,   // 숨김 여부
-      created_at: string    // 생성일시 (ISO 8601)
+      id: string,                   // 게시글 UUID
+      title: string,                // 제목
+      content?: string | null,      // 내용 미리보기 (HTML 태그 제거, URL_LINK 타입은 null)
+      views: number,                // 조회수
+      author_name: string,
+      is_hidden: boolean,
+      created_at: string,           // ISO 8601
+      categories: string[] | null,  // 선택된 카테고리 목록
+      link_url: string | null       // URL_LINK 타입만 값 있음, 나머지는 null
     }>,
-    total_count: number,    // 전체 개수
-    offset: number,         // 시작 위치
-    limit: number,          // 조회 개수
-    board_settings: {       // 게시판 설정 (런타임, 관리자가 변경 시 즉시 반영)
+    total_count: number,
+    offset: number,
+    limit: number,
+    board_settings: {               // 런타임 설정 — UI 조건부 렌더링에 사용
       allow_comment: boolean,
       is_board_enabled: boolean,
       require_login: boolean,
-      allow_attachment: boolean
+      allow_attachment: boolean,
+      categories: string[] | null,  // 허용 카테고리 목록
+      board_type: string            // "FREE" | "REVIEW" | "URL_LINK"
     } | null
   },
   message: "게시글 목록 조회"
 }
 ```
 
-> **참고**: `board_settings`는 API 응답에서 실시간으로 반환되는 런타임 설정입니다. [게시판 정보 JSON](#게시판-정보-json)은 코드 생성 시점의 참조 설정이므로, 관리자가 설정을 변경하면 `board_settings`에만 반영됩니다. UI 조건부 렌더링에는 `board_settings`를 사용하세요.
+> **board_settings 우선 사용**: `board_settings`는 관리자가 변경 시 즉시 반영됩니다. 게시판 정보 JSON은 최초 설정 참조용이므로 UI 조건부 렌더링에는 `board_settings`를 사용하세요.
+> **카테고리 필터 UI**: `board_settings.categories`가 null이 아니면 카테고리 탭/칩 UI를 표시하고 선택값을 `?category=`로 전달하세요.
+> **URL_LINK 타입**: `link_url`이 있는 아이템은 클릭 시 `link_url`로 바로 이동합니다. 상세 조회가 필요없는 링크 목록 UI로 구성하세요.
 
 ### 응답 JSON 예시
 ```json
@@ -104,10 +115,13 @@ interface BoardPostListParams {
       {
         "id": "550e8400-e29b-41d4-a716-446655440000",
         "title": "첫 번째 게시글입니다",
+        "content": "안녕하세요. 자유게시판 첫 번째 글입니다...",
         "views": 42,
         "author_name": "홍길동",
         "is_hidden": false,
-        "created_at": "2026-03-10T09:00:00Z"
+        "created_at": "2026-03-10T09:00:00",
+        "categories": ["자유"],
+        "link_url": null
       }
     ],
     "total_count": 1,
@@ -117,7 +131,9 @@ interface BoardPostListParams {
       "allow_comment": true,
       "is_board_enabled": true,
       "require_login": false,
-      "allow_attachment": true
+      "allow_attachment": true,
+      "categories": ["질문", "자유", "리뷰"],
+      "board_type": "FREE"
     }
   },
   "message": "게시글 목록 조회"
@@ -146,12 +162,16 @@ interface BoardPostListParams {
 ### 요청
 ```typescript
 interface BoardPostCreateRequest {
-  title: string;           // 제목 (최대 256자)
-  content: string;         // 내용 (Base64 이미지 포함, 최대 16MB)
-  file_ids?: number[];     // 첨부파일 ID 목록 (uploadFiles 후 획득)
-  is_hidden?: boolean;     // 숨김 여부 (기본값: false)
+  title: string;              // 제목 (최대 256자)
+  content: string;            // 내용 (HTML). URL_LINK 타입은 URL 문자열을 저장
+  file_ids?: number[];        // 첨부파일 ID 목록 (uploadFiles 후 획득)
+  is_hidden?: boolean;        // 숨김 여부 (기본값: false)
+  categories?: string[];      // 선택한 카테고리 목록 (board_settings.categories의 부분집합)
 }
 ```
+
+> **URL_LINK 타입**: `content`에 `https://` URL 문자열을 그대로 저장합니다. HTML이 아닙니다.
+> **categories**: 게시판에 categories가 설정된 경우(`board_settings.categories != null`) 허용 목록 안에서만 선택 가능합니다.
 
 ### 응답
 ```typescript
@@ -167,7 +187,9 @@ interface BoardPostCreateRequest {
     author_name: string,
     created_at: string,
     updated_at: string | null,
-    attachments: Array<{ id: number, file_name: string, url: string }>
+    attachments: Array<{ id: number, file_name: string, url: string }>,
+    categories: string[] | null,
+    link_url: string | null  // URL_LINK 타입만 값 있음
   },
   message: "게시글이 작성되었습니다."
 }
@@ -208,7 +230,7 @@ interface BoardPostDetailParams {
     id: string,
     board_id: string,
     title: string,
-    content: string,               // HTML 내용
+    content: string,               // HTML 내용. URL_LINK 타입은 URL 문자열
     views: number,
     author_id: string,
     author_name: string,
@@ -219,11 +241,15 @@ interface BoardPostDetailParams {
       file_name: string,
       url: string
     }>,
+    categories: string[] | null,   // 선택된 카테고리 목록
+    link_url: string | null,       // URL_LINK 타입만 값 있음, 나머지는 null
     board_settings: {       // 게시판 설정 (런타임)
       allow_comment: boolean,
       is_board_enabled: boolean,
       require_login: boolean,
-      allow_attachment: boolean
+      allow_attachment: boolean,
+      categories: string[] | null, // 허용 카테고리 목록
+      board_type: string           // "FREE" | "REVIEW" | "URL_LINK"
     } | null
   },
   message: "게시글 상세 조회"

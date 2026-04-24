@@ -1,0 +1,211 @@
+{
+  "version": "6.0",
+  "base_url": "/aiapp-baas",
+  "common_ref": "references/common.md",
+  "fallback": "sections로 부족하면 ref 파일 전체를 읽고, 인증/에러 처리가 필요하면 references/common.md를 추가로 읽으세요",
+  "data_flow": {
+    "account": "auth: true인 기능(board_create, comments 쓰기, report 등)을 구현하면 login/signup 기능도 함께 제공해야 함",
+    "board_read": "notice/faq_list → post_id → notice/faq_detail",
+    "dynamic_board": "board_id(관리자 제공) → board_list → post_id → board_detail / comments / report. 게시글 작성은 board_id + board_type 필요",
+    "board_create_with_file": "file_upload → file_ids 획득 → board_create에 포함",
+    "survey": "survey_list → survey_id → survey_detail → survey_submit"
+  },
+  "feature_groups": [
+    {
+      "group": "account",
+      "ref": "references/account.md",
+      "common_sections": ["## 에러 코드"],
+      "features": [
+        {
+          "id": "login",
+          "label": "로그인",
+          "auth": false,
+          "keywords": ["로그인", "login", "인증"],
+          "template": "templates/react/useLogin.tsx",
+          "sections": ["## 2. 로그인 API"]
+        },
+        {
+          "id": "signup",
+          "label": "회원가입",
+          "auth": false,
+          "keywords": ["회원가입", "가입", "signup"],
+          "template": "templates/react/useSignup.tsx",
+          "sections": ["## 1. 회원가입 API (프로젝트 회원 전용)", "## phone 필드 검증"]
+        },
+        {
+          "id": "logout",
+          "label": "로그아웃",
+          "auth": "optional",
+          "keywords": ["로그아웃", "logout"],
+          "template": "templates/react/useLogout.tsx",
+          "sections": ["## 3. 로그아웃 API"]
+        },
+        {
+          "id": "account_info",
+          "label": "계정정보 조회",
+          "auth": true,
+          "keywords": ["계정정보", "내 정보", "프로필"],
+          "template": "templates/react/useAccountInfo.tsx",
+          "sections": ["## 4. 계정정보 조회 API"]
+        }
+      ]
+    },
+    {
+      "group": "messaging",
+      "ref": "references/messaging.md",
+      "features": [
+        {
+          "id": "recipient",
+          "label": "연락처 등록",
+          "auth": false,
+          "keywords": ["연락처", "문의", "예약", "뉴스레터", "구독", "접수", "신청"],
+          "template": "templates/react/useRecipient.tsx"
+        }
+      ]
+    },
+    {
+      "group": "board",
+      "ref": "references/board.md",
+      "note": "관리자 작성 전용 — 일반 사용자는 조회만",
+      "features": [
+        {
+          "id": "notice",
+          "label": "공지사항 목록/상세",
+          "auth": false,
+          "keywords": ["공지사항", "notice", "공지"],
+          "template": "templates/react/useNotice.tsx",
+          "sections": ["## 1. 게시글 목록 조회 (통합 엔드포인트)", "## 2. 게시글 상세 조회"]
+        },
+        {
+          "id": "faq",
+          "label": "FAQ 목록/상세",
+          "auth": false,
+          "keywords": ["FAQ", "자주묻는질문", "질문", "답변"],
+          "template": "templates/react/useFaq.tsx",
+          "sections": ["## 1. 게시글 목록 조회 (통합 엔드포인트)", "## 2. 게시글 상세 조회"],
+          "note": "목록 응답에 답변(content) 포함 — 상세 조회 없이 Accordion UI 구성 가능"
+        }
+      ]
+    },
+    {
+      "group": "dynamic_board",
+      "ref": "references/dynamic-board.md",
+      "note": "board_id(UUID)와 board_type(FREE|REVIEW|URL_LINK) 필요. URL_LINK 타입은 상세 조회 없이 link_url로 바로 이동",
+      "common_sections": ["### 권한 규칙", "### 숨김 처리", "## 에러 코드"],
+      "features": [
+        {
+          "id": "board_list",
+          "label": "게시글 목록",
+          "auth": false,
+          "keywords": ["게시판", "게시글 목록", "자유게시판", "리뷰", "링크 목록"],
+          "template": "templates/react/useBoard.tsx",
+          "sections": ["## 게시판 정보 JSON", "## 1. 게시글 목록 조회 API"]
+        },
+        {
+          "id": "board_detail",
+          "label": "게시글 상세",
+          "auth": false,
+          "keywords": ["게시글 상세"],
+          "template": "templates/react/useBoard.tsx",
+          "sections": ["## 3. 게시글 상세 조회 API"],
+          "requires": ["board_list"]
+        },
+        {
+          "id": "board_create",
+          "label": "게시글 작성",
+          "auth": true,
+          "keywords": ["글쓰기", "게시글 작성", "등록"],
+          "template": "templates/react/useBoard.tsx",
+          "sections": ["## 게시판 정보 JSON", "## 2. 게시글 작성 API"],
+          "related": ["file_upload"]
+        },
+        {
+          "id": "board_update",
+          "label": "게시글 수정",
+          "auth": true,
+          "keywords": ["게시글 수정"],
+          "template": "templates/react/useBoard.tsx",
+          "sections": ["## 4. 게시글 수정 API"],
+          "requires": ["board_detail"]
+        },
+        {
+          "id": "board_delete",
+          "label": "게시글 삭제",
+          "auth": true,
+          "keywords": ["게시글 삭제"],
+          "template": "templates/react/useBoard.tsx",
+          "sections": ["## 5. 게시글 삭제 API"],
+          "requires": ["board_detail"]
+        },
+        {
+          "id": "file_upload",
+          "label": "파일 업로드",
+          "auth": true,
+          "keywords": ["파일", "첨부", "이미지 업로드"],
+          "template": "templates/react/useBoard.tsx",
+          "sections": ["## 12. 파일 업로드 API", "### 파일 업로드 플로우"],
+          "note": "게시글 작성 전 먼저 호출 — 반환된 file_ids를 board_create에 포함"
+        },
+        {
+          "id": "comments",
+          "label": "댓글/대댓글",
+          "auth": "optional",
+          "keywords": ["댓글", "대댓글", "comment"],
+          "template": "templates/react/useComments.tsx",
+          "sections": [
+            "## 7. 댓글 목록 조회 API",
+            "## 8. 댓글 작성 API",
+            "## 9. 댓글 수정 API",
+            "## 10. 댓글 삭제 API",
+            "### 댓글 계층 구조"
+          ],
+          "requires": ["board_detail"],
+          "note": "읽기: 인증 불필요 / 쓰기: 인증 필요"
+        },
+        {
+          "id": "report",
+          "label": "게시글/댓글 신고",
+          "auth": true,
+          "keywords": ["신고", "report"],
+          "template": "templates/react/useBoard.tsx",
+          "sections": ["## 13. 게시글 신고 API", "## 14. 댓글 신고 API", "### 신고 사유 Enum"],
+          "requires": ["board_detail"]
+        }
+      ]
+    },
+    {
+      "group": "survey",
+      "ref": "references/survey.md",
+      "features": [
+        {
+          "id": "survey_list",
+          "label": "설문 목록",
+          "auth": false,
+          "keywords": ["설문", "설문조사", "만족도"],
+          "template": "templates/react/useSurvey.tsx",
+          "sections": ["## 1. 활성 설문 목록 조회", "### 설문 목록 → 참여 흐름"],
+          "note": "is_login_required 배지, share_code로 참여 URL(/survey/{share_code}) 구성"
+        },
+        {
+          "id": "survey_detail",
+          "label": "설문 상세+질문",
+          "auth": "optional",
+          "keywords": ["설문 상세", "설문 질문"],
+          "template": "templates/react/useSurvey.tsx",
+          "sections": ["## 2. 설문 상세 조회 (질문 포함)", "### 설문 폼 렌더링 패턴"],
+          "requires": ["survey_list"],
+          "related": ["survey_submit"]
+        },
+        {
+          "id": "survey_submit",
+          "label": "설문 응답 제출",
+          "auth": "optional",
+          "keywords": ["설문 응답", "응답 제출"],
+          "template": "templates/react/useSurvey.tsx",
+          "sections": ["## 3. 설문 응답 제출"],
+          "requires": ["survey_detail"]
+        }
+      ]
+    }
+  ]
+}
