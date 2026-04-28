@@ -1,6 +1,6 @@
 ---
 name: baas-integration
-description: "(BaaS API) 회원 인증 + 발송대상 + 게시판 + 설문조사 통합. 제공 기능: 회원가입, 로그인, 로그아웃, 계정정보 조회, 발송대상(연락처) 등록, 공지사항/FAQ 조회, 동적 게시판(FREE/REVIEW/URL_LINK), 게시글 작성/카테고리, 댓글, 신고, 설문조사 목록/응답 제출. Use when: 로그인/회원가입 구현, 인증 시스템, 연락처 등록 폼, 예약 접수, 문의 등록, 뉴스레터 구독, 공지사항 페이지, FAQ 페이지, 자유게시판, 리뷰 게시판, 링크 목록(URL_LINK), 커뮤니티, 설문조사 페이지, 만족도 조사"
+description: "(BaaS API) 회원 인증 + 발송대상 + 게시판 + 설문조사 목록 통합. static: 회원가입/로그인/로그아웃(번들), 계정정보, 연락처 등록, 공지사항/FAQ 조회, 설문조사 목록. dynamic(board_id 필요): 동적 게시판(FREE/REVIEW/URL_LINK) — 게시글 CRUD/댓글/파일/신고 번들. Use when: 로그인/회원가입 구현, 인증 시스템, 연락처 등록 폼, 예약 접수, 문의 등록, 뉴스레터 구독, 공지사항 페이지, FAQ 페이지, 자유게시판, 리뷰 게시판, 링크 목록(URL_LINK), 커뮤니티, 설문조사 목록 페이지"
 ---
 
 # BaaS API 통합 스킬
@@ -12,12 +12,12 @@ description: "(BaaS API) 회원 인증 + 발송대상 + 게시판 + 설문조사
 ## 사용 방법
 
 1. **`features.json`을 먼저 읽어 필요한 기능을 파악하세요.**  
-   모든 기능의 엔드포인트, keywords, react_hook, 참조 문서(`ref`) 경로가 포함됩니다.
+   최상위에 `static`(project_id만으로 동작)과 `dynamic`(board_id 필요) 두 섹션으로 분리되어 있습니다.
 
 2. 필요한 기능의 `ref` 파일만 읽어 상세 API 스펙을 확인하세요.  
    공통 설정(Base URL, 인증, 에러코드)이 필요하면 `references/common.md`를 읽으세요.
 
-3. `react_hook` 필드에 명시된 훅 파일을 `templates/react/`에서 가져다 사용하세요.  
+3. `template` 필드에 명시된 훅 파일을 `templates/react/`에서 가져다 사용하세요.  
    훅은 **API 호출 + 상태관리**만 제공합니다. UI는 직접 작성하세요.
 
 ---
@@ -50,6 +50,6 @@ templates/
     ├── useFaq.tsx
     ├── useBoard.tsx           # FREE/REVIEW/URL_LINK CRUD + 파일 업로드 + 신고
     ├── useComments.tsx
-    ├── useSurvey.tsx          # useSurveyList, useSurveyDetail, useSurveySubmit
+    ├── useSurvey.tsx          # useSurveyList (목록 표시용)
     └── index.tsx              # 통합 export
 ```
