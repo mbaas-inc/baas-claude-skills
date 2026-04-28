@@ -55,6 +55,7 @@
     {
       "group": "messaging",
       "ref": "references/messaging.md",
+      "common_sections": ["## 에러 코드"],
       "features": [
         {
           "id": "recipient",
@@ -78,7 +79,7 @@
         {
           "id": "notice",
           "label": "공지사항 목록/상세",
-          "auth": false,
+          "auth": "settings",
           "keywords": ["공지사항", "notice", "공지"],
           "template": "templates/react/useNotice.tsx",
           "sections": [
@@ -89,7 +90,7 @@
         {
           "id": "faq",
           "label": "FAQ 목록/상세",
-          "auth": false,
+          "auth": "settings",
           "keywords": ["FAQ", "자주묻는질문", "질문", "답변"],
           "template": "templates/react/useFaq.tsx",
           "sections": [
@@ -129,6 +130,7 @@
         {
           "id": "dynamic_board",
           "label": "동적 게시판 (FREE/REVIEW/URL_LINK)",
+          "auth": "mixed",
           "keywords": ["게시판", "게시글 목록", "자유게시판", "리뷰", "링크 목록", "글쓰기", "댓글"],
           "template": [
             "templates/react/useBoard.tsx",
