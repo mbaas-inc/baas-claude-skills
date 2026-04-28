@@ -134,15 +134,9 @@
             "## 13. 게시글 신고 API",
             "## 14. 댓글 신고 API",
             "### 파일 업로드 플로우",
-            "### 댓글 계층 구조"
-          ],
-          "board_settings_ui": {
-            "is_board_enabled": "false → 작성/수정/삭제 버튼 비표시",
-            "allow_comment": "false → 댓글 영역 비표시",
-            "allow_attachment": "false → 파일 첨부 버튼 비표시",
-            "require_login": "true → 비로그인 사용자 로그인 유도",
-            "categories": "null이 아니면 카테고리 필터 탭/칩 표시"
-          }
+            "### 댓글 계층 구조",
+            "### board_settings UI 렌더링 규칙"
+          ]
         }
       ]
     }

@@ -636,6 +636,20 @@ interface ReportCreateRequest {
 
 ## 보충 설명
 
+### board_settings UI 렌더링 규칙
+
+API 응답의 `board_settings` 값을 기준으로 UI를 조건부 렌더링합니다.
+
+| 필드 | 값 | UI 처리 |
+|------|----|---------|
+| `is_board_enabled` | `false` | 작성/수정/삭제 버튼 비표시 |
+| `allow_comment` | `false` | 댓글 영역 비표시 |
+| `allow_attachment` | `false` | 파일 첨부 버튼 비표시 |
+| `require_login` | `true` | 비로그인 사용자에게 로그인 유도 (기능 코드는 유지) |
+| `categories` | `null` 아님 | 카테고리 필터 탭/칩 표시, 선택값을 `?category=`로 전달 |
+
+> **주의**: 게시판 정보 JSON은 초기 참조용이며, 런타임 UI 제어는 반드시 API 응답의 `board_settings`를 사용하세요. 관리자 설정 변경 시 즉시 반영됩니다.
+
 ### 파일 업로드 플로우
 
 파일 첨부가 있는 게시글은 2단계로 생성합니다:
