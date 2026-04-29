@@ -17,7 +17,7 @@
       "common_sections": ["## 에러 코드"],
       "features": [
         {
-          "id": "auth",
+          "id": "account",
           "label": "회원 인증 (번들) — 로그인/회원가입/로그아웃/계정정보",
           "auth": false,
           "keywords": ["로그인", "login", "회원가입", "signup", "가입", "로그아웃", "logout", "인증", "계정정보", "내 정보", "프로필"],

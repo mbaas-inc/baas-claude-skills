@@ -12,13 +12,16 @@ description: "(BaaS API) 회원 인증 + 발송대상 + 게시판 + 설문조사
 ## 사용 방법
 
 1. **`features.json`을 먼저 읽어 필요한 기능을 파악하세요.**  
-   최상위에 `static`(project_id만으로 동작)과 `dynamic`(board_id 필요) 두 섹션으로 분리되어 있습니다.
+   최상위에 `static`(project_id만으로 동작)과 `dynamic`(board_id 필요) 두 섹션으로 분리되어 있습니다.  
+   각 feature의 `id`는 메타데이터 식별자입니다 (실제 매칭은 `keywords`, 코드 생성은 `ref`/`sections`/`template`로 진행).
 
 2. 필요한 기능의 `ref` 파일만 읽어 상세 API 스펙을 확인하세요.  
    공통 설정(Base URL, 인증, 에러코드)이 필요하면 `references/common.md`를 읽으세요.
 
 3. `template` 필드에 명시된 훅 파일을 `templates/react/`에서 가져다 사용하세요.  
    배열이면 모든 파일을 복사, 문자열이면 단일 파일만 복사. 훅은 **API 호출 + 상태관리**만 제공합니다. UI는 직접 작성하세요.
+   - **React/Next/Vite 프로젝트**: `templates/react/` 훅 사용
+   - **순수 TS/JS 프로젝트**: `templates/baas.ts` 또는 `baas.js` 사용
 
 ---
 
@@ -29,6 +32,17 @@ description: "(BaaS API) 회원 인증 + 발송대상 + 게시판 + 설문조사
 | BASE_URL | `/aiapp-baas` |
 | 인증 | `credentials: 'include'` (모든 fetch 필수) |
 | 환경변수 | `REACT_APP_BAAS_PROJECT_ID` / `NEXT_PUBLIC_BAAS_PROJECT_ID` / `VITE_BAAS_PROJECT_ID` |
+
+---
+
+## auth 필드 값
+
+| 값 | 의미 |
+|----|------|
+| `false` | 인증 불필요 |
+| `true` | 항상 인증 필요 |
+| `"settings"` | `board_settings.require_login`으로 런타임 결정 (읽기 전용) |
+| `"mixed"` | 읽기는 settings 결정, 쓰기는 항상 인증 필요 |
 
 ---
 
