@@ -144,8 +144,7 @@ export function useSurveyList(): UseSurveyListReturn {
   }, []);
 
   const getParticipateUrl = useCallback((survey: SurveyListItem): string | null => {
-    if (!survey.share_code) return null;
-    return `${BASE_URL}/survey/${survey.share_code}`;
+    return survey.form_url ?? null;
   }, []);
 
   return { surveys, isLoading, error, fetchSurveys, getParticipateUrl };
