@@ -36,8 +36,8 @@ interface SurveyListParams {
       is_login_required: boolean, // true면 응답 제출 시 로그인 필요
       response_count: number,    // 현재 응답 수
       template_theme: string,    // "BASIC" | "MODERN" | "ELEGANT"
-      share_code: string | null, // 공유 코드 — 클라이언트가 /survey/{share_code} 경로로 조합
-      form_url: null,            // 항상 null — 사용하지 않음
+      share_code: string | null, // 공유 코드 (식별자)
+      form_url: string | null,   // 참여 URL — share_code 있으면 "/aiapp-baas/survey/{share_code}" 형식, 없으면 null
       created_at: string         // ISO 8601
     }>,
     total: number,
@@ -47,7 +47,7 @@ interface SurveyListParams {
 }
 ```
 
-> **참여 URL 조합**: `form_url`은 사용하지 않습니다 (항상 null). `share_code`가 있으면 `/survey/{share_code}` 경로로 이동하는 링크를 클라이언트에서 생성하세요. 설문 정적 페이지는 `/survey/*` (API와 달리 `/aiapp-baas/*` prefix 없음)에 서빙됩니다.
+> **참여 URL**: 응답의 `form_url` 필드를 그대로 사용하세요 — server가 `/aiapp-baas/survey/{share_code}` 상대 경로를 채워줍니다. 클라이언트가 호출한 도메인이 자동 prefix되므로 어떤 도메인에서든 정상 작동합니다. `form_url`이 null인 경우는 share_code가 발급되지 않은 설문이라 참여 불가.
 > `is_login_required: true`이면 "로그인 필요" 배지를 표시하고, 비로그인 사용자가 참여 버튼 클릭 시 로그인 페이지로 안내하세요.
 
 ### 응답 예시
@@ -64,7 +64,7 @@ interface SurveyListParams {
         "response_count": 127,
         "template_theme": "MODERN",
         "share_code": "abc123xy",
-        "form_url": null,
+        "form_url": "/aiapp-baas/survey/abc123xy",
         "created_at": "2024-01-15T09:00:00"
       }
     ],
@@ -98,7 +98,7 @@ interface SurveyListParams {
     response_count: number,
     template_theme: string,
     share_code: string | null,
-    form_url: null,                  // 항상 null — share_code 기반 조합 사용
+    form_url: string | null,         // "/aiapp-baas/survey/{share_code}" 형식 (share_code 없으면 null)
     respondent_name: string | null,  // 로그인 상태일 때 자동 주입
     has_responded: boolean,          // 이미 응답했는지 여부
     questions: Array<{
@@ -189,8 +189,10 @@ interface ResponseSubmitRequest {
 const { data } = await fetch(`/public/survey/${projectId}/surveys`).then(r => r.json());
 const surveys = data.items;
 
-// 2. 참여 URL 생성 (share_code 기반, 설문 SPA는 /survey/* 경로에 직접 서빙됨)
-const participateUrl = survey.share_code ? `/survey/${survey.share_code}` : null;
+// 2. 참여 URL — server가 채운 form_url 그대로 사용
+//    server-side 형식: "/aiapp-baas/survey/{share_code}" 상대 경로
+//    브라우저가 호출 도메인을 자동 prefix → 어떤 도메인에서든 same-origin으로 작동
+const participateUrl = survey.form_url;
 
 // 3. is_login_required 처리
 if (survey.is_login_required && !isLoggedIn) {

@@ -143,10 +143,12 @@ export function useSurveyList(): UseSurveyListReturn {
     }
   }, []);
 
-  const getParticipateUrl = useCallback((survey: SurveyListItem): string | null => {
-    if (!survey.share_code) return null;
-    return `/survey/${survey.share_code}`;
-  }, []);
+  // server가 채운 form_url 그대로 반환 — "/aiapp-baas/survey/{share_code}" 형식
+  // 브라우저가 호출 도메인 자동 prefix → 외부 도메인 임베드 시 same-origin 작동
+  const getParticipateUrl = useCallback(
+    (survey: SurveyListItem): string | null => survey.form_url,
+    []
+  );
 
   return { surveys, isLoading, error, fetchSurveys, getParticipateUrl };
 }
