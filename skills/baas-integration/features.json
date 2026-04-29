@@ -99,7 +99,7 @@
             "## 1. 활성 설문 목록 조회",
             "### 설문 목록 → 참여 흐름"
           ],
-          "note": "share_code로 외부 참여 URL 구성 (/survey/{share_code}). 응답 제출은 외부 URL에서 처리."
+          "note": "share_code로 외부 참여 URL 구성 (/aiapp-baas/survey/{share_code}). 응답 제출은 외부 URL에서 처리."
         }
       ]
     }

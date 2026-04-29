@@ -36,7 +36,7 @@ interface SurveyListParams {
       is_login_required: boolean, // true면 응답 제출 시 로그인 필요
       response_count: number,    // 현재 응답 수
       template_theme: string,    // "BASIC" | "MODERN" | "ELEGANT"
-      share_code: string | null, // 공유 코드 (/survey/{share_code} SPA로 이동)
+      share_code: string | null, // 공유 코드 (/aiapp-baas/survey/{share_code} SPA로 이동)
       form_url: null,            // 항상 null — 클라이언트에서 직접 조합
       created_at: string         // ISO 8601
     }>,
@@ -47,7 +47,7 @@ interface SurveyListParams {
 }
 ```
 
-> **참여 URL 조합**: `form_url`은 null입니다. `share_code`가 있으면 `/survey/{share_code}` 경로로 이동하는 링크를 클라이언트에서 직접 생성하세요.
+> **참여 URL 조합**: `form_url`은 null입니다. `share_code`가 있으면 `/aiapp-baas/survey/{share_code}` 경로로 이동하는 링크를 클라이언트에서 직접 생성하세요. (정적 설문 페이지도 `/aiapp-baas/*` prefix를 통해 CDN 프록시됩니다.)
 > `is_login_required: true`이면 "로그인 필요" 배지를 표시하고, 비로그인 사용자가 참여 버튼 클릭 시 로그인 페이지로 안내하세요.
 
 ### 응답 예시
@@ -189,8 +189,8 @@ interface ResponseSubmitRequest {
 const { data } = await fetch(`/public/survey/${projectId}/surveys`).then(r => r.json());
 const surveys = data.items;
 
-// 2. 참여 URL 생성 (share_code 기반)
-const participateUrl = survey.share_code ? `/survey/${survey.share_code}` : null;
+// 2. 참여 URL 생성 (share_code 기반, BASE_URL prefix 필수)
+const participateUrl = survey.share_code ? `${BASE_URL}/survey/${survey.share_code}` : null;
 
 // 3. is_login_required 처리
 if (survey.is_login_required && !isLoggedIn) {
