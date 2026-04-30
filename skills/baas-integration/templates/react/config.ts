@@ -2,7 +2,7 @@
  * BaaS API 설정
  */
 
-export const BASE_URL = '/aiapp-baas';
+export const BASE_URL = 'https://dev.aiapp.link';
 
 /**
  * 환경변수에서 Project ID를 가져옵니다.

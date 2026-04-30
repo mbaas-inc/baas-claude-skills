@@ -1,6 +1,6 @@
 {
   "version": "7.0",
-  "base_url": "/aiapp-baas",
+  "base_url": "https://dev.aiapp.link",
   "common_ref": "references/common.md",
   "fallback": "sections로 부족하면 ref 파일 전체를 읽고, 인증/에러 처리가 필요하면 references/common.md를 추가로 읽으세요",
   "data_flow": {
