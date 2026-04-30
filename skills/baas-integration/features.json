@@ -19,7 +19,8 @@
     },
     "feature": {
       "id": "기능을 식별하기 위한 키 (실제 매칭은 keywords로 함)",
-      "label": "사용자에게 보여줄 기능 이름",
+      "label": "사용자에게 보여줄 기능 이름 (짧은 제목)",
+      "description": "사용자가 읽고 이해할 수 있는 기능 설명 (어떤 일을 하는지)",
       "auth": "이 기능이 로그인이 필요한지에 대한 정책 (값별 의미는 SKILL.md 참조)",
       "keywords": "사용자 요청과 이 기능을 연결할 검색어 목록",
       "template": "이 기능 구현 시 가져다 쓸 코드 파일 (배열이면 여러 파일 묶음, 문자열이면 단일 파일)",
@@ -46,6 +47,7 @@
         {
           "id": "account",
           "label": "회원 인증 — 로그인/회원가입/로그아웃/계정정보",
+          "description": "회원가입, 로그인, 로그아웃, 그리고 본인 계정정보 조회까지 회원 인증 전반을 처리합니다.",
           "auth": false,
           "keywords": ["로그인", "login", "회원가입", "signup", "가입", "로그아웃", "logout", "인증", "계정정보", "내 정보", "프로필"],
           "template": [
@@ -72,6 +74,7 @@
         {
           "id": "recipient",
           "label": "연락처 등록",
+          "description": "이름·전화번호 등을 입력 받아 발송 대상(예약·문의·뉴스레터 구독자 등)을 등록합니다.",
           "auth": false,
           "keywords": ["연락처", "문의", "예약", "뉴스레터", "구독", "접수", "신청"],
           "template": "templates/react/useRecipient.tsx",
@@ -90,6 +93,7 @@
         {
           "id": "notice",
           "label": "공지사항 — 목록/상세",
+          "description": "공지사항을 사용자에게 목록과 상세 화면으로 보여줍니다.",
           "auth": "settings",
           "keywords": ["공지사항", "notice", "공지"],
           "template": "templates/react/useNotice.tsx",
@@ -101,6 +105,7 @@
         {
           "id": "faq",
           "label": "FAQ — 목록/상세",
+          "description": "자주 묻는 질문과 답변을 보여줍니다. 답변이 목록 응답에 포함되어 펼쳐보기 형태로도 구성할 수 있습니다.",
           "auth": "settings",
           "keywords": ["FAQ", "자주묻는질문", "질문", "답변"],
           "template": "templates/react/useFaq.tsx",
@@ -119,6 +124,7 @@
         {
           "id": "survey",
           "label": "설문조사 목록",
+          "description": "활성화된 설문 목록을 보여주고, 참여 버튼 클릭 시 설문 페이지로 이동시킵니다. 응답 제출은 외부 페이지에서 처리됩니다.",
           "auth": false,
           "keywords": ["설문", "설문조사", "만족도"],
           "template": "templates/react/useSurvey.tsx",
@@ -140,6 +146,7 @@
         {
           "id": "dynamic_board",
           "label": "동적 게시판 — FREE/REVIEW/URL_LINK",
+          "description": "게시판(자유게시판, 리뷰, URL 링크 모음)에서 글 작성·수정·삭제, 댓글, 파일 첨부, 신고 기능을 제공합니다.",
           "auth": "mixed",
           "keywords": ["게시판", "게시글 목록", "자유게시판", "리뷰", "링크 목록", "글쓰기", "댓글"],
           "template": [
