@@ -1,5 +1,32 @@
 {
   "version": "7.0",
+  "field_descriptions": {
+    "_purpose": "이 파일의 각 필드가 어떤 역할을 하는지 정리한 문서. 실제 동작에는 영향을 주지 않음.",
+    "top": {
+      "version": "이 색인 파일의 스키마 버전",
+      "base_url": "모든 API 호출 앞에 붙는 공통 URL",
+      "common_ref": "여러 그룹이 공통으로 참고하는 정보(에러 코드, 인증 등)가 담긴 파일",
+      "fallback": "sections만으로 부족할 때 AI가 어떻게 대응할지에 대한 안내",
+      "data_flow": "각 그룹의 일반적인 사용 흐름을 한 줄로 요약",
+      "static": "프로젝트 ID만 있으면 동작하는 기능 그룹들",
+      "dynamic": "추가 ID(예: board_id)가 별도로 필요한 기능 그룹들"
+    },
+    "group": {
+      "group": "도메인 단위 그룹명 (account, board 등)",
+      "ref": "이 그룹의 상세 API 스펙이 정리된 파일 경로",
+      "common_sections": "이 그룹 안 모든 기능이 공통으로 참조하는 ref 파일 섹션",
+      "features": "이 그룹에 속한 개별 기능 목록"
+    },
+    "feature": {
+      "id": "기능을 식별하기 위한 키 (실제 매칭은 keywords로 함)",
+      "label": "사용자에게 보여줄 기능 이름",
+      "auth": "이 기능이 로그인이 필요한지에 대한 정책 (값별 의미는 SKILL.md 참조)",
+      "keywords": "사용자 요청과 이 기능을 연결할 검색어 목록",
+      "template": "이 기능 구현 시 가져다 쓸 코드 파일 (배열이면 여러 파일 묶음, 문자열이면 단일 파일)",
+      "sections": "ref 파일에서 이 기능에 필요한 부분만 골라 읽기 위한 섹션 제목 목록",
+      "note": "AI가 코드 생성할 때만 참고하는 보충 메모 (사용자에게는 보이지 않음)"
+    }
+  },
   "base_url": "/aiapp-baas",
   "common_ref": "references/common.md",
   "fallback": "sections로 부족하면 ref 파일 전체를 읽고, 인증/에러 처리가 필요하면 references/common.md를 추가로 읽으세요",
@@ -18,7 +45,7 @@
       "features": [
         {
           "id": "account",
-          "label": "회원 인증 (번들) — 로그인/회원가입/로그아웃/계정정보",
+          "label": "회원 인증 — 로그인/회원가입/로그아웃/계정정보",
           "auth": false,
           "keywords": ["로그인", "login", "회원가입", "signup", "가입", "로그아웃", "logout", "인증", "계정정보", "내 정보", "프로필"],
           "template": [
@@ -62,7 +89,7 @@
       "features": [
         {
           "id": "notice",
-          "label": "공지사항 (번들) — 목록/상세",
+          "label": "공지사항 — 목록/상세",
           "auth": "settings",
           "keywords": ["공지사항", "notice", "공지"],
           "template": "templates/react/useNotice.tsx",
@@ -73,7 +100,7 @@
         },
         {
           "id": "faq",
-          "label": "FAQ (번들) — 목록/상세",
+          "label": "FAQ — 목록/상세",
           "auth": "settings",
           "keywords": ["FAQ", "자주묻는질문", "질문", "답변"],
           "template": "templates/react/useFaq.tsx",
@@ -112,7 +139,7 @@
       "features": [
         {
           "id": "dynamic_board",
-          "label": "동적 게시판 (번들) — FREE/REVIEW/URL_LINK",
+          "label": "동적 게시판 — FREE/REVIEW/URL_LINK",
           "auth": "mixed",
           "keywords": ["게시판", "게시글 목록", "자유게시판", "리뷰", "링크 목록", "글쓰기", "댓글"],
           "template": [
