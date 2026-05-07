@@ -6,7 +6,7 @@
 https://dev.aiapp.link
 ```
 
-> dev 환경에서는 절대 URL을 사용해 dev API 서버에 직접 호출합니다 (개발 시 상대경로로는 cross-origin이 어렵기 때문).
+> stage 환경에서는 절대 URL을 사용해 dev API 서버에 직접 호출합니다 (개발 시 상대경로로는 cross-origin이 어렵기 때문).
 > 모든 API 호출은 `${BASE_URL}/account/login` 형태로 구성하세요 (config의 `BASE_URL` 사용).
 
 ```typescript
