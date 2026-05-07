@@ -1,6 +1,6 @@
 # BaaS 동적 게시판 API 스펙
 
-동적 게시판(FREE/REVIEW)의 게시글 CRUD, 댓글, 파일 업로드, 신고 API 스펙입니다.
+동적 게시판(FREE/REVIEW/URL_LINK)의 게시글 CRUD, 댓글, 파일 업로드, 신고 API 스펙입니다.
 
 ## 목차
 
