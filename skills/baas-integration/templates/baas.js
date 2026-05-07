@@ -17,7 +17,7 @@
 // 설정
 // ============================================
 
-const API_BASE_URL = '/aiapp-baas';
+const API_BASE_URL = 'https://www.aiapp.link';
 
 /**
  * 환경변수에서 project_id를 가져옵니다.
@@ -188,6 +188,42 @@ export async function checkAuth() {
     return { isLoggedIn: true, user };
   } catch {
     return { isLoggedIn: false, user: null };
+  }
+}
+
+/**
+ * 비밀번호 변경
+ *
+ * 인증된 사용자만 본인의 비밀번호를 변경할 수 있습니다.
+ * SNS 로그인 계정(카카오/네이버/구글 등)은 비밀번호 변경이 불가합니다.
+ *
+ * @param {string} currentPassword - 현재 비밀번호
+ * @param {string} newPassword - 새 비밀번호 (8자 이상)
+ * @returns {Promise<void>}
+ *
+ * @example
+ * try {
+ *   await changePassword('oldpass123', 'newpass456');
+ *   alert('비밀번호가 변경되었습니다.');
+ * } catch (err) {
+ *   alert(err.message);
+ * }
+ */
+export async function changePassword(currentPassword, newPassword) {
+  const response = await fetch(`${API_BASE_URL}/account/profile/change-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+  });
+
+  const result = await response.json();
+
+  if (result.result !== 'SUCCESS') {
+    throw new Error(result.message || '비밀번호 변경에 실패했습니다');
   }
 }
 

@@ -124,6 +124,30 @@ export interface UseAccountInfoReturn {
 }
 
 // ============================================
+// useChangePassword 타입
+// ============================================
+
+/** 비밀번호 변경 요청 */
+export interface PasswordChangeRequest {
+  current_password: string;
+  new_password: string;
+}
+
+/** useChangePassword 반환 타입 */
+export interface UseChangePasswordReturn {
+  /** 비밀번호 변경 함수 */
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  /** 로딩 상태 */
+  isLoading: boolean;
+  /** 에러 메시지 */
+  error: string | null;
+  /** 변경 성공 여부 */
+  isSuccess: boolean;
+  /** 상태 초기화 */
+  reset: () => void;
+}
+
+// ============================================
 // useRecipient 타입
 // ============================================
 
