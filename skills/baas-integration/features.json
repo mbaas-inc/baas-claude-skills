@@ -1,5 +1,5 @@
 {
-  "version": "7.1",
+  "version": "7.0",
   "field_descriptions": {
     "_purpose": "이 파일의 각 필드가 어떤 역할을 하는지 정리한 문서. 실제 동작에는 영향을 주지 않음.",
     "top": {
@@ -46,9 +46,9 @@
       "features": [
         {
           "id": "account",
-          "label": "회원 인증 — 로그인/회원가입/로그아웃/계정정보/비밀번호 변경",
-          "description": "회원가입, 로그인, 로그아웃, 본인 계정정보 조회, 비밀번호 변경까지 회원 인증 전반을 처리합니다.",
-          "auth": "mixed",
+          "label": "회원 인증 — 로그인/회원가입/로그아웃/계정정보",
+          "description": "회원가입, 로그인, 로그아웃, 그리고 본인 계정정보 조회까지 회원 인증 전반을 처리합니다.",
+          "auth": false,
           "keywords": ["로그인", "login", "회원가입", "signup", "가입", "로그아웃", "logout", "인증", "계정정보", "내 정보", "프로필", "비밀번호 변경", "change password", "current password", "비밀번호 수정", "패스워드 변경"],
           "template": [
             "templates/react/useLogin.tsx",

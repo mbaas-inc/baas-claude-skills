@@ -79,6 +79,9 @@ export { useRecipient } from './useRecipient';
 export { useNotice } from './useNotice';
 export { useFaq } from './useFaq';
 
-// Dynamic Board Hooks (FREE/REVIEW)
+// Dynamic Board Hooks (FREE/REVIEW/URL_LINK)
 export { useBoard } from './useBoard';
 export { useComments } from './useComments';
+
+// Survey Hooks
+export { useSurveyList, useSurveyDetail, useSurveySubmit } from './useSurvey';
