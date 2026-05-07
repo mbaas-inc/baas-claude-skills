@@ -49,20 +49,23 @@
           "label": "회원 인증 — 로그인/회원가입/로그아웃/계정정보",
           "description": "회원가입, 로그인, 로그아웃, 그리고 본인 계정정보 조회까지 회원 인증 전반을 처리합니다.",
           "auth": false,
-          "keywords": ["로그인", "login", "회원가입", "signup", "가입", "로그아웃", "logout", "인증", "계정정보", "내 정보", "프로필"],
+          "keywords": ["로그인", "login", "회원가입", "signup", "가입", "로그아웃", "logout", "인증", "계정정보", "내 정보", "프로필", "비밀번호 변경", "change password", "current password", "비밀번호 수정", "패스워드 변경"],
           "template": [
             "templates/react/useLogin.tsx",
             "templates/react/useSignup.tsx",
             "templates/react/useLogout.tsx",
-            "templates/react/useAccountInfo.tsx"
+            "templates/react/useAccountInfo.tsx",
+            "templates/react/useChangePassword.tsx"
           ],
           "sections": [
             "## 1. 회원가입 API (프로젝트 회원 전용)",
             "## 2. 로그인 API",
             "## 3. 로그아웃 API",
             "## 4. 계정정보 조회 API",
+            "## 5. 비밀번호 변경 API",
             "## phone 필드 검증"
-          ]
+          ],
+          "note": "비밀번호 변경은 인증 필수(쿠키), SNS 로그인 계정은 사용 불가"
         }
       ]
     },

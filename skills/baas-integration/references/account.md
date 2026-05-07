@@ -6,6 +6,7 @@
 2. [로그인 API](#2-로그인-api)
 3. [로그아웃 API](#3-로그아웃-api)
 4. [계정정보 조회 API](#4-계정정보-조회-api)
+5. [비밀번호 변경 API](#5-비밀번호-변경-api)
 
 ---
 
@@ -163,6 +164,60 @@ interface LoginRequest {
   "message": "로그인이 필요합니다."
 }
 ```
+
+---
+
+## 5. 비밀번호 변경 API
+
+| 항목 | 값 |
+|------|-----|
+| Endpoint | `POST /account/profile/change-password` |
+| 인증 | 필요 (쿠키) |
+| Content-Type | `application/json` |
+
+### 요청
+```typescript
+interface PasswordChangeRequest {
+  current_password: string;  // 현재 비밀번호
+  new_password: string;      // 새 비밀번호 (8자 이상 필수)
+}
+```
+
+### 응답
+```typescript
+{
+  result: "SUCCESS",
+  data: null,
+  message: "비밀번호가 변경되었습니다."
+}
+```
+
+### 유효성 검사
+| 필드 | 조건 |
+|------|------|
+| `current_password` | 필수 |
+| `new_password` | 필수, 8자 이상 |
+
+### 제약 사항
+- SNS 로그인 계정(카카오/네이버/구글 등)은 비밀번호 변경 불가
+- 현재 비밀번호가 일치해야 변경 가능
+
+### 에러 응답 예시
+```json
+{
+  "result": "FAIL",
+  "errorCode": "BAD_REQUEST",
+  "message": "현재 비밀번호가 올바르지 않습니다."
+}
+```
+
+| 상황 | HTTP | errorCode |
+|------|------|-----------|
+| 현재 비밀번호 불일치 | 400 | `BAD_REQUEST` |
+| SNS 로그인 계정 | 400 | `BAD_REQUEST` |
+| 계정을 찾을 수 없음 | 404 | `NOT_FOUND` |
+| `new_password` 8자 미만 | 422 | `VALIDATION_ERROR` |
+| 미인증(쿠키 만료) | 401 | `UNAUTHORIZED` |
 
 ---
 

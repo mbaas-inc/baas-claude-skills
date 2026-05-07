@@ -4,7 +4,7 @@
  * Account + Messaging API를 모두 포함합니다.
  *
  * 사용법:
- * import { useLogin, useSignup, useLogout, useAccountInfo, useRecipient } from './react';
+ * import { useLogin, useSignup, useLogout, useAccountInfo, useChangePassword, useRecipient } from './react';
  *
  * 환경변수 설정 필요 (로그인/회원가입/발송대상):
  * - REACT_APP_BAAS_PROJECT_ID (React CRA)
@@ -28,6 +28,8 @@ export type {
   UseLogoutReturn,
   UseAccountInfoOptions,
   UseAccountInfoReturn,
+  PasswordChangeRequest,
+  UseChangePasswordReturn,
   // Messaging Types
   RecipientCreateRequest,
   RecipientResponse,
@@ -68,6 +70,7 @@ export { useLogin } from './useLogin';
 export { useSignup } from './useSignup';
 export { useLogout } from './useLogout';
 export { useAccountInfo } from './useAccountInfo';
+export { useChangePassword } from './useChangePassword';
 
 // Messaging Hooks
 export { useRecipient } from './useRecipient';
