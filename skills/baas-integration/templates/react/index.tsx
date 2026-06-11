@@ -85,3 +85,11 @@ export { useComments } from './useComments';
 
 // Survey Hooks
 export { useSurveyList, useSurveyDetail, useSurveySubmit } from './useSurvey';
+
+// Reservation Hooks (예약 — 슬롯 캘린더/예약 신청/내 예약)
+export {
+  useReservationTargets,
+  useReservationSlots,
+  useReservationBooking,
+  useMyReservations
+} from './useReservation';
