@@ -1,6 +1,6 @@
 ---
 name: baas-integration
-description: "(BaaS API) 회원 인증 + 발송대상 + 게시판 + 설문조사 목록 통합. static: 회원가입/로그인/로그아웃/계정정보(번들), 연락처 등록, 공지사항(번들)/FAQ(번들) 조회, 설문조사 목록. dynamic(board_id 필요): 동적 게시판(FREE/REVIEW/URL_LINK) — 게시글 CRUD/댓글/파일/신고(번들). Use when: 로그인/회원가입 구현, 인증 시스템, 연락처 등록 폼, 예약 접수, 문의 등록, 뉴스레터 구독, 공지사항 페이지, FAQ 페이지, 자유게시판, 리뷰 게시판, 링크 목록(URL_LINK), 커뮤니티, 설문조사 목록 페이지"
+description: "(BaaS API) 회원 인증 + 발송대상 + 게시판 + 설문조사 목록 + 예약 통합. static: 회원가입/로그인/로그아웃/계정정보(번들), 연락처 등록, 공지사항(번들)/FAQ(번들) 조회, 설문조사 목록, 예약(슬롯 캘린더/예약 신청/내 예약). dynamic(board_id 필요): 동적 게시판(FREE/REVIEW/URL_LINK) — 게시글 CRUD/댓글/파일/신고(번들). Use when: 로그인/회원가입 구현, 인증 시스템, 연락처 등록 폼, 예약 접수, 문의 등록, 뉴스레터 구독, 공지사항 페이지, FAQ 페이지, 자유게시판, 리뷰 게시판, 링크 목록(URL_LINK), 커뮤니티, 설문조사 목록 페이지, 슬롯/캘린더 기반 예약(네이버 예약식), 예약 내역 관리"
 ---
 
 # BaaS API 통합 스킬
@@ -65,5 +65,6 @@ templates/
     ├── useBoard.tsx           # FREE/REVIEW/URL_LINK CRUD + 파일 업로드 + 신고
     ├── useComments.tsx
     ├── useSurvey.tsx          # useSurveyList (목록 표시용)
+    ├── useReservation.tsx     # 예약: 대상/슬롯/캘린더 조회 + 예약 생성/내역/수정/취소
     └── index.tsx              # 통합 export
 ```
