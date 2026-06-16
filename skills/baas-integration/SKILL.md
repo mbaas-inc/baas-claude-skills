@@ -29,7 +29,7 @@ description: "(BaaS API) 회원 인증 + 발송대상 + 게시판 + 설문조사
 
 | 항목 | 값 |
 |------|-----|
-| BASE_URL | `https://dev.aiapp.link` (dev 환경) |
+| BASE_URL | `/aiapp-baas` |
 | 인증 | `credentials: 'include'` (모든 fetch 필수) |
 | 환경변수 | `REACT_APP_BAAS_PROJECT_ID` / `NEXT_PUBLIC_BAAS_PROJECT_ID` / `VITE_BAAS_PROJECT_ID` |
 
@@ -50,7 +50,7 @@ description: "(BaaS API) 회원 인증 + 발송대상 + 게시판 + 설문조사
 
 ```
 templates/
-├── baas.ts / baas.js          # Vanilla TS/JS (API_BASE_URL = 'https://dev.aiapp.link')
+├── baas.ts / baas.js          # Vanilla TS/JS (API_BASE_URL = '/aiapp-baas')
 └── react/
     ├── config.ts              # BASE_URL, getProjectId
     ├── types.ts               # 중앙 집중식 타입 정의

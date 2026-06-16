@@ -143,8 +143,8 @@ export function useSurveyList(): UseSurveyListReturn {
     }
   }, []);
 
-  // server가 채운 form_url 그대로 반환 — "https://dev.aiapp.link/survey/{share_code}" 절대 URL
-  // 별도 가공 없이 그대로 link href로 사용
+  // server가 채운 form_url 그대로 반환 — "/aiapp-baas/survey/{share_code}" 형식
+  // 브라우저가 호출 도메인 자동 prefix → 외부 도메인 임베드 시 same-origin 작동
   const getParticipateUrl = useCallback(
     (survey: SurveyListItem): string | null => survey.form_url,
     []

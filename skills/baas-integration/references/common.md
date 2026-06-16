@@ -3,16 +3,17 @@
 ## Base URL
 
 ```
-https://dev.aiapp.link
+/aiapp-baas
 ```
 
-> stage 환경에서는 절대 URL을 사용해 dev API 서버에 직접 호출합니다 (개발 시 상대경로로는 cross-origin이 어렵기 때문).
+> CDN `/aiapp-baas/*` behavior → API Gateway → aiapp-service Lambda  
+> CloudFront Function이 `/aiapp-baas` prefix를 제거하므로 Lambda는 `/account/login` 형태로 수신합니다.  
 > 모든 API 호출은 `${BASE_URL}/account/login` 형태로 구성하세요 (config의 `BASE_URL` 사용).
 
 ```typescript
-// 올바른 호출 패턴 (BASE_URL = 'https://dev.aiapp.link')
+// 올바른 호출 패턴 (BASE_URL = '/aiapp-baas')
 fetch(`${BASE_URL}/account/login`, { credentials: 'include' });
-// → https://dev.aiapp.link/account/login → dev API 서버
+// → /aiapp-baas/account/login → CDN → API GW → Lambda(/account/login)
 ```
 
 ---
