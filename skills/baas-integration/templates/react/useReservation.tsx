@@ -58,6 +58,10 @@ export interface ReservationSettings {
     allow_self_modify: boolean;
     max_active_per_user: number;
   };
+  payment_policy: {                // 결제 정책 — enabled=true면 예약 후 결제 필요
+    enabled: boolean;
+    amount: number;                // 표시 참고용. 실제 청구액은 booking 응답 payment.amount
+  };
 }
 
 export interface ReservationFormField {
@@ -84,6 +88,15 @@ export interface ReservationSlot {
   remaining: number;   // 0이면 마감
 }
 
+// 결제 필요 대상의 예약 생성 응답에 포함 (payment_policy.enabled=true). 토스 위젯에 그대로 사용.
+export interface ReservationPaymentInfo {
+  session_id: string;
+  amount: number;       // 서버 확정 금액(원)
+  order_id: string;     // 토스 orderId
+  status: string;       // 결제 세션 상태 (CREATED = 결제 전)
+  client_key: string;   // 토스 결제위젯 clientKey
+}
+
 export interface Reservation {
   id: string;
   target_id: string;
@@ -95,6 +108,7 @@ export interface Reservation {
   created_at: string;
   updated_at: string;
   cancelled_at: string | null;
+  payment?: ReservationPaymentInfo | null;  // 결제 필요 대상만. 토스 위젯 → confirmPayment 흐름
 }
 
 // =============================================================================
@@ -230,6 +244,11 @@ interface UseReservationBookingReturn {
   isLoading: boolean;
   error: string | null;
   book: (reservedAt: string, formData: Record<string, any>) => Promise<Reservation | null>;
+  // 결제 필요 대상: 토스 위젯 성공 후 호출 (payment 인자는 book 응답의 reservation.payment 그대로)
+  confirmPayment: (
+    reservationId: string,
+    payment: { payment_key: string; order_id: string; amount: number },
+  ) => Promise<Reservation | null>;
 }
 
 export function useReservationBooking(targetId: string): UseReservationBookingReturn {
@@ -263,7 +282,36 @@ export function useReservationBooking(targetId: string): UseReservationBookingRe
     }
   }, [targetId]);
 
-  return { reservation, isLoading, error, book };
+  // 토스 결제위젯 성공 후 결제 승인 → 예약 확정. amount/order_id는 book 응답 payment 값 그대로 전달.
+  const confirmPayment = useCallback(async (
+    reservationId: string,
+    payment: { payment_key: string; order_id: string; amount: number },
+  ) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `${BASE_URL}/reservation/bookings/${reservationId}/confirm-payment`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payment),
+        }
+      );
+      const json = await res.json();
+      if (json.result !== 'SUCCESS') throw new Error(json.message || '결제 승인 실패');
+      setReservation(json.data);
+      return json.data as Reservation;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '알 수 없는 오류');
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  return { reservation, isLoading, error, book, confirmPayment };
 }
 
 // =============================================================================

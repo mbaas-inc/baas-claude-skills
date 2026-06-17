@@ -151,13 +151,22 @@ interface ReservationCreateRequest {
     admin_memo: string | null,
     created_at: string,
     updated_at: string,
-    cancelled_at: string | null
+    cancelled_at: string | null,
+    payment?: {                   // 결제 필요 대상(payment_policy.enabled=true)일 때만 포함, 아니면 null
+      session_id: string,
+      amount: number,             // 서버 확정 결제 금액(원) — 위젯·표시에 이 값 사용
+      order_id: string,           // 토스 orderId (위젯·결제 승인에 그대로 사용)
+      status: string,             // 결제 세션 상태 (CREATED = 결제 전)
+      client_key: string          // 토스 결제위젯 clientKey (브라우저 공개용)
+    } | null
   },
-  message: "예약이 접수되었습니다."
+  message: "예약이 접수되었습니다." // 결제 필요 시 "예약이 접수되었습니다. 결제를 완료해 주세요."
 }
 ```
 
 > **status 분기**: `approval_policy.auto_confirm=true`면 즉시 `CONFIRMED`, `false`면 `PENDING`(관리자 승인 대기). 응답 `status`로 "예약 확정"/"접수됨(승인 대기)" 화면을 분기하세요.
+>
+> **결제 필요 대상**(`payment_policy.enabled=true`): 응답에 `payment` 객체가 포함되고, status는 결제 완료 전까지 항상 `PENDING`입니다. 결제(`## 9`)를 완료해야 확정(auto_confirm) 또는 승인 대기로 진행합니다. `payment`가 없으면(무료 대상) 기존대로 status로 바로 완료 처리하세요.
 
 ---
 
@@ -233,6 +242,52 @@ interface ReservationUpdateRequest {
 
 ---
 
+## 9. 예약 결제 승인 (결제 필요 대상, 로그인 필요)
+
+`payment_policy.enabled=true`인 대상은 **예약 생성(`## 5`) 후 결제까지 완료해야 예약이 확정**됩니다. 예약 생성 응답의 `payment` 정보로 토스 결제위젯을 띄우고, 성공 후 아래로 승인합니다.
+
+| 항목 | 값 |
+|------|-----|
+| Endpoint | `POST /reservation/bookings/{reservation_id}/confirm-payment` |
+| 인증 | **필수** (본인 예약) |
+| Content-Type | `application/json` |
+
+### 요청
+```typescript
+interface ReservationConfirmPaymentRequest {
+  payment_key: string;  // 토스 결제위젯 성공 콜백의 paymentKey
+  order_id: string;     // 예약 생성 응답 payment.order_id 그대로
+  amount: number;       // 예약 생성 응답 payment.amount 그대로 (서버가 세션 금액과 대조)
+}
+```
+
+### 응답
+`## 5`와 동일한 `ReservationResponse`. 결제 완료 후 `auto_confirm=true`면 `status="CONFIRMED"`, `false`면 `PENDING` 유지(관리자 승인 대기). `message: "결제가 완료되었습니다."`
+
+### 결제 흐름
+```typescript
+// 1. 예약 생성 → 응답 payment 수신 (결제 필요 대상만)
+const booking = await book(slot, formData);             // POST .../bookings
+if (booking.payment) {
+  // 2. 토스 결제위젯 (금액·orderId·clientKey 모두 서버 응답값 사용)
+  const toss = await loadTossPayments(booking.payment.client_key);
+  await toss.requestPayment('CARD', {
+    amount: booking.payment.amount,                       // 서버 확정 금액
+    orderId: booking.payment.order_id,                    // 세션 orderId
+    orderName: targetName + ' 예약',
+    successUrl: location.origin + '/reservation/payment-success?rid=' + booking.id,
+    failUrl: location.origin + '/reservation/payment-fail',
+  });
+  // 3. successUrl 페이지에서 paymentKey 수신 → 승인
+  // POST /reservation/bookings/{booking.id}/confirm-payment
+  //   { payment_key, order_id: booking.payment.order_id, amount: booking.payment.amount }
+}
+```
+
+> 금액·orderId·clientKey는 **반드시 booking 응답값을 그대로** 사용하세요(직접 만들지 말 것). 금액은 서버가 세션과 대조해 위변조 시 `BAD_REQUEST`. 무료 대상은 `payment`가 없으므로 이 단계를 건너뜁니다.
+
+---
+
 ## reservation_settings 해설
 
 `## 2` 응답의 `reservation_settings`는 4개 정책 묶음입니다. 슬롯 그리드와 입력 검증을 이 값으로 구성하세요.
@@ -258,6 +313,10 @@ interface ReservationSettings {
     allow_self_modify: boolean;   // false면 수정 버튼 숨김
     max_active_per_user: number;  // 사용자당 동시 활성 예약 수 상한
   };
+  payment_policy: {               // 예약 결제 정책 (#495 결제 빌딩블록)
+    enabled: boolean;             // true면 예약 신청 시 결제 필요 (false=무료 예약)
+    amount: number;               // 결제 금액(원). 표시 참고용 — 실제 청구액은 booking 응답 payment.amount(서버 확정) 사용
+  };
 }
 ```
 
@@ -271,6 +330,8 @@ interface ReservationSettings {
 | `cancel_deadline_min` | 취소 버튼 노출/비활성 판단(클라이언트 가드 + 서버 재검증) |
 | `allow_self_modify` | `false`면 수정 UI 숨김 |
 | `max_active_per_user` | 한도 도달 시 예약 버튼 비활성 + 안내 |
+| `payment_policy.enabled` | `true`면 예약 흐름에 결제 단계 추가(`## 9`). 금액 표시 + 결제 버튼. `false`면 무료 예약 |
+| `payment_policy.amount` | 결제 금액 표시(원). 실제 청구액은 booking 응답 `payment.amount`(서버 확정)를 사용 |
 
 ---
 
@@ -330,11 +391,17 @@ await fetchSlots('2026-06-15');                         // remaining===0 → 비
 // 5. 로그인 체크 → 폼 작성 → 예약 생성
 if (!isLoggedIn) { /* account 로그인으로 유도 */ }
 const { book } = useReservationBooking(target.id);
-await book(selectedSlot, formData);                     // POST .../bookings
+const booking = await book(selectedSlot, formData);     // POST .../bookings
 
-// 6. auto_confirm 분기
-//   응답 status === 'CONFIRMED' → "예약 확정"
-//   응답 status === 'PENDING'   → confirmation_message + "승인 대기"
+// 5.5 결제 필요 대상이면 토스 위젯 → 결제 승인(## 9). 무료 대상은 booking.payment 없음 → 건너뜀
+if (booking.payment) {
+  // loadTossPayments(booking.payment.client_key).requestPayment({ orderId, amount, ... })
+  // successUrl → POST /reservation/bookings/{booking.id}/confirm-payment
+}
+
+// 6. auto_confirm 분기 (결제 완료 후 기준)
+//   status === 'CONFIRMED' → "예약 확정"
+//   status === 'PENDING'   → confirmation_message + "승인 대기"
 ```
 
 ### 레시피 요약
@@ -344,6 +411,8 @@ await book(selectedSlot, formData);                     // POST .../bookings
 | `## 3` `slots[].remaining` | 시간 슬롯 버튼(0=마감 비활성) |
 | `## 2` `reservation_form_schema.fields` | 동적 입력 폼 |
 | `## 2` `approval_policy.auto_confirm` | 완료 화면 확정/접수 분기 |
+| `## 2` `payment_policy.enabled` | 결제 단계 노출 여부(`## 9`). 금액 표시 + 결제 후 확정 |
+| `## 5` 응답 `payment` | 토스 위젯(client_key/order_id/amount) → `## 9` 승인 |
 | 비로그인 + 예약 시도 | `account` 로그인/회원가입 유도 |
 
 ---
