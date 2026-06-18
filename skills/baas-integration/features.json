@@ -1,5 +1,5 @@
 {
-  "version": "9.1",
+  "version": "9.2",
   "field_descriptions": {
     "_purpose": "이 파일의 각 필드가 어떤 역할을 하는지 정리한 문서. 실제 동작에는 영향을 주지 않음.",
     "top": {
@@ -163,12 +163,12 @@
             "## 6. 내 예약 목록 (로그인 필요)",
             "## 7. 예약 수정 (로그인 필요)",
             "## 8. 예약 취소 (로그인 필요)",
-            "## 9. 예약 결제 승인 (결제 필요 대상, 로그인 필요)",
+            "## 9. 예약 결제 승인 (카드 결제 예약, 로그인 필요)",
             "## reservation_settings 해설",
             "## reservation_form_schema 렌더링",
             "## 구현 패턴"
           ],
-          "note": "조회(목록/상세/슬롯/캘린더)는 무인증, 예약 생성/수정/취소/결제는 프로젝트 회원 로그인 필요(account 기능 재사용). Target·운영정책·예약폼·결제정책은 관리자가 콘솔에서 사전 생성. payment_policy.enabled=true면 예약 생성 응답 payment로 토스 위젯→confirm-payment(## 9). 금액·orderId·client_key는 서버 응답값 그대로 사용. 단순 접수폼은 messaging.recipient 사용."
+          "note": "조회(목록/상세/슬롯/캘린더)는 무인증, 예약 생성/수정/취소/결제는 프로젝트 회원 로그인 필요(account 기능 재사용). Target·운영정책·예약폼·결제정책은 관리자가 콘솔에서 사전 생성. payment_policy는 {amount,onsite,online} — 유료(amount>0+방법≥1)면 구매자가 booking 시 payment_method 선택(둘 다 제공이면). online이면 응답 payment(amount/order_id=예약id/client_key)로 토스 위젯→confirm-payment(## 9), 세션은 승인 시점 생성. onsite는 결제단계 없이 현장 수금. 단순 접수폼은 messaging.recipient 사용."
         }
       ]
     },

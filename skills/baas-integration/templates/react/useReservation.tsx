@@ -58,9 +58,10 @@ export interface ReservationSettings {
     allow_self_modify: boolean;
     max_active_per_user: number;
   };
-  payment_policy: {                // 결제 정책 — enabled=true면 예약 후 결제 필요
-    enabled: boolean;
+  payment_policy: {                // 결제 정책 — amount>0 + 제공방법(onsite/online)≥1이면 유료
     amount: number;                // 표시 참고용. 실제 청구액은 booking 응답 payment.amount
+    onsite: boolean;               // 현장 결제 제공(방문 시 결제)
+    online: boolean;               // 카드 선결제 제공(예약 시 토스 결제 — 정산 계정 등록 시에만 true)
   };
 }
 
@@ -88,14 +89,15 @@ export interface ReservationSlot {
   remaining: number;   // 0이면 마감
 }
 
-// 결제 필요 대상의 예약 생성 응답에 포함 (payment_policy.enabled=true). 토스 위젯에 그대로 사용.
+// 카드(online) 결제 예약의 생성 응답에 포함. 토스 위젯에 그대로 사용.
+// 세션은 결제 승인 시점에 생성되므로 여기엔 session_id가 없다. order_id는 예약 ID를 그대로 쓴다.
 export interface ReservationPaymentInfo {
-  session_id: string;
   amount: number;       // 서버 확정 금액(원)
-  order_id: string;     // 토스 orderId
-  status: string;       // 결제 세션 상태 (CREATED = 결제 전)
+  order_id: string;     // 토스 orderId (= 예약 id)
   client_key: string;   // 토스 결제위젯 clientKey
 }
+
+export type ReservationPaymentMethod = 'onsite' | 'online';
 
 export interface Reservation {
   id: string;
@@ -104,11 +106,12 @@ export interface Reservation {
   reserved_at: string;
   form_data: Record<string, any>;
   status: ReservationStatus;
+  payment_method: ReservationPaymentMethod | null;  // 구매자 선택 결제방법(무료는 null)
   admin_memo: string | null;
   created_at: string;
   updated_at: string;
   cancelled_at: string | null;
-  payment?: ReservationPaymentInfo | null;  // 결제 필요 대상만. 토스 위젯 → confirmPayment 흐름
+  payment?: ReservationPaymentInfo | null;  // 카드 결제 예약만. 토스 위젯 → confirmPayment 흐름
 }
 
 // =============================================================================
@@ -243,8 +246,14 @@ interface UseReservationBookingReturn {
   reservation: Reservation | null;
   isLoading: boolean;
   error: string | null;
-  book: (reservedAt: string, formData: Record<string, any>) => Promise<Reservation | null>;
-  // 결제 필요 대상: 토스 위젯 성공 후 호출 (payment 인자는 book 응답의 reservation.payment 그대로)
+  // paymentMethod: 유료 대상에서 제공방법(payment_policy.onsite/online) 중 구매자 선택.
+  // 둘 다 제공이면 사용자가 고른 값을, 하나만 제공이면 생략 가능(서버가 자동 선택).
+  book: (
+    reservedAt: string,
+    formData: Record<string, any>,
+    paymentMethod?: ReservationPaymentMethod,
+  ) => Promise<Reservation | null>;
+  // 카드(online) 예약: 토스 위젯 성공 후 호출 (payment 인자는 book 응답의 reservation.payment 그대로)
   confirmPayment: (
     reservationId: string,
     payment: { payment_key: string; order_id: string; amount: number },
@@ -257,7 +266,11 @@ export function useReservationBooking(targetId: string): UseReservationBookingRe
   const [error, setError] = useState<string | null>(null);
 
   // reservedAt: ## 3 슬롯 응답의 slot 값을 그대로 전달
-  const book = useCallback(async (reservedAt: string, formData: Record<string, any>) => {
+  const book = useCallback(async (
+    reservedAt: string,
+    formData: Record<string, any>,
+    paymentMethod?: ReservationPaymentMethod,
+  ) => {
     setIsLoading(true);
     setError(null);
     try {
@@ -267,7 +280,11 @@ export function useReservationBooking(targetId: string): UseReservationBookingRe
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reserved_at: reservedAt, form_data: formData }),
+          body: JSON.stringify({
+            reserved_at: reservedAt,
+            form_data: formData,
+            ...(paymentMethod ? { payment_method: paymentMethod } : {}),
+          }),
         }
       );
       const json = await res.json();
