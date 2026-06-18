@@ -6,7 +6,9 @@
 > **구현 전 확인**: `GET /public/store/{project_id}/config`의 `store_enabled`가 `false`이거나
 > 상품 목록이 빈 배열이면 판매자(셀러) 미승인/상품 미등록 상태입니다. 구매 UI를 구현하지 마세요.
 
-> **데이터 흐름**: config 조회(store_enabled·클라이언트 키) → 상품 목록/상세 → **로그인** → 약관 동의 → 주문 생성 → 토스 결제창 → successUrl 리다이렉트 → 결제 승인(confirm) → 내 주문 → (전달 확인 후) 구매확정
+> **데이터 흐름**: config 조회(store_enabled·클라이언트 키) → 상품 목록/상세 → **로그인** → 약관 동의 → **결제 준비(prepare)** → 토스 결제창 → successUrl 리다이렉트 → **결제 승인(confirm = 주문 생성)** → 내 주문 → (전달 확인 후) 구매확정
+>
+> **주문은 결제 완료 시점에 생성됩니다(#495).** 결제창만 열고 결제하지 않으면 주문이 만들어지지 않아 "결제대기" 잔재가 없습니다. prepare는 검증·금액 계산만, confirm이 결제 승인과 동시에 주문을 생성합니다.
 
 > **인증 경계**: 상품·config·약관 **조회는 인증 불필요**. 주문 생성/결제 승인/내 주문/구매확정/취소는 **프로젝트 회원 로그인 필수** (이 스킬의 `account` 기능으로 가입·로그인한 사용자). 비로그인 사용자가 구매 버튼을 누르면 `account` 로그인으로 유도하세요.
 
@@ -99,12 +101,15 @@
 
 ---
 
-## 4. 주문 생성 (로그인 필수)
+## 4. 결제 준비 (prepare, 로그인 필수)
 
 | 항목 | 값 |
 |------|-----|
-| Endpoint | `POST /store/orders` |
+| Endpoint | `POST /store/orders/prepare` |
 | 인증 | **필수** (프로젝트 회원) |
+
+> **주문은 아직 생성되지 않습니다.** prepare는 게이팅·상품·약관 검증과 금액 계산만 하고, 토스 결제창에
+> 넘길 `order_no`·`amount`·`order_name`을 발급합니다. 결제창만 열고 이탈해도 주문 잔재가 없습니다.
 
 ### 요청
 ```typescript
@@ -120,15 +125,16 @@
 {
   result: "SUCCESS",
   data: {
-    id: string,            // order_id — 이후 confirm-payment/confirm/cancel path에 사용
-    order_no: string,      // 토스 결제창 orderId로 그대로 사용
-    product_name: string,  // 결제창 orderName으로 사용
-    amount: number,        // 결제창 amount로 그대로 사용 (서버 계산값)
-    status: "PENDING",
-    ...
+    order_no: string,      // 토스 결제창 orderId로 그대로 사용 + confirm에 전달
+    amount: number,        // 결제창 amount (서버 계산값) + confirm에 전달
+    order_name: string     // 결제창 orderName
   }
 }
 ```
+
+> ⚠️ confirm 단계에서 `product_id`·`quantity`·`terms_agreed`를 **다시 보내야** 합니다(주문이 아직 없어
+> 서버가 금액을 재계산). successUrl 리다이렉트로 상태가 사라지므로, prepare 직전 값(`product_id`,
+> `quantity`, `order_no`)을 **`sessionStorage` 등에 저장**해 두었다가 success 페이지에서 사용하세요.
 
 ---
 
@@ -144,10 +150,10 @@ const payment = tossPayments.payment({ customerKey: TossPayments.ANONYMOUS });
 
 await payment.requestPayment({
   method: "CARD",
-  amount: { currency: "KRW", value: order.amount },   // 서버 응답 금액 그대로
-  orderId: order.order_no,                            // 서버 응답 order_no 그대로
-  orderName: order.product_name,
-  successUrl: `${window.location.origin}/checkout/success?store_order_id=${order.id}`,
+  amount: { currency: "KRW", value: prepared.amount },   // prepare 응답 금액 그대로
+  orderId: prepared.order_no,                            // prepare 응답 order_no 그대로
+  orderName: prepared.order_name,
+  successUrl: `${window.location.origin}/checkout/success`,
   failUrl: `${window.location.origin}/checkout/fail`,
 });
 ```
@@ -156,29 +162,33 @@ await payment.requestPayment({
 
 ---
 
-## 6. 결제 승인 (successUrl 페이지에서 호출, 로그인 필수)
+## 6. 결제 승인 = 주문 생성 (successUrl 페이지에서 호출, 로그인 필수)
 
 | 항목 | 값 |
 |------|-----|
-| Endpoint | `POST /store/orders/{order_id}/confirm-payment` |
-| 인증 | **필수** (주문 생성과 같은 회원) |
+| Endpoint | `POST /store/orders/confirm` |
+| 인증 | **필수** (prepare와 같은 회원) |
 
-### 요청 (successUrl 쿼리 파라미터를 그대로 전달)
+### 요청 (successUrl 쿼리 + 보관해 둔 준비 정보)
 ```typescript
 {
   payment_key: string,   // 쿼리 paymentKey
-  order_id: string,      // 쿼리 orderId (= order_no)
-  amount: number         // 쿼리 amount (숫자 변환)
+  order_id: string,      // 쿼리 orderId (= prepare의 order_no)
+  amount: number,        // 쿼리 amount (숫자 변환)
+  product_id: string,    // 보관해 둔 값 (서버가 금액 재계산·검증)
+  quantity: number,      // 보관해 둔 값
+  terms_agreed: true
 }
 ```
 
 ### 응답
 ```typescript
-{ result: "SUCCESS", data: { ...주문, status: "PAID", receipt_url: string | null } }
+{ result: "SUCCESS", data: { id, order_no, status: "PAID", receipt_url: string | null, ... } }
 ```
 
-> 이중 호출은 서버가 멱등 처리합니다(같은 paymentKey 재호출 시 성공 반환). 그래도 성공 후에는 주문 상세 페이지로 즉시 이동하세요.
-> 실패(4xx) 시 주문은 `FAILED`가 되며 재결제는 **새 주문 생성**부터 다시 시작합니다.
+> 결제 승인이 성공하면 **이 시점에 주문(PAID)이 생성**됩니다. 이중 호출은 서버가 멱등 처리합니다(같은
+> `order_id`로 이미 결제된 주문이 있으면 그 주문 반환). 토스 승인 실패(4xx) 시 **주문은 생성되지 않으며**,
+> 재결제는 prepare부터 다시 시작합니다.
 
 ---
 
@@ -200,7 +210,7 @@ await payment.requestPayment({
     product_name: string,
     quantity: number,
     amount: number,
-    status: "PENDING" | "PAID" | "FULFILLED" | "CONFIRMED" | "FAILED" | "CANCELED",
+    status: "PAID" | "FULFILLED" | "CONFIRMED" | "CANCELED",  // 주문은 PAID로만 생성됨(결제 완료 시)
     fulfillment_note: string | null,  // FULFILLED 이후 — 전달받은 코드/안내 (강조 표시)
     receipt_url: string | null,       // 토스 영수증
     paid_at: string | null,
@@ -216,7 +226,6 @@ await payment.requestPayment({
 ### 상태별 UI 가이드
 | status | 표시 | 가능한 액션 |
 |--------|------|------------|
-| `PENDING` | 결제 대기 | 취소 |
 | `PAID` | 전달 대기 (판매자 처리 중) | 환불 |
 | `FULFILLED` | 전달 완료 — `fulfillment_note` 강조 표시 | **구매확정** / 환불 |
 | `CONFIRMED` | 구매 확정 (환불 불가) | - |

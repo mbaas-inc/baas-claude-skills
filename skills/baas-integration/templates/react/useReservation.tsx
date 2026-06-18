@@ -59,9 +59,9 @@ export interface ReservationSettings {
     max_active_per_user: number;
   };
   payment_policy: {                // 결제 정책 — amount>0 + 제공방법(onsite/online)≥1이면 유료
-    amount: number;                // 표시 참고용. 실제 청구액은 booking 응답 payment.amount
-    onsite: boolean;               // 현장 결제 제공(방문 시 결제)
-    online: boolean;               // 카드 선결제 제공(예약 시 토스 결제 — 정산 계정 등록 시에만 true)
+    amount: number;                // 표시 참고용. 카드 결제 청구액은 prepare 응답 amount(서버 확정)
+    onsite: boolean;               // 현장 결제 제공(방문 시 결제 — 즉시 예약)
+    online: boolean;               // 카드 선결제 제공(prepare→confirm, 정산 계정 등록 시에만 true)
   };
 }
 
@@ -89,11 +89,11 @@ export interface ReservationSlot {
   remaining: number;   // 0이면 마감
 }
 
-// 카드(online) 결제 예약의 생성 응답에 포함. 토스 위젯에 그대로 사용.
-// 세션은 결제 승인 시점에 생성되므로 여기엔 session_id가 없다. order_id는 예약 ID를 그대로 쓴다.
+// 카드(online) 예약 "결제 준비(prepare)" 응답. 토스 위젯에 그대로 사용(예약은 결제 승인 시 생성).
+// 세션·예약이 아직 없으므로 session_id가 없다. order_id는 생성될 예약 ID이자 토스 orderId.
 export interface ReservationPaymentInfo {
   amount: number;       // 서버 확정 금액(원)
-  order_id: string;     // 토스 orderId (= 예약 id)
+  order_id: string;     // 토스 orderId (= 생성될 예약 id)
   client_key: string;   // 토스 결제위젯 clientKey
 }
 
@@ -111,7 +111,6 @@ export interface Reservation {
   created_at: string;
   updated_at: string;
   cancelled_at: string | null;
-  payment?: ReservationPaymentInfo | null;  // 카드 결제 예약만. 토스 위젯 → confirmPayment 흐름
 }
 
 // =============================================================================
@@ -246,17 +245,20 @@ interface UseReservationBookingReturn {
   reservation: Reservation | null;
   isLoading: boolean;
   error: string | null;
-  // paymentMethod: 유료 대상에서 제공방법(payment_policy.onsite/online) 중 구매자 선택.
-  // 둘 다 제공이면 사용자가 고른 값을, 하나만 제공이면 생략 가능(서버가 자동 선택).
+  // 무료/현장(onsite) 예약 — 즉시 생성. paymentMethod: 현장이면 'onsite', 무료면 생략. 'online'은 보내지 말 것(prepare 사용).
   book: (
     reservedAt: string,
     formData: Record<string, any>,
     paymentMethod?: ReservationPaymentMethod,
   ) => Promise<Reservation | null>;
-  // 카드(online) 예약: 토스 위젯 성공 후 호출 (payment 인자는 book 응답의 reservation.payment 그대로)
-  confirmPayment: (
-    reservationId: string,
-    payment: { payment_key: string; order_id: string; amount: number },
+  // 카드(online) 예약 결제 준비 — 예약 미생성. 토스 위젯에 넘길 amount/order_id/client_key 발급.
+  prepareBooking: (
+    reservedAt: string,
+    formData: Record<string, any>,
+  ) => Promise<ReservationPaymentInfo | null>;
+  // 카드 결제 승인 = 예약 생성. 토스 위젯 성공 후 successUrl에서 호출(보관해 둔 reserved_at/form_data 함께).
+  confirmBooking: (
+    payload: { order_id: string; payment_key: string; amount: number; reserved_at: string; form_data: Record<string, any> },
   ) => Promise<Reservation | null>;
 }
 
@@ -265,7 +267,7 @@ export function useReservationBooking(targetId: string): UseReservationBookingRe
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // reservedAt: ## 3 슬롯 응답의 slot 값을 그대로 전달
+  // 무료/현장 — 즉시 생성. reservedAt: ## 3 슬롯 응답의 slot 값을 그대로 전달
   const book = useCallback(async (
     reservedAt: string,
     formData: Record<string, any>,
@@ -299,26 +301,53 @@ export function useReservationBooking(targetId: string): UseReservationBookingRe
     }
   }, [targetId]);
 
-  // 토스 결제위젯 성공 후 결제 승인 → 예약 확정. amount/order_id는 book 응답 payment 값 그대로 전달.
-  const confirmPayment = useCallback(async (
-    reservationId: string,
-    payment: { payment_key: string; order_id: string; amount: number },
+  // 카드 — 결제 준비(예약 미생성). 반환 amount/order_id/client_key로 토스 위젯 호출 후 confirmBooking.
+  const prepareBooking = useCallback(async (
+    reservedAt: string,
+    formData: Record<string, any>,
   ) => {
     setIsLoading(true);
     setError(null);
     try {
       const res = await fetch(
-        `${BASE_URL}/reservation/bookings/${reservationId}/confirm-payment`,
+        `${BASE_URL}/reservation/targets/${targetId}/bookings/prepare`,
         {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payment),
+          body: JSON.stringify({ reserved_at: reservedAt, form_data: formData, payment_method: 'online' }),
+        }
+      );
+      const json = await res.json();
+      if (json.result !== 'SUCCESS') throw new Error(json.message || '결제 준비 실패');
+      return json.data as ReservationPaymentInfo;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '알 수 없는 오류');
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [targetId]);
+
+  // 카드 결제 승인 = 예약 생성. 예약이 아직 없으므로 reserved_at/form_data를 함께 전달(서버 재검증).
+  const confirmBooking = useCallback(async (
+    payload: { order_id: string; payment_key: string; amount: number; reserved_at: string; form_data: Record<string, any> },
+  ) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `${BASE_URL}/reservation/targets/${targetId}/bookings/confirm`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
         }
       );
       const json = await res.json();
       if (json.result !== 'SUCCESS') throw new Error(json.message || '결제 승인 실패');
-      setReservation(json.data);
+      setReservation(json.data);   // 이 시점에 예약 생성됨
       return json.data as Reservation;
     } catch (e) {
       setError(e instanceof Error ? e.message : '알 수 없는 오류');
@@ -326,9 +355,9 @@ export function useReservationBooking(targetId: string): UseReservationBookingRe
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [targetId]);
 
-  return { reservation, isLoading, error, book, confirmPayment };
+  return { reservation, isLoading, error, book, prepareBooking, confirmBooking };
 }
 
 // =============================================================================

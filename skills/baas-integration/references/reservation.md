@@ -123,51 +123,67 @@
 
 ## 5. 예약 생성 (로그인 필요)
 
+**결제 방법에 따라 경로가 갈립니다** — 무료·현장(onsite)은 **즉시 생성**, 카드(online)는 **결제 완료 시점에 생성**(prepare→confirm). 어떤 방법인지는 대상의 `payment_policy`로 런타임 결정합니다(아래 "결제 UI 분기" 참고).
+
+> **카드 예약은 결제 완료 시점에 생성됩니다(#495).** 결제창만 열고 이탈하면 예약·슬롯 점유 잔재가 없습니다.
+
+### 5-1. 무료 / 현장(onsite) 예약 — 즉시 생성
+
 | 항목 | 값 |
 |------|-----|
 | Endpoint | `POST /reservation/targets/{target_id}/bookings` |
-| 인증 | **필수** (프로젝트 회원) |
-| Content-Type | `application/json` |
+| 인증 | **필수** |
 
-### 요청
 ```typescript
-interface ReservationCreateRequest {
-  reserved_at: string;            // 슬롯 시작 시각 (## 3의 slot 값 그대로, ISO 8601)
-  form_data: Record<string, any>; // reservation_form_schema.fields의 name → 값 맵
-  payment_method?: 'onsite' | 'online';  // 유료 대상에서 구매자 선택. 제공방법(payment_policy.onsite/online) 중 하나.
-                                          // 둘 다 제공이면 필수, 하나만 제공이면 생략 가능(서버 자동 선택)
-}
+// 요청
+{ reserved_at: string, form_data: Record<string, any>, payment_method?: 'onsite' }
+//   무료=payment_method 생략, 현장=‘onsite’. ‘online’을 보내면 400(카드는 prepare 경로 사용)
+// 응답 data
+{ id, target_id, reserved_at, form_data,
+  status: "PENDING" | "CONFIRMED" | "CANCELLED" | "NO_SHOW",
+  payment_method: 'onsite' | null, ... }   // payment 객체 없음
 ```
 
-### 응답
+> status: `auto_confirm=true`→`CONFIRMED`, `false`→`PENDING`(관리자 승인 대기). 현장(onsite)은 방문 시 오프라인 수금.
+
+### 5-2. 카드(online) 예약 — 결제 준비 (prepare)
+
+| 항목 | 값 |
+|------|-----|
+| Endpoint | `POST /reservation/targets/{target_id}/bookings/prepare` |
+| 인증 | **필수** |
+
+> 예약은 아직 생성되지 않습니다. 슬롯·폼 검증 + 금액 계산 후 토스 결제창에 넘길 정보를 발급합니다.
+
 ```typescript
-{
-  result: "SUCCESS",
-  data: {
-    id: string,                   // reservation_id
-    target_id: string,
-    account_id: string,
-    reserved_at: string,
-    form_data: Record<string, any>,
-    status: "PENDING" | "CONFIRMED" | "CANCELLED" | "NO_SHOW",
-    payment_method: 'onsite' | 'online' | null,  // 구매자 선택 결제방법(무료는 null)
-    admin_memo: string | null,
-    created_at: string,
-    updated_at: string,
-    cancelled_at: string | null,
-    payment?: {                   // 카드(online) 결제 예약일 때만 포함, 아니면 null
-      amount: number,             // 서버 확정 결제 금액(원) — 위젯·표시에 이 값 사용
-      order_id: string,           // 토스 orderId (= 예약 id, 위젯·결제 승인에 그대로 사용)
-      client_key: string          // 토스 결제위젯 clientKey (브라우저 공개용)
-    } | null
-  },
-  message: "예약이 접수되었습니다." // 카드 결제 시 "예약이 접수되었습니다. 결제를 완료해 주세요."
-}
+// 요청
+{ reserved_at: string, form_data: Record<string, any>, payment_method: 'online' }
+// 응답 data
+{ amount: number,        // 서버 확정 결제 금액(원) — 위젯에 이 값 사용
+  order_id: string,      // 토스 orderId (= 생성될 예약 ID). confirm에 그대로 전달
+  client_key: string }   // 토스 결제위젯 clientKey
 ```
 
-> **status 분기**: `approval_policy.auto_confirm=true`면 즉시 `CONFIRMED`, `false`면 `PENDING`(관리자 승인 대기). 응답 `status`로 "예약 확정"/"접수됨(승인 대기)" 화면을 분기하세요.
->
-> **카드(online) 결제 예약**: 응답에 `payment` 객체가 포함되고 status는 결제 완료 전까지 `PENDING`입니다. 결제(`## 9`)를 완료해야 확정으로 진행합니다. **세션은 결제 승인 시점에 생성**되므로 `payment`엔 `session_id`가 없고 `order_id`는 예약 ID입니다. **현장(onsite)·무료 예약**은 `payment`가 없으므로 status로 바로 완료 처리하세요(현장 결제는 방문 시 오프라인 수금).
+> ⚠️ confirm에 `reserved_at`·`form_data`를 **다시 보내야** 합니다(예약이 아직 없어 서버가 정원·폼·금액 재검증). successUrl 리다이렉트로 상태가 사라지므로 prepare 직전 값(`order_id`, `reserved_at`, `form_data`)을 **`sessionStorage` 등에 보관**하세요.
+
+### 5-3. 카드 예약 결제 승인 = 예약 생성 (confirm)
+
+| 항목 | 값 |
+|------|-----|
+| Endpoint | `POST /reservation/targets/{target_id}/bookings/confirm` |
+| 인증 | **필수** |
+
+```typescript
+// 요청 (successUrl 쿼리 + 보관해 둔 준비 정보)
+{ order_id: string,      // 쿼리 orderId (= prepare의 order_id)
+  payment_key: string,   // 쿼리 paymentKey
+  amount: number,        // 쿼리 amount
+  reserved_at: string,   // 보관 값
+  form_data: Record<string, any> }  // 보관 값
+// 응답 data: 생성된 예약 { id, status, payment_method: 'online', ... }
+```
+
+> **결제 ≠ 자동확정** — 결제 완료 후 status는 승인 정책을 따릅니다(`auto_confirm`이면 `CONFIRMED`, 아니면 `PENDING` 승인 대기). 정원은 토스 과금 *전* 재검증(마감이면 과금 없이 거부). 이중 호출은 멱등(같은 `order_id`면 그 예약 반환).
 
 ---
 
@@ -243,47 +259,44 @@ interface ReservationUpdateRequest {
 
 ---
 
-## 9. 예약 결제 승인 (카드 결제 예약, 로그인 필요)
+## 9. 카드 예약 결제 흐름 (prepare → 토스 위젯 → confirm)
 
-구매자가 **카드(online)** 결제를 선택한 예약은 **예약 생성(`## 5`) 후 결제까지 완료해야 확정**됩니다. 예약 생성 응답의 `payment` 정보로 토스 결제위젯을 띄우고, 성공 후 아래로 승인합니다. (현장(onsite) 결제는 `payment`가 없어 이 단계를 건너뜁니다.)
+카드(online) 예약은 **결제 준비(`## 5-2`) → 토스 결제창 → 결제 승인(`## 5-3` = 예약 생성)** 순으로 진행합니다. 예약은 결제 승인 성공 시점에 만들어집니다(현장·무료는 `## 5-1`로 즉시 생성, 이 흐름을 건너뜀).
 
-| 항목 | 값 |
-|------|-----|
-| Endpoint | `POST /reservation/bookings/{reservation_id}/confirm-payment` |
-| 인증 | **필수** (본인 예약) |
-| Content-Type | `application/json` |
+> **토스 SDK는 v2(스토어와 동일)** 를 사용합니다 — `js.tosspayments.com/v2/standard`. 예약·스토어가 같은 SDK·호출 방식을 공유합니다.
 
-### 요청
-```typescript
-interface ReservationConfirmPaymentRequest {
-  payment_key: string;  // 토스 결제위젯 성공 콜백의 paymentKey
-  order_id: string;     // 예약 생성 응답 payment.order_id 그대로
-  amount: number;       // 예약 생성 응답 payment.amount 그대로 (서버가 세션 금액과 대조)
-}
+```html
+<script src="https://js.tosspayments.com/v2/standard"></script>
 ```
 
-### 응답
-`## 5`와 동일한 `ReservationResponse`. 결제 완료 후 `auto_confirm=true`면 `status="CONFIRMED"`, `false`면 `PENDING` 유지(관리자 승인 대기). `message: "결제가 완료되었습니다."`
-
-### 결제 흐름
 ```typescript
-// 1. 예약 생성 → 응답 payment 수신 (결제 필요 대상만)
-const booking = await book(slot, formData);             // POST .../bookings
-if (booking.payment) {
-  // 2. 토스 결제위젯 (금액·orderId·clientKey 모두 서버 응답값 사용)
-  const toss = await loadTossPayments(booking.payment.client_key);
-  await toss.requestPayment('CARD', {
-    amount: booking.payment.amount,                       // 서버 확정 금액
-    orderId: booking.payment.order_id,                    // 세션 orderId
-    orderName: targetName + ' 예약',
-    successUrl: location.origin + '/reservation/payment-success?rid=' + booking.id,
-    failUrl: location.origin + '/reservation/payment-fail',
-  });
-  // 3. successUrl 페이지에서 paymentKey 수신 → 승인
-  // POST /reservation/bookings/{booking.id}/confirm-payment
-  //   { payment_key, order_id: booking.payment.order_id, amount: booking.payment.amount }
-}
+// 1) 결제 준비 — 예약 미생성, order_id/amount/client_key 발급
+const prepared = await prepareBooking(targetId, {
+  reserved_at: slot, form_data: formData, payment_method: 'online',
+});  // POST /reservation/targets/{target_id}/bookings/prepare
+
+// confirm(예약 생성)에 필요 — 리다이렉트로 사라지는 값 보관
+sessionStorage.setItem('baas_rsv_ctx', JSON.stringify({
+  target_id: targetId, order_id: prepared.order_id, reserved_at: slot, form_data: formData,
+}));
+
+// 2) 토스 결제창 (v2) — 금액·orderId·clientKey 모두 prepare 응답값 사용
+const payment = TossPayments(prepared.client_key).payment({ customerKey: TossPayments.ANONYMOUS });
+await payment.requestPayment({
+  method: 'CARD',
+  amount: { currency: 'KRW', value: prepared.amount },   // 서버 확정 금액
+  orderId: prepared.order_id,                            // = 생성될 예약 ID
+  orderName: targetName + ' 예약',
+  successUrl: location.origin + '/reservation/payment-success',
+  failUrl: location.origin + '/reservation/payment-fail',
+});
+
+// 3) successUrl 페이지 — 보관 값 + 쿼리(paymentKey/orderId/amount)로 결제 승인 = 예약 생성
+//    POST /reservation/targets/{target_id}/bookings/confirm
+//      { order_id, payment_key, amount, reserved_at, form_data }
 ```
+
+> 결제 승인 성공 시 **이 시점에 예약이 생성**되고, status는 승인 정책을 따릅니다(`auto_confirm`이면 `CONFIRMED`, 아니면 `PENDING`). 토스 승인 실패 시 예약은 생성되지 않습니다. 이중 호출은 멱등(같은 `order_id`면 그 예약 반환).
 
 > 금액·orderId·clientKey는 **반드시 booking 응답값을 그대로** 사용하세요(직접 만들지 말 것). 금액은 서버가 세션과 대조해 위변조 시 `BAD_REQUEST`. 무료 대상은 `payment`가 없으므로 이 단계를 건너뜁니다.
 
@@ -332,8 +345,8 @@ interface ReservationSettings {
 | `cancel_deadline_min` | 취소 버튼 노출/비활성 판단(클라이언트 가드 + 서버 재검증) |
 | `allow_self_modify` | `false`면 수정 UI 숨김 |
 | `max_active_per_user` | 한도 도달 시 예약 버튼 비활성 + 안내 |
-| `payment_policy.amount` | 0보다 크고 제공방법(onsite/online)이 1개 이상이면 유료 예약. 금액 표시(원), 실제 청구액은 booking 응답 `payment.amount`(서버 확정) 사용 |
-| `payment_policy.onsite` / `.online` | 구매자에게 보여줄 결제방법. **둘 다 true면 사용자가 선택**(`book`의 `paymentMethod`), 하나면 자동. `online`만 카드 결제 단계(`## 9`) 진행, `onsite`는 결제 단계 없이 방문 시 수금 |
+| `payment_policy.amount` | 0보다 크고 제공방법(onsite/online)이 1개 이상이면 유료 예약. 금액 표시(원), 카드 결제 청구액은 prepare 응답 `amount`(서버 확정) 사용 |
+| `payment_policy.onsite` / `.online` | 유료면 `[현장][카드]` 선택 그룹을 **항상 렌더하되 제공되는 것만 활성**(미제공은 `disabled`, 숨기지 말 것). 기본 = 활성 첫 방식. `online` 선택은 prepare→confirm 결제 단계(`## 9`), `onsite`/무료는 결제 단계 없이 `POST /bookings`로 즉시 생성(현장은 방문 시 수금) |
 
 ---
 
@@ -374,7 +387,9 @@ interface FormField {
 
 예약 UI는 고정 레이아웃이 아닙니다 — 아래 데이터→UI 매핑(레시피)을 조합해 **위저드/단일 페이지/인라인 캘린더 등 원하는 형태로** 자유롭게 구성하세요.
 
-> **⚠️ 결제 UI는 런타임 분기로 구현하세요 (하드코딩 금지).** 결제 정책은 관리자가 콘솔에서 언제든 바꿉니다(무료↔유료, 현장/카드 토글, 셀러 등록으로 카드 개방). 따라서 **특정 설정에 맞춰 고정 UI를 만들지 말고**, 대상 상세(`## 2`)의 `payment_policy`(`amount`/`onsite`/`online`)를 **매번 읽어 조건부 렌더**하세요 — 모든 경우(무료 / 현장만 / 카드만 / 둘 다)를 코드에 열어두고 값에 따라 보여주거나 숨기면, 관리자가 금액을 0→유료로 바꾸거나 셀러를 등록해도 **재생성·재배포 없이** 즉시 반영됩니다.
+> **⚠️ 결제 UI는 런타임 분기로 구현하세요 (하드코딩 금지).** 결제 정책은 관리자가 콘솔에서 언제든 바꿉니다(무료↔유료, 현장/카드 토글, 셀러 등록으로 카드 개방). 대상 상세(`## 2`)의 `payment_policy`(`amount`/`onsite`/`online`)를 **매번 읽어 조건부 렌더**하세요.
+>
+> **결제 방법 선택 UI는 "무료 / 유료" 2분기로 구현합니다.** 무료(`amount===0` 또는 제공방법 없음)면 결제 UI를 두지 않습니다. **유료면 `[현장 결제][카드 결제]` 선택 그룹을 항상 렌더하되, 제공되는 방식만 활성화하고 미제공 방식은 `disabled`로 비활성(숨기지 말 것)** 하세요. 기본 선택 = 활성된 첫 방식. 이렇게 하면 사용자는 활성 버튼만 고를 수 있어 **유료 예약은 항상 유효한 `payment_method`를 전송**하고, 관리자가 셀러 등록으로 카드를 열거나 금액을 바꿔도 재생성 없이 즉시 반영됩니다. (예: `<button disabled={!pay.onsite}>현장</button> <button disabled={!pay.online}>카드</button>`)
 
 ### 표준 예약 흐름
 ```typescript
@@ -384,40 +399,28 @@ const { targets } = useReservationTargets();            // GET /targets
 // 2. 대상 선택 → 상세(운영설정 + 폼)
 await fetchTargetDetail(target.id);                     // GET /targets/{id}
 
-// 3. 월 캘린더 → 날짜별 잔여 뱃지
-const { monthCounts, fetchMonth } = useReservationSlots(target.id);
-await fetchMonth('2026-06-01', '2026-06-30');           // counts {date: n}, 0이면 비활성
+// 3~4. 월 캘린더 → 날짜 → 시간 슬롯 (remaining===0 비활성)
+const { fetchMonth, fetchSlots } = useReservationSlots(target.id);
 
-// 4. 날짜 선택 → 시간 슬롯 버튼
-const { slots, fetchSlots } = useReservationSlots(target.id);
-await fetchSlots('2026-06-15');                         // remaining===0 → 비활성
-
-// 5.0 결제 방법 분기 — 런타임에 payment_policy로 결정(하드코딩 금지)
+// 5.0 결제 방법 분기 — 무료/유료 2분기 (하드코딩 금지)
 const pay = target.reservation_settings.payment_policy;
-const methods = [
-  pay.onsite && 'onsite',
-  pay.online && 'online',
-].filter(Boolean) as ('onsite' | 'online')[];
-const needsPayment = pay.amount > 0 && methods.length > 0;
-// needsPayment===false → 결제 UI 없음(무료). methods.length===1 → 자동. 2개 → 사용자 선택 UI 노출.
-let chosen: 'onsite' | 'online' | undefined = methods.length === 1 ? methods[0] : undefined;
-// (둘 다면 라디오/버튼으로 chosen 선택받기)
+const isPaid = pay.amount > 0 && (pay.onsite || pay.online);
+// 유료면 [현장][카드] 그룹을 항상 렌더, 제공되는 것만 활성(미제공은 disabled). 기본값 = 활성 첫 방식.
+let method: 'onsite' | 'online' | null = isPaid ? (pay.onsite ? 'onsite' : 'online') : null;
+//   onsite 버튼 disabled={!pay.onsite}, online 버튼 disabled={!pay.online} — onChange로 method 갱신
 
-// 5. 로그인 체크 → 폼 작성 → 예약 생성 (유료면 chosen 전달)
+// 5. 로그인 체크 → 폼 작성 → 결제 방법에 따라 분기
 if (!isLoggedIn) { /* account 로그인으로 유도 */ }
-const { book } = useReservationBooking(target.id);
-const booking = await book(selectedSlot, formData, needsPayment ? chosen : undefined);
 
-// 5.5 카드(online) 선택이면 booking.payment로 토스 위젯 → 결제 승인(## 9).
-//     현장(onsite)·무료는 booking.payment 없음 → 건너뜀(현장은 방문 시 오프라인 수금 안내).
-if (booking.payment) {
-  // loadTossPayments(booking.payment.client_key).requestPayment({ orderId, amount, ... })
-  // successUrl → POST /reservation/bookings/{booking.id}/confirm-payment
+if (isPaid && method === 'online') {
+  // 카드: 결제 준비(prepare) → 토스 위젯(v2) → 결제 승인(confirm = 예약 생성). ## 9 참고
+  // prepareBooking(...) → requestPayment(...) → successUrl → POST .../bookings/confirm
+} else {
+  // 무료 / 현장(onsite): 즉시 예약 생성
+  const { book } = useReservationBooking(target.id);
+  const booking = await book(selectedSlot, formData, isPaid ? method : undefined);
+  // 6. auto_confirm 분기: status==='CONFIRMED' → "예약 확정" / 'PENDING' → confirmation_message + "승인 대기"
 }
-
-// 6. auto_confirm 분기 (결제 완료 후 기준)
-//   status === 'CONFIRMED' → "예약 확정"
-//   status === 'PENDING'   → confirmation_message + "승인 대기"
 ```
 
 ### 레시피 요약
@@ -427,8 +430,8 @@ if (booking.payment) {
 | `## 3` `slots[].remaining` | 시간 슬롯 버튼(0=마감 비활성) |
 | `## 2` `reservation_form_schema.fields` | 동적 입력 폼 |
 | `## 2` `approval_policy.auto_confirm` | 완료 화면 확정/접수 분기 |
-| `## 2` `payment_policy.amount`/`onsite`/`online` | 유료 여부(amount>0+방법≥1)·제공 결제방법. 둘 다 제공이면 구매자 선택, online만 결제 단계(`## 9`) |
-| `## 5` 응답 `payment` | 토스 위젯(client_key/order_id/amount) → `## 9` 승인 |
+| `## 2` `payment_policy.amount`/`onsite`/`online` | 유료 여부(amount>0+방법≥1)·제공 결제방법. 유료면 `[현장][카드]` 그룹 항상 렌더(미제공 disabled), online 선택만 prepare→confirm 결제 단계(`## 9`) |
+| `## 5-2` prepare 응답(client_key/order_id/amount) | 카드 결제 시 토스 위젯(`## 9`) → `## 5-3` confirm으로 예약 생성 |
 | 비로그인 + 예약 시도 | `account` 로그인/회원가입 유도 |
 
 ---

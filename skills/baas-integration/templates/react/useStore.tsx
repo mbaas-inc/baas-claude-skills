@@ -196,6 +196,8 @@ declare global {
 }
 
 const TOSS_SDK_URL = 'https://js.tosspayments.com/v2/standard';
+// 결제 준비(prepare)~승인(confirm) 사이 successUrl 리다이렉트로 사라지는 컨텍스트 보관 키
+const CHECKOUT_CTX_KEY = 'baas_store_checkout_ctx';
 
 function loadTossSdk(): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -213,7 +215,8 @@ export function useCheckout() {
   const [error, setError] = useState<string | null>(null);
 
   /**
-   * 약관 동의 확인 → 주문 생성 → 토스 결제창 호출.
+   * 약관 동의 확인 → 결제 준비(prepare) → 토스 결제창 호출. **주문은 결제 완료(confirm) 시점에 생성된다.**
+   * successUrl 리다이렉트로 상태가 사라지므로, confirm에 필요한 정보를 sessionStorage에 보관한다.
    * 성공 시 /checkout/success 로 리다이렉트되므로 이후 코드는 실행되지 않는다.
    */
   const checkout = useCallback(
@@ -235,26 +238,33 @@ export function useCheckout() {
           throw new Error('현재 구매할 수 없는 상태입니다.');
         }
 
-        // 2) 주문 생성 — 금액은 서버가 계산
-        const orderRes = await fetch(`${BASE_URL}/store/orders`, {
+        // 2) 결제 준비 — 검증·금액 계산만(주문 미생성). order_no/amount/order_name 발급
+        const prepareRes = await fetch(`${BASE_URL}/store/orders/prepare`, {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ product_id: productId, quantity, terms_agreed: true }),
         });
-        const order: StoreOrder = await parseResponse(orderRes);
+        const prepared: { order_no: string; amount: number; order_name: string } =
+          await parseResponse(prepareRes);
 
-        // 3) 토스 결제창 — 서버 응답 금액/주문번호 그대로 사용
+        // confirm(주문 생성)에 필요 — 리다이렉트로 사라지는 상태를 보관
+        sessionStorage.setItem(
+          CHECKOUT_CTX_KEY,
+          JSON.stringify({ order_no: prepared.order_no, product_id: productId, quantity }),
+        );
+
+        // 3) 토스 결제창 — prepare 응답 금액/주문번호 그대로 사용
         const TossPayments = await loadTossSdk();
         const payment = TossPayments(config.toss_client_key).payment({
           customerKey: TossPayments.ANONYMOUS,
         });
         await payment.requestPayment({
           method: 'CARD',
-          amount: { currency: 'KRW', value: order.amount },
-          orderId: order.order_no,
-          orderName: order.product_name,
-          successUrl: `${window.location.origin}/checkout/success?store_order_id=${order.id}`,
+          amount: { currency: 'KRW', value: prepared.amount },
+          orderId: prepared.order_no,
+          orderName: prepared.order_name,
+          successUrl: `${window.location.origin}/checkout/success`,
           failUrl: `${window.location.origin}/checkout/fail`,
         });
       } catch (e: any) {
@@ -284,27 +294,29 @@ export function useCheckoutConfirm() {
     (async () => {
       try {
         const params = new URLSearchParams(window.location.search);
-        const storeOrderId = params.get('store_order_id');
         const paymentKey = params.get('paymentKey');
         const orderId = params.get('orderId');
         const amount = params.get('amount');
-        if (!storeOrderId || !paymentKey || !orderId || !amount) {
+        // prepare 단계에서 보관한 정보(주문이 아직 없으므로 confirm에 함께 전달)
+        const ctx = JSON.parse(sessionStorage.getItem(CHECKOUT_CTX_KEY) || 'null');
+        if (!paymentKey || !orderId || !amount || !ctx) {
           throw new Error('결제 정보가 올바르지 않습니다. 다시 시도해주세요.');
         }
-        const res = await fetch(
-          `${BASE_URL}/store/orders/${storeOrderId}/confirm-payment`,
-          {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              payment_key: paymentKey,
-              order_id: orderId,
-              amount: Number(amount),
-            }),
-          },
-        );
-        setOrder(await parseResponse(res));
+        const res = await fetch(`${BASE_URL}/store/orders/confirm`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            payment_key: paymentKey,
+            order_id: orderId,
+            amount: Number(amount),
+            product_id: ctx.product_id,
+            quantity: ctx.quantity,
+            terms_agreed: true,
+          }),
+        });
+        setOrder(await parseResponse(res));        // 이 시점에 주문(PAID) 생성됨
+        sessionStorage.removeItem(CHECKOUT_CTX_KEY);
       } catch (e: any) {
         setError(e.message || '결제 승인에 실패했습니다.');
       } finally {
