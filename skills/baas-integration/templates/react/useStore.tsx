@@ -6,7 +6,7 @@
  *
  * ⚠️ 결제 위험 구간은 이 훅이 전부 캡슐화합니다 — 훅 내부 로직을 수정하지 말고 그대로 사용하세요.
  *   - 금액은 항상 서버 주문 응답(amount)을 사용 (클라이언트 계산 금지)
- *   - successUrl/failUrl 라우트 규약: /checkout/success, /checkout/fail (references/store.md 참조)
+ *   - successUrl/failUrl 라우트 규약: /checkout-success, /checkout-fail (references/store.md 참조)
  *   - 약관 동의(termsAgreed) 없이 checkout()을 호출하면 에러
  *
  * 사용법:
@@ -14,7 +14,7 @@
  * const { products, categories, fetchProducts } = useStoreProducts();
  * const { terms } = useStoreTerms();
  * const { checkout, isLoading } = useCheckout();                // 결제창까지 진행
- * const { confirmResult } = useCheckoutConfirm();               // /checkout/success 전용
+ * const { confirmResult } = useCheckoutConfirm();               // /checkout-success 전용
  * const { orders, fetchMine, confirmPurchase, cancelOrder } = useMyOrders();
  *
  * 환경변수 설정 필요:
@@ -217,7 +217,7 @@ export function useCheckout() {
   /**
    * 약관 동의 확인 → 결제 준비(prepare) → 토스 결제창 호출. **주문은 결제 완료(confirm) 시점에 생성된다.**
    * successUrl 리다이렉트로 상태가 사라지므로, confirm에 필요한 정보를 sessionStorage에 보관한다.
-   * 성공 시 /checkout/success 로 리다이렉트되므로 이후 코드는 실행되지 않는다.
+   * 성공 시 /checkout-success 로 리다이렉트되므로 이후 코드는 실행되지 않는다.
    */
   const checkout = useCallback(
     async (productId: string, quantity: number, termsAgreed: boolean) => {
@@ -264,8 +264,8 @@ export function useCheckout() {
           amount: { currency: 'KRW', value: prepared.amount },
           orderId: prepared.order_no,
           orderName: prepared.order_name,
-          successUrl: `${window.location.origin}/checkout/success`,
-          failUrl: `${window.location.origin}/checkout/fail`,
+          successUrl: `${window.location.origin}/checkout-success`,
+          failUrl: `${window.location.origin}/checkout-fail`,
         });
       } catch (e: any) {
         // 사용자가 결제창을 닫은 경우(USER_CANCEL)는 조용히 종료
@@ -282,7 +282,7 @@ export function useCheckout() {
 }
 
 // =============================================================================
-// 결제 승인 — /checkout/success 페이지 전용 (위험 구간: 수정 금지)
+// 결제 승인 — /checkout-success 페이지 전용 (위험 구간: 수정 금지)
 // =============================================================================
 
 export function useCheckoutConfirm() {

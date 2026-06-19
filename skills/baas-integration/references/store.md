@@ -20,8 +20,8 @@
 
 | 라우트 | 역할 |
 |--------|------|
-| `/checkout/success` | 결제창 성공 복귀 — **`useCheckoutConfirm` 훅만 호출**해 결제 승인(confirm) 처리 후 결과 표시 |
-| `/checkout/fail` | 결제창 실패/취소 복귀 — 쿼리 `code`, `message` 표시 후 상품 페이지로 유도 |
+| `/checkout-success` | 결제창 성공 복귀 — **`useCheckoutConfirm` 훅만 호출**해 결제 승인(confirm) 처리 후 결과 표시 |
+| `/checkout-fail` | 결제창 실패/취소 복귀 — 쿼리 `code`, `message` 표시 후 상품 페이지로 유도 |
 
 추가 규약:
 - **금액은 항상 서버 기준** — 주문 생성 응답의 `amount`를 결제창에 전달하고, confirm 시에도 그 값을 그대로 사용. 클라이언트에서 금액을 계산·수정하지 마세요 (서버가 불일치 거부).
@@ -153,8 +153,8 @@ await payment.requestPayment({
   amount: { currency: "KRW", value: prepared.amount },   // prepare 응답 금액 그대로
   orderId: prepared.order_no,                            // prepare 응답 order_no 그대로
   orderName: prepared.order_name,
-  successUrl: `${window.location.origin}/checkout/success`,
-  failUrl: `${window.location.origin}/checkout/fail`,
+  successUrl: `${window.location.origin}/checkout-success`,
+  failUrl: `${window.location.origin}/checkout-fail`,
 });
 ```
 

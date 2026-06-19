@@ -287,8 +287,8 @@ await payment.requestPayment({
   amount: { currency: 'KRW', value: prepared.amount },   // 서버 확정 금액
   orderId: prepared.order_id,                            // = 생성될 예약 ID
   orderName: targetName + ' 예약',
-  successUrl: location.origin + '/reservation/payment-success',
-  failUrl: location.origin + '/reservation/payment-fail',
+  successUrl: location.origin + '/reservation-payment-success',
+  failUrl: location.origin + '/reservation-payment-fail',
 });
 
 // 3) successUrl 페이지 — 보관 값 + 쿼리(paymentKey/orderId/amount)로 결제 승인 = 예약 생성

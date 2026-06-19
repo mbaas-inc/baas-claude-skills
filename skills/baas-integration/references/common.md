@@ -18,6 +18,18 @@ fetch(`${BASE_URL}/account/login`, { credentials: 'include' });
 
 ---
 
+## ⚠️ 결제 복귀 라우트 · 정적 서빙 주의 (토스 successUrl/failUrl)
+
+토스 결제창은 **페이지 리다이렉트**로 돌아오므로, 결제 복귀 라우트(`/checkout-success` 등)는 **사용자가 그 URL로 직접 진입**합니다. 이때 SPA가 빌드되는 방식에 따라 정적 자산(JS/CSS)이 404/403 날 수 있습니다.
+
+- **결제 복귀 라우트는 반드시 평면(단일 세그먼트) 경로로 두세요** — `/checkout-success`, `/checkout-fail`, `/reservation-payment-success` 처럼. 중첩 경로(`/checkout/success`)는 SPA가 **상대 base(`./assets/...`)** 로 빌드된 경우 직접 진입 시 자산이 `/checkout/assets/...`로 잘못 해석돼 깨집니다(실제 자산은 `/assets/...`).
+- 가능하면 **빌드 base를 절대경로(`/`)** 로 설정하세요(Vite `base: '/'`). 그러면 라우트 깊이와 무관하게 자산이 `/assets/...`로 해석됩니다.
+- 결제 복귀 라우트를 포함한 모든 클라이언트 라우트는 **SPA fallback**(없는 경로 → `index.html` 반환)으로 서빙되어야 새로고침·직접 진입에서 부팅됩니다.
+
+> 토스 결제는 멱등(`idempotency_key`)이라, 자산 문제로 confirm이 실행되지 않아도 자산 복구 후 success 페이지에 다시 진입하면 같은 파라미터로 confirm이 실행되어 주문/예약이 생성됩니다(돈 유실 없음).
+
+---
+
 ## 인증 방식
 
 ### 쿠키 기반 JWT
