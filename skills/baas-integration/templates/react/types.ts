@@ -350,6 +350,7 @@ export interface BoardPostListItem {
   author_name: string;
   is_hidden: boolean;
   created_at: string;
+  rating: number | null;
 }
 
 /** 동적 게시판 게시글 목록 응답 */
@@ -374,6 +375,7 @@ export interface BoardPostDetail {
   updated_at: string | null;
   attachments: FileResponse[];
   board_settings: BoardSettings | null;
+  rating: number | null;
 }
 
 /** 게시글 작성 요청 */
@@ -382,6 +384,7 @@ export interface BoardPostCreateRequest {
   content: string;
   file_ids?: number[];
   is_hidden?: boolean;
+  rating?: number;
 }
 
 /** 게시글 수정 요청 */
@@ -389,6 +392,7 @@ export interface BoardPostUpdateRequest {
   title?: string;
   content?: string;
   file_ids?: number[];
+  rating?: number;
 }
 
 /** 게시글 목록 조회 옵션 */

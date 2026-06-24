@@ -1,5 +1,5 @@
 {
-  "version": "9.5",
+  "version": "9.6",
   "field_descriptions": {
     "_purpose": "이 파일의 각 필드가 어떤 역할을 하는지 정리한 문서. 실제 동작에는 영향을 주지 않음.",
     "top": {
@@ -201,9 +201,9 @@
         {
           "id": "dynamic_board",
           "label": "동적 게시판 — FREE/REVIEW/URL_LINK",
-          "description": "게시판(자유게시판, 리뷰, URL 링크 모음)에서 글 작성·수정·삭제, 댓글, 파일 첨부, 신고 기능을 제공합니다.",
+          "description": "게시판(자유게시판, 리뷰, URL 링크 모음)에서 글 작성·수정·삭제, 댓글, 파일 첨부(presigned URL 업로드), 신고 기능을 제공합니다. REVIEW 게시판은 1~5 별점(rating) 지원.",
           "auth": "mixed",
-          "keywords": ["게시판", "게시글 목록", "자유게시판", "리뷰", "링크 목록", "글쓰기", "댓글"],
+          "keywords": ["게시판", "게시글 목록", "자유게시판", "리뷰", "별점", "평점", "링크 목록", "글쓰기", "댓글", "파일 업로드"],
           "template": [
             "templates/react/useBoard.tsx",
             "templates/react/useComments.tsx"
@@ -219,10 +219,11 @@
             "## 8. 댓글 작성 API",
             "## 9. 댓글 수정 API",
             "## 10. 댓글 삭제 API",
-            "## 12. 파일 업로드 API",
+            "## 12. 파일 업로드 API (presigned URL)",
             "## 13. 게시글 신고 API",
             "## 14. 댓글 신고 API",
             "### 파일 업로드 플로우",
+            "### 리뷰(REVIEW) 별점",
             "### 댓글 계층 구조",
             "### board_settings UI 렌더링 규칙"
           ]

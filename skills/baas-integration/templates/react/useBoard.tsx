@@ -278,25 +278,44 @@ export function useBoard(): UseBoardReturn {
     setError(null);
 
     try {
-      const formData = new FormData();
-      files.forEach(file => formData.append('files', file));
+      const uploaded = [];
 
-      const response = await fetch(
-        `${BASE_URL}/boards/files?project_id=${getProjectId()}`,
-        {
-          method: 'POST',
-          credentials: 'include',
-          body: formData,
+      for (const file of files) {
+        const presignRes = await fetch(
+          `${BASE_URL}/upload/presign?project_id=${getProjectId()}`,
+          {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              category: 'board_attachment',
+              filename: file.name,
+              content_type: file.type || 'application/octet-stream',
+              size: file.size,
+              with_compressed: false,
+            }),
+          }
+        );
+
+        const presignJson = await presignRes.json();
+        if (!presignRes.ok) {
+          throw new Error(presignJson.message || '업로드 URL 발급에 실패했습니다');
         }
-      );
+        const { original, file_id } = presignJson.data;
 
-      const result = await response.json();
+        const putRes = await fetch(original.presign_url, {
+          method: 'PUT',
+          body: file,
+          headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        });
+        if (!putRes.ok) {
+          throw new Error('S3 업로드에 실패했습니다');
+        }
 
-      if (result.result !== 'SUCCESS') {
-        throw new Error(result.message || '파일 업로드에 실패했습니다');
+        uploaded.push({ id: file_id, file_name: file.name, url: original.cdn_url });
       }
 
-      return result.data;
+      return { files: uploaded };
     } catch (err) {
       const message = err instanceof Error ? err.message : '파일 업로드에 실패했습니다';
       setError(message);

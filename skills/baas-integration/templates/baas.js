@@ -536,10 +536,13 @@ export async function getBoardPostDetail(postId) {
  * @param {string} data.content - 내용
  * @param {number[]} [data.file_ids] - 첨부파일 ID 목록
  * @param {boolean} [data.is_hidden] - 숨김 여부
+ * @param {number} [data.rating] - 별점 (1~5). REVIEW 게시판 전용
  * @returns {Promise<Object>} 생성된 게시글
  *
  * @example
  * const post = await createBoardPost('FREE', { title: '제목', content: '내용' });
+ * // REVIEW 게시판: rating 포함
+ * const review = await createBoardPost('REVIEW', { title: '후기', content: '좋아요', rating: 5 });
  */
 export async function createBoardPost(boardType, data) {
   const response = await fetch(`${API_BASE_URL}/boards/${getProjectId()}/posts?type=${boardType}`, {
@@ -765,10 +768,15 @@ export async function toggleBoardCommentHidden(commentId, isHidden) {
 }
 
 /**
- * 게시판 파일 업로드 (로그인 필수, 10MB 제한)
+ * 게시판 파일 업로드 (로그인 필수, 파일당 10MB 제한)
+ *
+ * presigned URL 방식: 작은 JSON으로 업로드 URL을 발급받고 파일은 S3로 직접 PUT 한다.
+ * (큰 바이너리가 CloudFront Function 경로를 못 지나 413/403 나는 문제 해소)
+ *
+ * 흐름(파일당): ① POST /upload/presign → ② presign_url로 S3 PUT → ③ file_id 수집
  *
  * @param {File[]} files - 업로드할 파일 배열
- * @returns {Promise<Object>} 업로드된 파일 정보
+ * @returns {Promise<Object>} 업로드된 파일 정보 ({ files: [{ id, file_name, url }] })
  *
  * @example
  * const uploaded = await uploadBoardFiles([file1, file2]);
@@ -776,22 +784,44 @@ export async function toggleBoardCommentHidden(commentId, isHidden) {
  * await createBoardPost('FREE', { title: '제목', content: '내용', file_ids: fileIds });
  */
 export async function uploadBoardFiles(files) {
-  const formData = new FormData();
-  files.forEach(file => formData.append('files', file));
+  const uploaded = [];
 
-  const response = await fetch(`${API_BASE_URL}/boards/files?project_id=${getProjectId()}`, {
-    method: 'POST',
-    credentials: 'include',
-    body: formData,
-  });
+  for (const file of files) {
+    // ① presign 발급 (작은 JSON → CloudFront Function 경로 통과)
+    const presignRes = await fetch(`${API_BASE_URL}/upload/presign?project_id=${getProjectId()}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        category: 'board_attachment',
+        filename: file.name,
+        content_type: file.type || 'application/octet-stream',
+        size: file.size,
+        with_compressed: false,
+      }),
+    });
+    const presignJson = await presignRes.json();
+    // presign 응답 envelope은 { result: true, data, message } — HTTP 상태로 성공 판정
+    if (!presignRes.ok) {
+      throw new Error(presignJson.message || '업로드 URL 발급에 실패했습니다');
+    }
+    const { original, file_id } = presignJson.data;
 
-  const result = await response.json();
+    // ② S3 직접 PUT (Content-Type은 presign 발급 시 값과 일치해야 함)
+    const putRes = await fetch(original.presign_url, {
+      method: 'PUT',
+      body: file,
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+    });
+    if (!putRes.ok) {
+      throw new Error('S3 업로드에 실패했습니다');
+    }
 
-  if (result.result !== 'SUCCESS') {
-    throw new Error(result.message || '파일 업로드에 실패했습니다');
+    // ③ file_id 수집 (게시글 생성 시 file_ids로 사용), url은 영구 조회용 CDN URL
+    uploaded.push({ id: file_id, file_name: file.name, url: original.cdn_url });
   }
 
-  return result.data;
+  return { files: uploaded };
 }
 
 /**
