@@ -754,14 +754,14 @@ export async function getBoardPostDetail(postId: string): Promise<BoardPostDetai
 /**
  * 게시글 작성 (로그인 필수)
  *
- * @param boardType - 게시판 타입 ('FREE' | 'REVIEW')
+ * @param boardId - 게시판 UUID (같은 타입 게시판이 여러 개일 수 있어 board_id로 지정)
  * @param data - 게시글 데이터
  *
  * @example
- * const post = await createBoardPost('FREE', { title: '제목', content: '내용' });
+ * const post = await createBoardPost(boardId, { title: '제목', content: '내용' });
  */
-export async function createBoardPost(boardType: string, data: BoardPostCreateRequest): Promise<BoardPostDetail> {
-  const response = await fetch(`${API_BASE_URL}/boards/${getProjectId()}/posts?type=${boardType}`, {
+export async function createBoardPost(boardId: string, data: BoardPostCreateRequest): Promise<BoardPostDetail> {
+  const response = await fetch(`${API_BASE_URL}/boards/${getProjectId()}/${boardId}/posts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -986,7 +986,7 @@ export async function toggleBoardCommentHidden(commentId: string, isHidden: bool
  * @example
  * const uploaded = await uploadBoardFiles([file1, file2]);
  * const fileIds = uploaded.files.map(f => f.id);
- * await createBoardPost('FREE', { title: '제목', content: '내용', file_ids: fileIds });
+ * await createBoardPost(boardId, { title: '제목', content: '내용', file_ids: fileIds });
  */
 export async function uploadBoardFiles(files: File[]): Promise<BoardFileUploadResponse> {
   const uploaded: FileResponse[] = [];

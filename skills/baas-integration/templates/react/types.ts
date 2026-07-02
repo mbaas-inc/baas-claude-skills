@@ -441,7 +441,7 @@ export interface UseBoardReturn {
   /** 게시글 상세 조회 (선택적 인증) */
   fetchPost: (postId: string) => Promise<BoardPostDetail>;
   /** 게시글 작성 (인증 필수) */
-  createPost: (boardType: 'FREE' | 'REVIEW', data: BoardPostCreateRequest) => Promise<BoardPostDetail>;
+  createPost: (boardId: string, data: BoardPostCreateRequest) => Promise<BoardPostDetail>;
   /** 게시글 수정 (작성자만) */
   updatePost: (postId: string, data: BoardPostUpdateRequest) => Promise<BoardPostDetail>;
   /** 게시글 삭제 (작성자 또는 소유자) */

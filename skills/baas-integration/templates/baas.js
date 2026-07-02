@@ -530,7 +530,7 @@ export async function getBoardPostDetail(postId) {
 /**
  * 게시글 작성 (로그인 필수)
  *
- * @param {string} boardType - 게시판 타입 ('FREE' | 'REVIEW')
+ * @param {string} boardId - 게시판 UUID (같은 타입 게시판이 여러 개일 수 있어 board_id로 지정)
  * @param {Object} data - 게시글 데이터
  * @param {string} data.title - 제목
  * @param {string} data.content - 내용
@@ -540,12 +540,12 @@ export async function getBoardPostDetail(postId) {
  * @returns {Promise<Object>} 생성된 게시글
  *
  * @example
- * const post = await createBoardPost('FREE', { title: '제목', content: '내용' });
+ * const post = await createBoardPost(boardId, { title: '제목', content: '내용' });
  * // REVIEW 게시판: rating 포함
- * const review = await createBoardPost('REVIEW', { title: '후기', content: '좋아요', rating: 5 });
+ * const review = await createBoardPost(boardId, { title: '후기', content: '좋아요', rating: 5 });
  */
-export async function createBoardPost(boardType, data) {
-  const response = await fetch(`${API_BASE_URL}/boards/${getProjectId()}/posts?type=${boardType}`, {
+export async function createBoardPost(boardId, data) {
+  const response = await fetch(`${API_BASE_URL}/boards/${getProjectId()}/${boardId}/posts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -781,7 +781,7 @@ export async function toggleBoardCommentHidden(commentId, isHidden) {
  * @example
  * const uploaded = await uploadBoardFiles([file1, file2]);
  * const fileIds = uploaded.files.map(f => f.id);
- * await createBoardPost('FREE', { title: '제목', content: '내용', file_ids: fileIds });
+ * await createBoardPost(boardId, { title: '제목', content: '내용', file_ids: fileIds });
  */
 export async function uploadBoardFiles(files) {
   const uploaded = [];
