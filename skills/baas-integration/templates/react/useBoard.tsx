@@ -59,7 +59,7 @@ import type {
  * }
  *
  * @example
- * function CreatePostForm({ boardType }) {
+ * function CreatePostForm({ boardId }) {
  *   const { createPost, uploadFiles, isLoading } = useBoard();
  *
  *   const handleSubmit = async (title, content, files) => {
@@ -68,7 +68,7 @@ import type {
  *       const uploaded = await uploadFiles(files);
  *       fileIds = uploaded.files.map(f => f.id);
  *     }
- *     await createPost(boardType, { title, content, file_ids: fileIds });
+ *     await createPost(boardId, { title, content, file_ids: fileIds });
  *   };
  *
  *   return <form onSubmit={handleSubmit}>{/* UI */}</form>;
@@ -147,13 +147,13 @@ export function useBoard(): UseBoardReturn {
     }
   }, []);
 
-  const createPost = useCallback(async (boardType: 'FREE' | 'REVIEW', data: BoardPostCreateRequest): Promise<BoardPostDetail> => {
+  const createPost = useCallback(async (boardId: string, data: BoardPostCreateRequest): Promise<BoardPostDetail> => {
     setIsLoading(true);
     setError(null);
 
     try {
       const response = await fetch(
-        `${BASE_URL}/boards/${getProjectId()}/posts?type=${boardType}`,
+        `${BASE_URL}/boards/${getProjectId()}/${boardId}/posts`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
