@@ -24,7 +24,6 @@ interface BoardListParams {
   offset?: number;          // 기본값 0
   limit?: number;           // 기본값 20, 최대 100
   keyword?: string;         // 검색어 (제목/내용)
-  category?: string;        // 카테고리 필터 (board_settings.categories 목록 중 하나)
 }
 ```
 
@@ -41,7 +40,7 @@ interface BoardListParams {
       author_name: string,
       is_hidden: boolean,
       created_at: string,           // ISO 8601
-      categories: string[] | null,  // 선택된 카테고리 목록
+      categories: null,             // NOTICE/FAQ는 카테고리 미지원 (항상 null)
       link_url: null                // NOTICE/FAQ는 항상 null
     }>,
     total_count: number,
@@ -52,7 +51,7 @@ interface BoardListParams {
       is_board_enabled: boolean,
       allow_attachment: boolean,
       require_login: boolean,
-      categories: string[] | null,  // 허용 카테고리 목록 (null이면 카테고리 없음)
+      categories: null,             // NOTICE/FAQ는 카테고리 미지원 (항상 null)
       board_type: string            // "NOTICE" | "FAQ"
     } | null
   },
@@ -60,7 +59,7 @@ interface BoardListParams {
 }
 ```
 
-> **카테고리 필터 UI**: `board_settings.categories`가 null이 아닌 경우 목록 위에 카테고리 탭/칩 필터를 표시하세요. 선택한 값을 `?category=` 쿼리로 전달합니다.
+> **카테고리 미지원**: NOTICE/FAQ 기본 게시판은 카테고리 기능이 없습니다. `categories`는 항상 `null`이며 카테고리 필터 UI가 필요 없습니다. (카테고리는 동적 게시판 FREE/REVIEW/URL_LINK 전용 — [dynamic-board.md](dynamic-board.md) 참조)
 
 ### 응답 예시 (공지사항)
 ```json
@@ -76,7 +75,7 @@ interface BoardListParams {
         "author_name": "관리자",
         "is_hidden": false,
         "created_at": "2024-01-15T09:00:00",
-        "categories": ["공지"],
+        "categories": null,
         "link_url": null
       }
     ],
@@ -88,7 +87,7 @@ interface BoardListParams {
       "is_board_enabled": true,
       "allow_attachment": false,
       "require_login": false,
-      "categories": ["공지", "이벤트", "서비스"],
+      "categories": null,
       "board_type": "NOTICE"
     }
   }
@@ -129,10 +128,10 @@ interface BoardListParams {
       is_board_enabled: boolean,
       allow_attachment: boolean,
       require_login: boolean,
-      categories: string[] | null,
+      categories: null,             // NOTICE/FAQ는 카테고리 미지원 (항상 null)
       board_type: string
     } | null,
-    categories: string[] | null,  // 이 게시글에 선택된 카테고리
+    categories: null,             // NOTICE/FAQ는 카테고리 미지원 (항상 null)
     link_url: null                // NOTICE/FAQ는 항상 null
   }
 }
