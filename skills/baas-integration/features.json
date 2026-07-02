@@ -1,5 +1,5 @@
 {
-  "version": "8.0",
+  "version": "8.1",
   "field_descriptions": {
     "_purpose": "이 파일의 각 필드가 어떤 역할을 하는지 정리한 문서. 실제 동작에는 영향을 주지 않음.",
     "top": {
