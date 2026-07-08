@@ -17,39 +17,34 @@ import type { AccountResponse, UseAccountInfoOptions, UseAccountInfoReturn } fro
 /**
  * BaaS 계정 정보 Hook
  *
+ * ⚠️ 화면(페이지) 컴포넌트에서 직접 호출하지 마세요.
+ * 이 훅은 앱 루트의 AuthProvider 내부에서 1회만 사용하고,
+ * 각 화면은 useAuth()로 전역 인증 상태를 읽기만 합니다.
+ * (화면마다 직접 호출하면 페이지 이동 시마다 /account/info가 중복 호출됩니다)
+ *
+ * 비로그인 상태의 401(UNAUTHORIZED)은 에러가 아닌 정상 신호로 취급하여
+ * data=null로 조용히 반환합니다 (error 미설정, onError 미호출).
+ *
  * @param {UseAccountInfoOptions} [options] - 옵션
  * @returns {UseAccountInfoReturn} 계정 정보와 상태
  *
  * @example
- * // 기본 사용법 - 마운트 시 자동 조회
+ * // 권장 사용법 - AuthProvider 경유 (AuthProvider.tsx 참조)
+ * // 화면에서는 useAccountInfo() 대신 useAuth()를 사용
  * function ProfilePage() {
- *   const { data: account, isLoading, error } = useAccountInfo();
+ *   const { user, isLoggedIn, isLoading } = useAuth();
  *
  *   if (isLoading) return <div>로딩 중...</div>;
- *   if (error) return <div>에러: {error}</div>;
- *   if (!account) return <div>로그인이 필요합니다</div>;
+ *   if (!isLoggedIn) return <div>로그인이 필요합니다</div>;
  *
- *   return (
- *     <div>
- *       <h1>안녕하세요, {account.name}님!</h1>
- *       <p>이메일: {account.user_id}</p>
- *     </div>
- *   );
+ *   return <h1>안녕하세요, {user.name}님!</h1>;
  * }
  *
  * @example
- * // 옵션 사용
- * function Dashboard() {
- *   const { data: account, refetch } = useAccountInfo({
- *     redirectOnUnauthorized: '/login'
- *   });
- *
- *   return (
- *     <div>
- *       {account && <span>환영합니다, {account.name}님</span>}
- *       <button onClick={refetch}>새로고침</button>
- *     </div>
- *   );
+ * // AuthProvider 내부에서의 사용 (앱에서 유일한 직접 호출 지점)
+ * function AuthProvider({ children }) {
+ *   const { data: user, isLoading, error, refetch, reset } = useAccountInfo();
+ *   // ... Context로 하위 컴포넌트에 공유
  * }
  */
 export function useAccountInfo(options: UseAccountInfoOptions = {}): UseAccountInfoReturn {
@@ -78,8 +73,12 @@ export function useAccountInfo(options: UseAccountInfoOptions = {}): UseAccountI
       const result = await response.json();
 
       if (result.result !== 'SUCCESS') {
-        if (result.errorCode === 'UNAUTHORIZED' && redirectOnUnauthorized) {
-          window.location.href = redirectOnUnauthorized;
+        // 401(UNAUTHORIZED) = 비로그인 정상 신호 - 에러로 취급하지 않음
+        if (result.errorCode === 'UNAUTHORIZED') {
+          if (redirectOnUnauthorized) {
+            window.location.href = redirectOnUnauthorized;
+          }
+          setData(null);
           return null;
         }
         throw new Error(result.message || '계정 정보를 가져올 수 없습니다');

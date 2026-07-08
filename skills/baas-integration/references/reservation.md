@@ -410,6 +410,7 @@ let method: 'onsite' | 'online' | null = isPaid ? (pay.onsite ? 'onsite' : 'onli
 //   onsite 버튼 disabled={!pay.onsite}, online 버튼 disabled={!pay.online} — onChange로 method 갱신
 
 // 5. 로그인 체크 → 폼 작성 → 결제 방법에 따라 분기
+//    isLoggedIn 출처: useAuth() (react/AuthProvider.tsx) — 화면에서 /account/info를 직접 호출하지 말 것
 if (!isLoggedIn) { /* account 로그인으로 유도 */ }
 
 if (isPaid && method === 'online') {

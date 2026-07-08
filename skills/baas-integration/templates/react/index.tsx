@@ -28,6 +28,7 @@ export type {
   UseLogoutReturn,
   UseAccountInfoOptions,
   UseAccountInfoReturn,
+  AuthContextValue,
   PasswordChangeRequest,
   UseChangePasswordReturn,
   // Messaging Types
@@ -71,6 +72,9 @@ export { useSignup } from './useSignup';
 export { useLogout } from './useLogout';
 export { useAccountInfo } from './useAccountInfo';
 export { useChangePassword } from './useChangePassword';
+
+// 전역 인증 상태 (앱 루트에서 1회 조회 후 공유 - 화면은 useAuth()로 읽기만)
+export { AuthProvider, useAuth, RequireAuth } from './AuthProvider';
 
 // Messaging Hooks
 export { useRecipient } from './useRecipient';
