@@ -23,15 +23,20 @@ SDK_VERSION=0.3.0 npm run build   # → dist/
 - **메이저 승격**(v1→v2)만 새 별칭. 마이너/패치는 v1 별칭 갱신으로 자동 전파.
 - 모든 요청에 `X-Baas-Sdk-Version` 헤더 → 서버 로그로 프로젝트별 실사용 버전 파악.
 
-## 배포 (S3 + CloudFront)
-버킷/배포는 하드코딩하지 않는다 — 환경변수/CI 변수로 주입.
+## 배포 (S3 + CloudFront) — mbaas CDN
+deploy.mjs 에 실제 대상이 기본값으로 박혀 있다(다른 대상은 env override):
+- 버킷 `mbaas-file-bucket`, prefix `public/baas-integration-sdk`, CloudFront `E3O4WUZ5YOS1S`, 별칭 `v1`
+- cdn.mbaas.kr 의 `/public/*` 동작이 이 버킷으로 라우팅 → URL `https://cdn.mbaas.kr/public/baas-integration-sdk/<version|v1>/baas-react.js`
+
 ```bash
 SDK_VERSION=0.3.0 npm run build
-SDK_VERSION=0.3.0 SDK_S3_BUCKET=<버킷> SDK_CF_DISTRIBUTION=<배포ID> \
-  SDK_CHANNEL=v1 SDK_S3_PREFIX=sdk npm run deploy
+SDK_VERSION=0.3.0 npm run deploy        # 기본 대상으로 배포 + v1 무효화
 ```
-CI: `sdk-vX.Y.Z` 태그 push → `.github/workflows/sdk-release.yml` 가 빌드·검증·배포.
-필요 설정 — Secrets: `SDK_DEPLOY_ROLE_ARN` / Variables: `SDK_AWS_REGION`·`SDK_S3_BUCKET`·`SDK_CF_DISTRIBUTION`·`SDK_CHANNEL`·`SDK_S3_PREFIX`.
+
+**자동화 (권장 — 수동 배포 불필요)**: `sdk-vX.Y.Z` 태그 push 또는 Actions 수동 실행 →
+`.github/workflows/sdk-release.yml` 가 빌드·검증·배포·무효화. 최초 1회 설정:
+- Secret `SDK_DEPLOY_ROLE_ARN`: S3 put(`public/baas-integration-sdk/*`) + CloudFront `CreateInvalidation` 권한 role(GitHub OIDC 신뢰)
+- (선택) Variables 로 배포 대상 override — 미설정 시 deploy.mjs 기본값 사용
 
 ## 롤백
 별칭을 이전 불변 버전으로 되돌린다(불변 경로는 그대로 있으므로 즉시 복구):

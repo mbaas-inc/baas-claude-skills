@@ -1,7 +1,12 @@
 # AI Studio 연동 핸드오프 — BaaS SDK + baas-integration-sdk 스킬
 
 런타임 CDN SDK로 BaaS 프론트 transport를 올려, 스킬/API 변경 전파를 O(1)로 만드는 전환.
-AI Studio 팀이 **로컬에서 플러그인으로 기술 검증 → dev 배포**하는 절차를 정리한다.
+
+**책임 경계 (요약)**
+- **우리(baas-claude-skills)**: SDK 개발 + 스킬 + **CDN 자동 배포(CI)**. AI Studio가 배포에 관여하지 않는다.
+- **AI Studio 팀**: ① 플러그인으로 로컬 기술 검증(§1) ② 앱빌더 스캐폴드에 SDK 배선 반영(§3) ③ 버전 매니페스트 비교·마이그레이션 UI(§5) ④ 생성 앱이 CDN URL(§2)을 소비.
+
+즉 AI Studio는 **SDK를 소비·검증하고 앱빌더에 배선**할 뿐, SDK 자체의 배포/버전 릴리스는 우리 CI가 자동 수행한다.
 
 ## 0. 구성요소 (역할)
 | 요소 | 소유 | 역할 |
@@ -20,20 +25,19 @@ AI Studio 팀이 **로컬에서 플러그인으로 기술 검증 → dev 배포*
 4. 로컬 서빙: `dist/baas-react.js` 를 앱의 `/sdk/baas-react.js` 로 두고, `/aiapp-baas/*` 를 dev 프로젝트 도메인으로 프록시(host 보존 + 쿠키 Domain/Secure/SameSite 로컬화). 로그인·게시판 CRUD가 dev 백엔드로 동작하는지 확인.
    - 참조 구현: 우리 PoC 서버(host 보존 프록시 + Set-Cookie 재작성)와 A/B 테스트 절차.
 
-## 2. dev 배포 (SDK를 CDN에)
-`sdk/README.md`의 배포 절차. 팀이 dev 버킷/배포/리전을 정해 주입:
-```bash
-cd sdk && SDK_VERSION=<x.y.z> npm run build
-SDK_VERSION=<x.y.z> SDK_S3_BUCKET=<dev버킷> SDK_CF_DISTRIBUTION=<dev배포ID> \
-  SDK_CHANNEL=v1 SDK_S3_PREFIX=sdk npm run deploy
+## 2. SDK 배포 — 자동화됨 (AI Studio 팀 불필요)
+SDK 배포는 **우리(baas-claude-skills repo) CI가 자동 수행**한다. AI Studio 팀은 배포에 관여하지 않고, 아래 URL을 소비만 한다:
 ```
-또는 `sdk-v<x.y.z>` 태그 push → `.github/workflows/sdk-release.yml`(Secrets/Variables 설정 필요).
-- 결과: `/sdk/v1/baas-react.js`(별칭) + `/sdk/<version>/baas-react.js`(불변). 앱은 별칭 참조.
-- **확인 필요**: dev CDN 호스트(예: `cdn.aiapp.link` 여부), 버킷/배포 ID, 배포 IAM Role.
+https://cdn.mbaas.kr/public/baas-integration-sdk/v1/baas-react.js   (별칭 v1 = 자동 업데이트)
+https://cdn.mbaas.kr/public/baas-integration-sdk/<version>/baas-react.js  (불변 고정)
+```
+- 대상 인프라(고정): S3 `mbaas-file-bucket/public/baas-integration-sdk/`, CloudFront `E3O4WUZ5YOS1S`(cdn.mbaas.kr `/public/*` 동작).
+- 트리거: `sdk-vX.Y.Z` 태그 push 또는 Actions 수동 실행 → 빌드·검증·업로드(불변+별칭 v1)·무효화. (`.github/workflows/sdk-release.yml`)
+- 마이너/패치는 v1 별칭 갱신으로 전 앱 자동 반영(O(1)). 메이저(v2)만 새 별칭.
 
 ## 3. 앱빌더 스캐폴드 배선 (AI Studio 소유 — 고정 인프라)
 생성 앱마다 동일하므로 스캐폴드 템플릿에 고정한다(스킬의 `scaffold/wiring.md` 원문). LLM이 창작하지 않게 한다.
-- `index.html`: `<script src="https://<cdn>/sdk/v1/baas-react.js">` + `<meta name="baas-project-id" content="<id>">`
+- `index.html`: `<script src="https://cdn.mbaas.kr/public/baas-integration-sdk/v1/baas-react.js">` + `<meta name="baas-project-id" content="<id>">`
 - 앱 진입점: render 이전 `window.__BAAS_HOST__ = { React, ReactDOM }` → `window.BaasSDK.init({ baseUrl: "/aiapp-baas" })`
 - SDK 미로드 시 폴백 에러 화면(빈 화면 방지 — PoC-C에서 식별).
 
@@ -48,11 +52,11 @@ SDK_VERSION=<x.y.z> SDK_S3_BUCKET=<dev버킷> SDK_CF_DISTRIBUTION=<dev배포ID> 
 - SDK(런타임) 변경은 CDN push로 자동 반영 — 앱 재생성 불필요. 스킬(구조/UI) 변경만 위 절차.
 
 ## 6. 확인 필요 항목 (AI Studio 팀)
-- [ ] dev CDN 호스트·버킷·CloudFront 배포 ID·배포 IAM Role
-- [ ] 앱빌더 스캐폴드에 SDK 배선 반영(§3) + SDK 로드 실패 폴백
+- [ ] 앱빌더 스캐폴드에 SDK 배선 반영(§3, 고정 URL) + SDK 로드 실패 폴백
 - [ ] 생성 앱 `/aiapp-baas` 프록시가 프로젝트 도메인·쿠키를 정상 전달하는지(프로덕션 경로)
 - [ ] 매니페스트 비교 UI·codemod 러너(§5) 구현 범위·시점
 - [ ] 전환 정책: 신규 프로젝트부터 SDK 스킬 적용(기존 배포 앱은 서버 구경로 호환으로 무영향)
+- (SDK 배포/CDN은 우리 CI 소관 — AI Studio 확인 불필요)
 
 ## 검증 근거 (우리 실측, 2026-07-09)
 - PoC A(React 인스턴스 공유)/B(재빌드 0 CDN push 전파)/C(장애·롤백) 통과.

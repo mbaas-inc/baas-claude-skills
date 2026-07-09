@@ -14,7 +14,7 @@ SDK 로딩·host React 노출·init 은 모든 프로젝트가 동일하다. 아
   <meta name="baas-project-id" content="__PROJECT_ID__" />
   <title>__TITLE__</title>
   <!-- 런타임 CDN SDK (별칭 v1 = 자동 업데이트 채널) -->
-  <script src="https://cdn.aiapp.link/sdk/v1/baas-react.js"></script>
+  <script src="https://cdn.mbaas.kr/public/baas-integration-sdk/v1/baas-react.js"></script>
 </head>
 <body>
   <div id="root"></div>

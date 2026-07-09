@@ -16,11 +16,13 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 
+// mbaas 실제 CDN 기본값 — cdn.mbaas.kr 의 /public/* 동작이 mbaas-file-bucket 으로 라우팅.
+// URL: https://cdn.mbaas.kr/public/baas-integration-sdk/<version|v1>/baas-react.js
 const version = process.env.SDK_VERSION;
-const bucket = process.env.SDK_S3_BUCKET;
-const distribution = process.env.SDK_CF_DISTRIBUTION;
+const bucket = process.env.SDK_S3_BUCKET || "mbaas-file-bucket";
+const distribution = process.env.SDK_CF_DISTRIBUTION || "E3O4WUZ5YOS1S";
 const channel = process.env.SDK_CHANNEL || "v1";
-const prefix = process.env.SDK_S3_PREFIX || "sdk";
+const prefix = process.env.SDK_S3_PREFIX || "public/baas-integration-sdk";
 
 if (!version || !bucket) {
   console.error("SDK_VERSION, SDK_S3_BUCKET 는 필수입니다.");
@@ -52,5 +54,6 @@ if (distribution) {
   console.warn("SDK_CF_DISTRIBUTION 미지정 — 무효화 생략(별칭 캐시 TTL 만료까지 지연 반영).");
 }
 
+const cdnHost = process.env.SDK_CDN_HOST || "https://cdn.mbaas.kr";
 console.log(`\n✅ 배포 완료: ${version} → s3://${bucket}/${prefix}/{${version},${channel}}/`);
-console.log(`   앱 참조: https://<cdn-host>/${prefix}/${channel}/baas-react.js`);
+console.log(`   앱 참조: ${cdnHost}/${prefix}/${channel}/baas-react.js`);
