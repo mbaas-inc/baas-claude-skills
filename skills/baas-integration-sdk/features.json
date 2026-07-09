@@ -1,0 +1,31 @@
+{
+  "version": "0.1.0",
+  "sdk": "@mbaas/baas-web-sdk",
+  "sdk_global": "window.BaasSDK",
+  "surface_ref": "reference/sdk-surface.md",
+  "scaffold_ref": "scaffold/wiring.md",
+  "fallback": "표면에 없는 기능은 이 스킬 범위 밖입니다. 임의 fetch 코드를 만들지 말고 사용자에게 미지원임을 알리세요(raw API 이스케이프 해치 없음 — 모든 백엔드 호출은 SDK 경유).",
+  "data_flow": {
+    "account": "앱 루트 AuthProvider가 인증 상태 1회 조회 → 회원가입 → 로그인(자동 refetch) → 화면은 useAuth()로 읽기만 → 로그아웃(자동 clear)",
+    "board": "baas-cli로 게시판 생성(board_id) → 코드에 주입 → useBoard().fetchPosts(boardId) 목록 → post_id → fetchPost 상세 → (로그인) submitPost 작성"
+  },
+  "groups": {
+    "account": {
+      "surface_sections": ["인증 (account)"],
+      "features": [
+        { "id": "signup", "label": "회원가입", "auth": false, "keywords": ["회원가입", "가입", "sign up", "register"] },
+        { "id": "login", "label": "로그인", "auth": false, "keywords": ["로그인", "sign in", "login"] },
+        { "id": "logout", "label": "로그아웃", "auth": true, "keywords": ["로그아웃", "logout"] },
+        { "id": "account_info", "label": "내 정보", "auth": true, "keywords": ["내 정보", "프로필", "계정 정보", "마이페이지"] }
+      ]
+    },
+    "board": {
+      "surface_sections": ["게시판 (board)"],
+      "features": [
+        { "id": "board_list", "label": "게시글 목록", "auth": false, "keywords": ["게시판", "목록", "커뮤니티", "자유게시판", "리뷰"] },
+        { "id": "board_detail", "label": "게시글 상세", "auth": false, "keywords": ["게시글", "상세", "글 보기"] },
+        { "id": "board_write", "label": "게시글 작성/수정/삭제", "auth": "mixed", "keywords": ["글쓰기", "작성", "수정", "삭제", "post"] }
+      ]
+    }
+  }
+}
