@@ -6,6 +6,15 @@ import * as core from "../core/index";
 import { AuthProvider, useAuth, RequireAuth } from "./AuthProvider";
 import { useLogin, useSignup, useLogout } from "./hooks";
 import { useBoard } from "./useBoard";
+import {
+  useRecipient,
+  useNotice,
+  useFaq,
+  useComments,
+  useSurvey,
+  useReservation,
+  useStore,
+} from "./moreHooks";
 
 export const BaasSDK = {
   version: core.SDK_VERSION,
@@ -20,12 +29,50 @@ export const BaasSDK = {
   getAccountInfo: core.getAccountInfo,
   checkAuth: core.checkAuth,
   clearAuthCache: core.clearAuthCache,
+  changePassword: core.changePassword,
+  // board (dynamic)
   listPosts: core.listPosts,
   getPost: core.getPost,
   createPost: core.createPost,
   updatePost: core.updatePost,
   deletePost: core.deletePost,
-  // react
+  // notice/faq/comments
+  listNoticePosts: core.listNoticePosts,
+  getNoticePost: core.getNoticePost,
+  listFaqPosts: core.listFaqPosts,
+  getFaqPost: core.getFaqPost,
+  listComments: core.listComments,
+  createComment: core.createComment,
+  updateComment: core.updateComment,
+  deleteComment: core.deleteComment,
+  // recipient / survey / reservation / store
+  registerRecipient: core.registerRecipient,
+  listSurveys: core.listSurveys,
+  getSurvey: core.getSurvey,
+  submitSurveyResponse: core.submitSurveyResponse,
+  listTargets: core.listTargets,
+  getTarget: core.getTarget,
+  getAvailableSlots: core.getAvailableSlots,
+  getSlotRange: core.getSlotRange,
+  createBooking: core.createBooking,
+  prepareBooking: core.prepareBooking,
+  confirmBooking: core.confirmBooking,
+  listMyBookings: core.listMyBookings,
+  getBooking: core.getBooking,
+  updateBooking: core.updateBooking,
+  cancelBooking: core.cancelBooking,
+  getStoreConfig: core.getStoreConfig,
+  listProducts: core.listProducts,
+  listCategories: core.listCategories,
+  getProduct: core.getProduct,
+  getStoreTerms: core.getStoreTerms,
+  prepareOrder: core.prepareOrder,
+  confirmOrder: core.confirmOrder,
+  listMyOrders: core.listMyOrders,
+  getOrder: core.getOrder,
+  confirmPurchase: core.confirmPurchase,
+  cancelOrder: core.cancelOrder,
+  // react hooks
   AuthProvider,
   useAuth,
   RequireAuth,
@@ -33,7 +80,17 @@ export const BaasSDK = {
   useSignup,
   useLogout,
   useBoard,
+  useRecipient,
+  useNotice,
+  useFaq,
+  useComments,
+  useSurvey,
+  useReservation,
+  useStore,
 };
 
-export { AuthProvider, useAuth, RequireAuth, useLogin, useSignup, useLogout, useBoard };
+export {
+  AuthProvider, useAuth, RequireAuth, useLogin, useSignup, useLogout, useBoard,
+  useRecipient, useNotice, useFaq, useComments, useSurvey, useReservation, useStore,
+};
 export * from "../core/index";

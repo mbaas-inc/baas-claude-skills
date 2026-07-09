@@ -6,6 +6,7 @@ export {
   login,
   logout,
   getAccountInfo,
+  changePassword,
   checkAuth,
   clearAuthCache,
 } from "./auth";
@@ -16,6 +17,44 @@ export {
   updatePost,
   deletePost,
 } from "./board";
+export {
+  listNoticePosts,
+  getNoticePost,
+  listFaqPosts,
+  getFaqPost,
+  listComments,
+  createComment,
+  updateComment,
+  deleteComment,
+} from "./notice";
+export { registerRecipient } from "./recipient";
+export { listSurveys, getSurvey, submitSurveyResponse } from "./survey";
+export {
+  listTargets,
+  getTarget,
+  getAvailableSlots,
+  getSlotRange,
+  createBooking,
+  prepareBooking,
+  confirmBooking,
+  listMyBookings,
+  getBooking,
+  updateBooking,
+  cancelBooking,
+} from "./reservation";
+export {
+  getStoreConfig,
+  listProducts,
+  listCategories,
+  getProduct,
+  getStoreTerms,
+  prepareOrder,
+  confirmOrder,
+  listMyOrders,
+  getOrder,
+  confirmPurchase,
+  cancelOrder,
+} from "./store";
 export { SDK_VERSION } from "../version";
 export type {
   Envelope,
@@ -30,3 +69,8 @@ export type {
   PostListOptions,
   PostCreateInput,
 } from "./board";
+export type { Comment } from "./notice";
+export type { RecipientInput } from "./recipient";
+export type { Survey } from "./survey";
+export type { ReservationTarget } from "./reservation";
+export type { StoreConfig, Product } from "./store";

@@ -1,0 +1,43 @@
+name: sdk-release
+
+# sdk-vX.Y.Z 태그 push 시 SDK 빌드 → S3(불변+별칭) 업로드 → CloudFront 무효화.
+# 실제 버킷/배포/리전은 repo Secrets·Variables 로 주입(팀이 dev/prod 별로 설정).
+on:
+  push:
+    tags: ["sdk-v*"]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # OIDC AssumeRole 용(권장)
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Derive version
+        id: v
+        run: echo "version=${GITHUB_REF_NAME#sdk-v}" >> "$GITHUB_OUTPUT"
+      - name: Build
+        working-directory: sdk
+        run: |
+          npm install
+          npm run typecheck
+          npm test
+          SDK_VERSION="${{ steps.v.outputs.version }}" npm run build
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.SDK_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.SDK_AWS_REGION }}
+      - name: Deploy to S3 + invalidate
+        working-directory: sdk
+        env:
+          SDK_VERSION: ${{ steps.v.outputs.version }}
+          SDK_S3_BUCKET: ${{ vars.SDK_S3_BUCKET }}
+          SDK_CF_DISTRIBUTION: ${{ vars.SDK_CF_DISTRIBUTION }}
+          SDK_CHANNEL: ${{ vars.SDK_CHANNEL }}     # 예: v1
+          SDK_S3_PREFIX: ${{ vars.SDK_S3_PREFIX }} # 예: sdk
+        run: npm run deploy

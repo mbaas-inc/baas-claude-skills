@@ -37,6 +37,13 @@ export async function getAccountInfo(): Promise<AccountInfo> {
   return request<AccountInfo>("/account/info", { method: "GET", allow401: true });
 }
 
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  await request<unknown>("/account/profile/change-password", {
+    method: "POST",
+    body: { current_password: currentPassword, new_password: newPassword },
+  });
+}
+
 // ── 인증 상태 캐시 (화면마다 /account/info 반복 방지) ──
 let authCache: AuthState | null = null;
 let authCachePromise: Promise<AuthState> | null = null;
