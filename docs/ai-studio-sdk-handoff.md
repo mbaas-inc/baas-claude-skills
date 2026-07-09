@@ -1,6 +1,7 @@
 # AI Studio 연동 핸드오프 — BaaS SDK + baas-integration-sdk 스킬
 
 런타임 CDN SDK로 BaaS 프론트 transport를 올려, 스킬/API 변경 전파를 O(1)로 만드는 전환.
+이 문서는 **AI Studio 팀 전달용**(할 일·연동 계약만). 설계 배경·버전/배포 전체 그림은 [baas-sdk-overview.md](baas-sdk-overview.md).
 
 **책임 경계 (요약)**
 - **우리(baas-claude-skills)**: SDK 개발 + 스킬 + **CDN 자동 배포(CI)**. AI Studio가 배포에 관여하지 않는다.
