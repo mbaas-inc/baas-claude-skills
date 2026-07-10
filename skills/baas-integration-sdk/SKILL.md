@@ -54,14 +54,17 @@ SDK는 CDN에서 로드되고 앱의 React 인스턴스를 공유한다. 이 배
 - 게시판 쓰기는 로그인 필수 — 비로그인 사용자에겐 로그인 유도 UI를 보여준다.
 - 반환된 에러의 `errorCode`로 분기한다(코드 목록은 `reference/sdk-surface.md`의 에러 표 참조).
 
-## 버전 매니페스트 (생성 시 필수 기록)
+## 버전 매니페스트 (생성 시 필수 기록 · 변경 시 필수 동기화)
 
 프로젝트 루트에 `baas-manifest.json`을 만든다 — 이후 업데이트 판단의 근거(LLM 없이 diff):
 ```json
-{ "skill": "baas-integration-sdk", "skill_version": "0.1.0", "sdk_channel": "v1", "features_used": ["account", "board"] }
+{ "skill": "baas-integration-sdk", "skill_version": "0.2.0", "sdk_channel": "v1", "features_used": ["account", "notice", "recipient", "board"] }
 ```
-`features_used`에는 실제 사용한 기능 그룹만 적는다. 스킬/SDK 업데이트 시 앱빌더가 이 파일과 최신 버전을
-비교해 영향 여부·마이그레이션 Tier를 판정한다(`migrations/README.md` 참조).
+- `features_used`에는 **실제 사용한 기능 그룹만** 적는다(그룹 키: `account`, `notice`(공지+FAQ), `recipient`, `board`, `survey`, `reservation`, `store`).
+- `skill_version`은 이 앱을 생성/갱신할 때 사용한 스킬 버전(`features.json`의 `version`)을 적는다.
+- **⚠️ 기능을 추가·제거하면 `features_used`를 반드시 함께 갱신한다.** manifest가 실제 사용 기능과 어긋나면(stale) 업데이트 비교기의 교집합 계산이 틀어져 **해당 기능의 업데이트가 누락된다.** 예: 나중에 로그인·게시판을 덧붙였는데 `features_used`에 `account`·`board`를 안 넣으면, 그 기능들의 스킬 변경이 이 앱엔 반영되지 않는다.
+
+스킬/SDK 업데이트 시 앱빌더가 이 파일과 최신 버전을 비교해 영향 여부·마이그레이션 Tier를 판정한다(`migrations/README.md` 참조).
 
 ## auth 필드 값 (features.json)
 
