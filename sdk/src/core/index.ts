@@ -27,6 +27,15 @@ export {
   updateComment,
   deleteComment,
 } from "./notice";
+export {
+  listRecords,
+  getRecord,
+  createRecord,
+  updateRecord,
+  deleteRecord,
+  listPublicRecords,
+  getPublicRecord,
+} from "./collection";
 export { registerRecipient } from "./recipient";
 export { listSurveys, getSurvey, submitSurveyResponse } from "./survey";
 export {
@@ -70,6 +79,12 @@ export type {
   PostCreateInput,
 } from "./board";
 export type { Comment } from "./notice";
+export type {
+  DynRecord,
+  RecordListResult,
+  RecordFilter,
+  RecordListOptions,
+} from "./collection";
 export type { RecipientInput } from "./recipient";
 export type { Survey } from "./survey";
 export type { ReservationTarget } from "./reservation";

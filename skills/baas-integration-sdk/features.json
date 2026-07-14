@@ -1,5 +1,5 @@
 {
-  "version": "0.2.0",
+  "version": "0.3.0",
   "sdk": "@mbaas/baas-web-sdk",
   "sdk_global": "window.BaasSDK",
   "surface_ref": "reference/sdk-surface.md",
@@ -14,7 +14,8 @@
     "comments": "게시글 post_id → useComments().fetchComments → (로그인) addComment/editComment/removeComment",
     "survey": "useSurvey().fetchSurveys → survey_id → fetchSurvey → submitResponse(공개)",
     "reservation": "useReservation().fetchTargets → target_id → fetchTarget/fetchSlots → (로그인) book(무료·현장) 또는 prepare→토스위젯→confirm(카드) → myBookings/cancel",
-    "store": "useStore().fetchConfig(store_enabled 확인) → fetchProducts → product_id → fetchProduct → (로그인) prepare→토스위젯→confirm(=주문생성) → myOrders → confirmPurchase · [필수] 모든 페이지 푸터에 통신판매중개업자 고지"
+    "store": "useStore().fetchConfig(store_enabled 확인) → fetchProducts → product_id → fetchProduct → (로그인) prepare→토스위젯→confirm(=주문생성) → myOrders → confirmPurchase · [필수] 모든 페이지 푸터에 통신판매중개업자 고지",
+    "collection": "요구에 맞춰 UI 설계 → baas-cli로 컬렉션/필드 생성(스키마) → collection name 주입 → useCollection().fetchRecords(name, {filter,sort}) 또는 fetchPublicRecords(공개) → (로그인) submitRecord/editRecord/removeRecord · UI는 앱이 요구에 맞춰 설계(범용 자동 렌더 아님), 스키마 변경은 CLI/에이전트 소유"
   },
   "groups": {
     "account": {
@@ -31,6 +32,13 @@
       "surface_sections": ["발송대상 (recipient)"],
       "features": [
         { "id": "recipient", "label": "연락처 등록", "auth": false, "keywords": ["연락처", "발송대상", "문의", "상담신청", "뉴스레터", "구독", "예약 접수"] }
+      ]
+    },
+    "collection": {
+      "surface_sections": ["동적 컬렉션 (collection)"],
+      "requires": "collection_name (baas-cli로 생성)",
+      "features": [
+        { "id": "collection", "label": "동적 컬렉션(커스텀 데이터)", "auth": false, "keywords": ["커스텀 데이터", "동적 컬렉션", "재고", "인벤토리", "신청 목록", "고객 관리", "커스텀 DB", "데이터베이스", "목록 관리", "임의 데이터"] }
       ]
     },
     "notice": {

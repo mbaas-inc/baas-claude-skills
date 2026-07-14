@@ -6,6 +6,7 @@ import * as core from "../core/index";
 import { AuthProvider, useAuth, RequireAuth } from "./AuthProvider";
 import { useLogin, useSignup, useLogout } from "./hooks";
 import { useBoard } from "./useBoard";
+import { useCollection } from "./useCollection";
 import {
   useRecipient,
   useNotice,
@@ -36,6 +37,14 @@ export const BaasSDK = {
   createPost: core.createPost,
   updatePost: core.updatePost,
   deletePost: core.deletePost,
+  // collection (동적 컬렉션 레코드)
+  listRecords: core.listRecords,
+  getRecord: core.getRecord,
+  createRecord: core.createRecord,
+  updateRecord: core.updateRecord,
+  deleteRecord: core.deleteRecord,
+  listPublicRecords: core.listPublicRecords,
+  getPublicRecord: core.getPublicRecord,
   // notice/faq/comments
   listNoticePosts: core.listNoticePosts,
   getNoticePost: core.getNoticePost,
@@ -80,6 +89,7 @@ export const BaasSDK = {
   useSignup,
   useLogout,
   useBoard,
+  useCollection,
   useRecipient,
   useNotice,
   useFaq,
@@ -90,7 +100,7 @@ export const BaasSDK = {
 };
 
 export {
-  AuthProvider, useAuth, RequireAuth, useLogin, useSignup, useLogout, useBoard,
+  AuthProvider, useAuth, RequireAuth, useLogin, useSignup, useLogout, useBoard, useCollection,
   useRecipient, useNotice, useFaq, useComments, useSurvey, useReservation, useStore,
 };
 export * from "../core/index";
