@@ -45,6 +45,15 @@ fetch(url, {
 });
 ```
 
+### 인증 상태 전역 관리 (필수 원칙)
+
+**인증 상태는 앱 루트에서 1회만 조회합니다.** HttpOnly 쿠키는 JS로 읽을 수 없으므로 로그인 여부는 `GET /account/info` 호출로만 판단할 수 있는데, 이 호출을 화면마다 반복하면 페이지 이동 시마다 중복 요청이 발생하고 비로그인 시 401이 계속 쌓입니다.
+
+- **React**: 앱 루트를 `AuthProvider`로 감싸고(`templates/react/AuthProvider.tsx`), 화면은 `useAuth()`로 읽기만 합니다. 로그인 성공 직후 `refetch()`, 로그아웃 직후 `clear()`를 호출합니다. 로그인 필수 화면은 `<RequireAuth>`로 감쌉니다.
+- **Vanilla JS/TS**: `checkAuth()`를 사용합니다(`templates/baas.ts`). 결과가 모듈 레벨에 캐시되어 여러 곳에서 호출해도 실제 요청은 1회입니다. 로그인 직후에는 `checkAuth({ force: true })`로 재조회합니다.
+
+**401 구분 원칙**: `GET /account/info`의 401은 에러가 아닌 **비로그인 정상 신호**입니다. 에러 UI나 강제 리다이렉트 없이 "비로그인 상태"로 처리하세요. 반면 로그인 후 다른 API가 반환하는 401은 세션 만료이므로 재로그인을 유도합니다.
+
 ---
 
 ## 응답 형식
@@ -121,7 +130,7 @@ function getProjectId(): string {
 | ErrorCode | HTTP | 설명 | 대응 |
 |-----------|------|------|------|
 | `INVALID_USER` | 400 | ID/PW 불일치 | 입력값 확인 안내 |
-| `UNAUTHORIZED` | 401 | 로그인 필요 | 로그인 페이지로 이동 |
+| `UNAUTHORIZED` | 401 | 로그인 필요 | 보호된 기능이면 로그인 페이지로 이동. `GET /account/info`의 401은 비로그인 정상 신호이므로 에러 처리 금지 (위 "인증 상태 전역 관리" 참조) |
 | `INVALID_TOKEN` | 401 | 잘못된 토큰 | 재로그인 |
 | `TOKEN_EXPIRED` | 401 | 토큰 만료 | 재로그인 |
 | `ALREADY_EXISTS` | 409 | 이미 존재하는 ID | 다른 아이디 입력 안내 |

@@ -1,0 +1,71 @@
+{
+  "version": "0.2.0",
+  "sdk": "@mbaas/baas-web-sdk",
+  "sdk_global": "window.BaasSDK",
+  "surface_ref": "reference/sdk-surface.md",
+  "scaffold_ref": "scaffold/wiring.md",
+  "fallback": "표면에 없는 기능은 이 스킬 범위 밖입니다. 임의 fetch 코드를 만들지 말고 사용자에게 미지원임을 알리세요(raw API 이스케이프 해치 없음 — 모든 백엔드 호출은 SDK 경유).",
+  "data_flow": {
+    "account": "앱 루트 AuthProvider가 인증 상태 1회 조회 → 회원가입 → 로그인(자동 refetch) → 화면은 useAuth()로 읽기만 → 로그아웃(자동 clear)",
+    "recipient": "폼 입력(이름·전화) → useRecipient().register",
+    "notice": "useNotice().fetchPosts → post_id → fetchPost 상세 (공개)",
+    "faq": "useFaq().fetchPosts → fetchPost 상세 (공개)",
+    "board": "baas-cli로 게시판 생성(board_id) → 코드 주입 → useBoard().fetchPosts(boardId) → post_id → fetchPost → (로그인) submitPost",
+    "comments": "게시글 post_id → useComments().fetchComments → (로그인) addComment/editComment/removeComment",
+    "survey": "useSurvey().fetchSurveys → survey_id → fetchSurvey → submitResponse(공개)",
+    "reservation": "useReservation().fetchTargets → target_id → fetchTarget/fetchSlots → (로그인) book(무료·현장) 또는 prepare→토스위젯→confirm(카드) → myBookings/cancel",
+    "store": "useStore().fetchConfig(store_enabled 확인) → fetchProducts → product_id → fetchProduct → (로그인) prepare→토스위젯→confirm(=주문생성) → myOrders → confirmPurchase · [필수] 모든 페이지 푸터에 통신판매중개업자 고지"
+  },
+  "groups": {
+    "account": {
+      "surface_sections": ["인증 (account)"],
+      "features": [
+        { "id": "signup", "label": "회원가입", "auth": false, "keywords": ["회원가입", "가입", "sign up", "register"] },
+        { "id": "login", "label": "로그인", "auth": false, "keywords": ["로그인", "sign in", "login"] },
+        { "id": "logout", "label": "로그아웃", "auth": true, "keywords": ["로그아웃", "logout"] },
+        { "id": "account_info", "label": "내 정보", "auth": true, "keywords": ["내 정보", "프로필", "계정 정보", "마이페이지"] },
+        { "id": "change_password", "label": "비밀번호 변경", "auth": true, "keywords": ["비밀번호 변경", "패스워드"] }
+      ]
+    },
+    "recipient": {
+      "surface_sections": ["발송대상 (recipient)"],
+      "features": [
+        { "id": "recipient", "label": "연락처 등록", "auth": false, "keywords": ["연락처", "발송대상", "문의", "상담신청", "뉴스레터", "구독", "예약 접수"] }
+      ]
+    },
+    "notice": {
+      "surface_sections": ["공지사항·FAQ (notice/faq)"],
+      "features": [
+        { "id": "notice", "label": "공지사항", "auth": false, "keywords": ["공지사항", "공지", "notice"] },
+        { "id": "faq", "label": "FAQ", "auth": false, "keywords": ["FAQ", "자주 묻는 질문"] }
+      ]
+    },
+    "board": {
+      "surface_sections": ["게시판 (board)", "댓글 (comments)"],
+      "features": [
+        { "id": "board_list", "label": "게시글 목록", "auth": false, "keywords": ["게시판", "목록", "커뮤니티", "자유게시판", "리뷰"] },
+        { "id": "board_detail", "label": "게시글 상세", "auth": false, "keywords": ["게시글", "상세", "글 보기"] },
+        { "id": "board_write", "label": "게시글 작성/수정/삭제", "auth": "mixed", "keywords": ["글쓰기", "작성", "수정", "삭제", "post"] },
+        { "id": "comments", "label": "댓글", "auth": "mixed", "keywords": ["댓글", "comment", "답글"] }
+      ]
+    },
+    "survey": {
+      "surface_sections": ["설문조사 (survey)"],
+      "features": [
+        { "id": "survey", "label": "설문조사", "auth": false, "keywords": ["설문", "설문조사", "survey", "폼", "응답"] }
+      ]
+    },
+    "reservation": {
+      "surface_sections": ["예약 (reservation)"],
+      "features": [
+        { "id": "reservation", "label": "예약", "auth": "mixed", "keywords": ["예약", "reservation", "슬롯", "캘린더", "booking", "네이버 예약"] }
+      ]
+    },
+    "store": {
+      "surface_sections": ["스토어 (store)"],
+      "features": [
+        { "id": "store", "label": "스토어", "auth": "mixed", "keywords": ["스토어", "상품", "판매", "결제", "구매", "주문", "기프트카드", "상품권"] }
+      ]
+    }
+  }
+}

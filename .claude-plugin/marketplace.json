@@ -17,6 +17,15 @@
       "skills": [
         "./skills/baas-integration"
       ]
+    },
+    {
+      "name": "baas-integration-sdk-skills",
+      "description": "BaaS runtime CDN SDK 기반 UI 생성 가이드 (transport는 SDK가 담당)",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/baas-integration-sdk"
+      ]
     }
   ]
 }

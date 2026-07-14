@@ -124,6 +124,26 @@ export interface UseAccountInfoReturn {
 }
 
 // ============================================
+// AuthProvider 타입
+// ============================================
+
+/** AuthProvider가 useAuth()로 제공하는 전역 인증 상태 */
+export interface AuthContextValue {
+  /** 로그인된 사용자 정보 (비로그인 시 null) */
+  user: AccountResponse | null;
+  /** 로그인 여부 */
+  isLoggedIn: boolean;
+  /** 초기 인증 확인 중 여부 */
+  isLoading: boolean;
+  /** 에러 메시지 (비로그인 401은 에러가 아니므로 null 유지) */
+  error: string | null;
+  /** 인증 상태 재조회 - 로그인 직후 호출 */
+  refetch: () => Promise<AccountResponse | null>;
+  /** 인증 상태 초기화 - 로그아웃 직후 호출 */
+  clear: () => void;
+}
+
+// ============================================
 // useChangePassword 타입
 // ============================================
 

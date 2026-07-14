@@ -139,6 +139,12 @@ interface LoginRequest {
 | Endpoint | `GET /account/info` |
 | 인증 | 필요 (쿠키) |
 
+> **⚠️ 호출 원칙 — 앱 루트에서 1회만**
+> 이 API는 로그인 여부 판단의 유일한 수단이지만, **화면마다 호출하지 마세요.**
+> - React: 앱 루트의 `AuthProvider`가 1회 호출하고, 화면은 `useAuth()`로 읽기만 합니다 (`templates/react/AuthProvider.tsx`)
+> - Vanilla: `checkAuth()`를 사용하면 결과가 캐시되어 중복 요청이 발생하지 않습니다 (`templates/baas.ts`)
+> - 이 API의 401은 에러가 아닌 **비로그인 정상 신호**입니다. 에러 UI/강제 리다이렉트 없이 비로그인 상태로 처리하세요.
+
 ### 응답
 ```typescript
 {

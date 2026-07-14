@@ -35,6 +35,21 @@ description: "(BaaS API) 회원 인증 + 발송대상 + 게시판 + 설문조사
 
 ---
 
+## 인증 상태 전역 관리 (필수 원칙)
+
+**인증 상태(로그인 여부)는 앱 루트에서 1회만 조회합니다. 화면마다 `/account/info`를 호출하지 마세요.**
+
+| 프로젝트 | 방법 |
+|----------|------|
+| React/Next/Vite | 앱 루트를 `AuthProvider`로 감싸고, 화면은 `useAuth()`로 읽기만. 로그인 필수 화면은 `<RequireAuth>` 사용 (`templates/react/AuthProvider.tsx`) |
+| 순수 TS/JS | `checkAuth()` 사용 — 결과가 캐시되어 여러 곳에서 호출해도 실제 요청은 1회 (`templates/baas.ts`) |
+
+- 로그인 성공 직후 `refetch()`(React) / `checkAuth({ force: true })`(Vanilla)로 갱신, 로그아웃 직후 `clear()` 호출
+- `GET /account/info`의 401은 에러가 아닌 **비로그인 정상 신호** — 에러 UI/강제 리다이렉트 금지. 로그인 후 다른 API의 401은 세션 만료 → 재로그인 유도
+- `useAccountInfo` 훅을 화면 컴포넌트에서 직접 호출하는 코드는 생성하지 마세요 (AuthProvider 내부 전용)
+
+---
+
 ## auth 필드 값
 
 | 값 | 의미 |
@@ -58,7 +73,8 @@ templates/
     ├── useLogin.tsx
     ├── useSignup.tsx
     ├── useLogout.tsx
-    ├── useAccountInfo.tsx
+    ├── useAccountInfo.tsx     # AuthProvider 내부 전용 (화면에서 직접 호출 금지)
+    ├── AuthProvider.tsx       # 전역 인증 상태: AuthProvider / useAuth / RequireAuth
     ├── useRecipient.tsx
     ├── useNotice.tsx
     ├── useFaq.tsx

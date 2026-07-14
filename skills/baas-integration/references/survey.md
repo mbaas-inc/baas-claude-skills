@@ -195,6 +195,7 @@ const surveys = data.items;
 const participateUrl = survey.form_url;
 
 // 3. is_login_required 처리
+//    isLoggedIn 출처: useAuth() (react/AuthProvider.tsx) — 화면에서 /account/info를 직접 호출하지 말 것
 if (survey.is_login_required && !isLoggedIn) {
   // 로그인 페이지로 안내
 }

@@ -1,0 +1,56 @@
+name: sdk-release
+
+# sdk-vX.Y.Z 태그 push 시 SDK 자동 빌드→검증→배포(S3 불변+별칭)→CloudFront 무효화.
+# 배포 대상은 deploy.mjs 기본값(mbaas-file-bucket · public/baas-integration-sdk ·
+# CloudFront E3O4WUZ5YOS1S · 별칭 v1)을 사용 — 필요 시 repo Variables 로 override.
+# 앱 참조 URL: https://cdn.mbaas.kr/public/baas-integration-sdk/v1/baas-react.js
+on:
+  push:
+    tags: ["sdk-v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "배포할 버전 (예: 0.3.0)"
+        required: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # OIDC AssumeRole
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Derive version
+        id: v
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF_NAME#sdk-v}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build + verify
+        working-directory: sdk
+        run: |
+          npm install
+          npm run typecheck
+          SDK_VERSION="${{ steps.v.outputs.version }}" npm run build
+          npm test
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.SDK_DEPLOY_ROLE_ARN }}
+          aws-region: ap-northeast-2
+      - name: Deploy to CDN
+        working-directory: sdk
+        env:
+          SDK_VERSION: ${{ steps.v.outputs.version }}
+          # deploy.mjs 기본값 사용. prod 등 다른 대상이면 아래 vars 로 override.
+          SDK_S3_BUCKET: ${{ vars.SDK_S3_BUCKET }}
+          SDK_S3_PREFIX: ${{ vars.SDK_S3_PREFIX }}
+          SDK_CF_DISTRIBUTION: ${{ vars.SDK_CF_DISTRIBUTION }}
+          SDK_CHANNEL: ${{ vars.SDK_CHANNEL }}
+        run: npm run deploy

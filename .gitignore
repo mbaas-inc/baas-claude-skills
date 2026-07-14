@@ -46,3 +46,4 @@ temp/
 
 skills/*
 !skills/baas-integration/
+!skills/baas-integration-sdk/

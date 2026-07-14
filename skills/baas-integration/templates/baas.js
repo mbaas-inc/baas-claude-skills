@@ -117,6 +117,7 @@ export async function login(userId, userPw) {
     throw new Error(result.message || '로그인에 실패했습니다');
   }
 
+  clearAuthCache(); // 인증 상태가 바뀌었으므로 캐시 무효화
   return result.data;
 }
 
@@ -142,6 +143,8 @@ export async function logout() {
   if (result.result !== 'SUCCESS') {
     throw new Error(result.message || '로그아웃에 실패했습니다');
   }
+
+  clearAuthCache(); // 인증 상태가 바뀌었으므로 캐시 무효화
 }
 
 /**
@@ -171,9 +174,30 @@ export async function getAccountInfo() {
   return result.data;
 }
 
+// 인증 상태 캐시 - checkAuth()가 화면마다 /account/info를 반복 호출하지 않도록
+// 결과를 모듈 레벨에 보관하고, 동시 호출은 하나의 요청으로 합칩니다.
+let authCache = null;
+let authCachePromise = null;
+
+/**
+ * 인증 상태 캐시 무효화
+ *
+ * login()/logout()이 자동으로 호출하므로 직접 호출할 일은 드뭅니다.
+ * 다른 API가 401(세션 만료)을 반환한 경우 등에 사용하세요.
+ */
+export function clearAuthCache() {
+  authCache = null;
+  authCachePromise = null;
+}
+
 /**
  * 로그인 상태 확인
  *
+ * 앱 시작 시 1회만 /account/info를 호출하고 결과를 캐시합니다.
+ * 이후 호출은 캐시를 반환하므로 화면마다 호출해도 중복 요청이 발생하지 않습니다.
+ * 비로그인 401은 에러가 아닌 정상 신호이며 { isLoggedIn: false }로 반환됩니다.
+ *
+ * @param {{force?: boolean}} [options] - force가 true면 캐시를 무시하고 다시 조회
  * @returns {Promise<{isLoggedIn: boolean, user: Object|null}>} 로그인 여부와 사용자 정보
  *
  * @example
@@ -181,14 +205,36 @@ export async function getAccountInfo() {
  * if (isLoggedIn) {
  *   console.log(`환영합니다, ${user.name}님!`);
  * }
+ *
+ * @example
+ * // 로그인 직후 최신 상태로 재조회
+ * await login('user@example.com', 'password123');
+ * const { user } = await checkAuth({ force: true });
  */
-export async function checkAuth() {
-  try {
-    const user = await getAccountInfo();
-    return { isLoggedIn: true, user };
-  } catch {
-    return { isLoggedIn: false, user: null };
+export async function checkAuth(options = {}) {
+  if (options.force) {
+    clearAuthCache();
   }
+  if (authCache) {
+    return authCache;
+  }
+  if (authCachePromise) {
+    return authCachePromise; // 진행 중인 요청에 합류 (중복 호출 방지)
+  }
+
+  authCachePromise = (async () => {
+    try {
+      const user = await getAccountInfo();
+      authCache = { isLoggedIn: true, user };
+    } catch {
+      authCache = { isLoggedIn: false, user: null };
+    } finally {
+      authCachePromise = null;
+    }
+    return authCache;
+  })();
+
+  return authCachePromise;
 }
 
 /**
