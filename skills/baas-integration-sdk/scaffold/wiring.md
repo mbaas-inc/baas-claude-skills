@@ -13,8 +13,8 @@ SDK 로딩·host React 노출·init 은 모든 프로젝트가 동일하다. 아
   <!-- 프로젝트 컨텍스트 (앱빌더가 실제 project_id 주입) -->
   <meta name="baas-project-id" content="__PROJECT_ID__" />
   <title>__TITLE__</title>
-  <!-- 런타임 CDN SDK (별칭 v1 = 자동 업데이트 채널) -->
-  <script src="https://cdn.mbaas.kr/public/baas-integration-sdk/v1/baas-react.js"></script>
+  <!-- 런타임 CDN SDK. src 는 플레이스홀더 그대로 둔다 — concrete URL 하드코딩 금지. -->
+  <script src="%VITE_BAAS_SDK_URL%"></script>
 </head>
 <body>
   <div id="root"></div>
@@ -22,7 +22,7 @@ SDK 로딩·host React 노출·init 은 모든 프로젝트가 동일하다. 아
 </body>
 </html>
 ```
-- 로컬/dev 에선 `src` 를 환경에 맞는 SDK URL 로 둔다(앱빌더가 주입).
+- SDK `src` 는 `%VITE_BAAS_SDK_URL%` 플레이스홀더를 **그대로** 둔다(concrete URL 하드코딩 금지). 실제 값 주입은 인프라 몫이다.
 - Vite `base: '/'` 로 빌드한다(자산 경로 안정).
 
 ## 2. 앱 진입점 (`src/main.tsx`)
