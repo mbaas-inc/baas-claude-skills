@@ -173,30 +173,36 @@ await s.cancel(orderId, reason);
 **사용자 정의 커스텀 데이터**(고정 기능이 커버 못 하는 것). 데이터 프리미티브만 제공 — **범용 자동
 렌더 없음**. 앱은 요구에 맞춰 UI를 설계하고 이 훅으로 데이터만 연결한다.
 
-**전제**: `collection name`·필드(스키마)는 **baas-cli로 먼저 생성**(`baas collection create --name inventory
---field item_name:string:req,idx …` / `baas collection field add …`). 스키마 변경은 CLI/에이전트 소유(콘솔·앱에서 변경 아님).
+**전제**: `collection name`·필드(스키마)·접근 정책은 **baas-cli로 먼저 생성**(`baas collection create --name inventory
+--field item_name:string:req,idx … [--access-json '{"read":"public"}']` / `baas collection field add …`). 스키마·정책 변경은 CLI/에이전트 소유(콘솔·앱에서 변경 아님).
 ```tsx
 const { records, record, loading, error,
         fetchRecords, fetchPublicRecords, fetchRecord, submitRecord, editRecord, removeRecord } = BaasSDK.useCollection();
 
-// 회원(로그인) 경로 — require_login/owner_scope 정책은 서버가 강제
+// 회원(로그인) 경로 — 접근 정책(settings.access)은 서버가 강제
 await fetchRecords("inventory", { limit: 20, offset: 0, sort: "-created_at",
                                   filter: { quantity: { lt: 5 }, category: { eq: "전자" } } });
 // records = { items, total_count, offset, limit }; item = { id, collection, data:{...}, account_id, created_at }
 await fetchRecord("inventory", recordId);
-await submitRecord("inventory", { item_name: "노트북", quantity: 3, category: "전자" });  // 로그인 필수
-await editRecord("inventory", recordId, { quantity: 10 });                                 // 로그인 필수
-await removeRecord("inventory", recordId);                                                  // 로그인 필수
+await submitRecord("inventory", { item_name: "노트북", quantity: 3, category: "전자" });  // create 정책 member/owner면 로그인 필수
+await editRecord("inventory", recordId, { quantity: 10 });                                 // update 정책 owner면 작성자만
+await removeRecord("inventory", recordId);                                                  // delete 정책 owner면 작성자만
 
-// 공개(비로그인) 읽기 — public_read 정책 컬렉션 전용
+// 공개(비로그인) 읽기 — read 정책이 public 인 컬렉션 전용
 await fetchPublicRecords("inventory", { filter: { category: { eq: "전자" } } });
 ```
+- **접근 정책 (settings.access — CRUD 연산별, 서버 강제)**: `{create, read, update, delete}`, 각 scope ∈
+  `public`(누구나) | `member`(로그인) | `owner`(레코드 작성자). 기본값 create:member/read:member/update:owner/delete:owner.
+  - `read:public` → `fetchPublicRecords`로 비로그인 조회. 그 외엔 `fetchRecords`(로그인).
+  - `read:owner` → `fetchRecords`가 **본인 레코드만** 반환(개인 데이터).
+  - `update/delete:owner` → 작성자 아닌 회원의 `editRecord`/`removeRecord`는 서버가 403(클라 버튼 숨김은 보조).
+  - UI는 이 정책을 **읽어서** 로그인 게이트·버튼 노출을 맞춘다(정책 자체는 서버가 강제).
 - **필터 DSL**: `filter: { field: { op: value } }`, op ∈ `eq|ne|gt|gte|lt|lte|like|in`. sort는 `field`/`-field`.
 - **필드 타입↔UI 관례**(에이전트 설계 시): string→텍스트, number→숫자입력/범위필터, boolean→토글,
   date→날짜피커, enum→select(options.values), reference→검색선택.
 - `records.items`가 비면 빈 상태 UI. 작성/수정 성공 후 `fetchRecords`로 새로고침.
 - 표현 가능 범위(필드 타입·정책·제약)의 **권위 원본은 SDK 타입 + 런타임 컬렉션 스키마** — 이 문서는
-  프리미티브 사용법만. 스키마 자체는 CLI로 조회(`baas collection get <name>`).
+  프리미티브 사용법만. 스키마·정책은 CLI로 조회(`baas collection get <name>` → fields + settings.access).
 
 ---
 
