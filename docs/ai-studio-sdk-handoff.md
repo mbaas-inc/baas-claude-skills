@@ -32,10 +32,10 @@ SDK 배포는 **우리(baas-claude-skills repo) CI가 자동 수행**한다. AI 
 https://cdn.mbaas.kr/public/baas-integration-sdk/v1/baas-react.js   ← 앱은 이걸 참조(별칭, 자동 업데이트)
 https://cdn.mbaas.kr/public/baas-integration-sdk/<version>/baas-react.js  (불변 스냅샷 — 롤백·버전 고정용)
 ```
-- **두 경로 = 같은 산출물, 목적만 다름**: 별칭 `v1`은 최신 v1.x를 가리켜 CDN push로 전 앱 자동 반영(O(1)). 불변 `<version>`은 롤백 대상·버전 핀(별칭이 깨지면 `v1 ← 이전 version`으로 되돌림). 앱빌더는 **항상 `v1` 별칭만** 심는다.
+- **채널(가변 별칭) vs 불변 버전**: 채널(`v1`·`next`)은 최신을 가리키는 가변 별칭(CDN push로 전 앱 자동 반영, O(1)). 불변 `<version>`은 롤백·버전 핀용. 앱빌더는 **환경별 채널 URL을 주입**한다(§3.1: **dev=`next`, prod=`v1`**).
 - 대상 인프라(고정): S3 `mbaas-file-bucket/public/baas-integration-sdk/`, CloudFront `E3O4WUZ5YOS1S`(cdn.mbaas.kr `/public/*` 동작).
-- 트리거: `sdk-vX.Y.Z` 태그 push 또는 Actions 수동 실행 → 빌드·검증·업로드(불변+별칭 v1)·무효화. (`.github/workflows/sdk-release.yml`)
-- 마이너/패치는 v1 별칭 갱신으로 전 앱 자동 반영. 메이저(v2, 호환 깨짐)만 새 별칭.
+- 배포 방식: **정상 = 브랜치 CD**(`sdk-cd.yml`) — `stage` 머지 → `next` 채널 + 불변 `/<version>/` 배포(dev 검증), `main` 머지 → 검증된 불변 버전을 `v1`로 **승격**(재빌드 없이 복사). **예외(핫픽스·롤백·수동) = 태그**(`sdk-vX.Y.Z` push, `sdk-release.yml`).
+- 마이너/패치는 채널 갱신으로 자동 반영. 메이저(v2, 호환 깨짐)만 새 별칭.
 
 ## 3. 앱빌더 스캐폴드 배선 (AI Studio 소유 — 고정 인프라)
 생성 앱마다 동일하므로 스캐폴드 템플릿에 고정한다(스킬의 `scaffold/wiring.md` 원문). LLM이 창작하지 않게 한다.
