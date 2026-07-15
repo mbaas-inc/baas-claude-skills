@@ -1,0 +1,83 @@
+name: sdk-cd
+
+# SDK 채널 CD (브랜치 기반 — next→v1 승격 파이프라인):
+#   - stage push → next 채널(+ 불변 /<version>/) 배포        → dev E2E 검증용
+#   - main  push → v1 채널로 승격(검증된 /<version>/ 복사, 재빌드 없음) → 프로덕션 반영
+#
+# 버전 출처: sdk/package.json 의 version. 승격은 stage 에서 배포된 그 불변 산출물을
+# 그대로 v1 으로 복사하므로 "검증한 것 == 배포되는 것"이 보장된다.
+# 태그 기반 수동 릴리스는 sdk-release.yml 이 담당(핫픽스/롤백용으로 유지).
+on:
+  push:
+    branches: [stage, main]
+    paths:
+      - "sdk/**"
+      - ".github/workflows/sdk-cd.yml"
+
+jobs:
+  # stage: 새 SDK 를 next 채널 + 불변 /<version>/ 로 배포 (v1 은 건드리지 않음)
+  staging:
+    if: github.ref == 'refs/heads/stage'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # OIDC AssumeRole
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Derive version (sdk/package.json)
+        id: v
+        run: echo "version=$(node -p "require('./sdk/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Build + verify
+        working-directory: sdk
+        run: |
+          npm install
+          npm run typecheck
+          SDK_VERSION="${{ steps.v.outputs.version }}" npm run build
+          npm test
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.SDK_DEPLOY_ROLE_ARN }}
+          aws-region: ap-northeast-2
+      - name: Deploy to next channel (+ immutable version)
+        working-directory: sdk
+        env:
+          SDK_VERSION: ${{ steps.v.outputs.version }}
+          SDK_CHANNEL: next   # v1 이 아닌 스테이징 채널 — 프로덕션 격리
+          SDK_S3_BUCKET: ${{ vars.SDK_S3_BUCKET }}
+          SDK_S3_PREFIX: ${{ vars.SDK_S3_PREFIX }}
+          SDK_CF_DISTRIBUTION: ${{ vars.SDK_CF_DISTRIBUTION }}
+        run: npm run deploy
+
+  # main: 검증된 불변 /<version>/ 를 v1 로 승격 (재빌드 없음)
+  promote:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Derive version (sdk/package.json)
+        id: v
+        run: echo "version=$(node -p "require('./sdk/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.SDK_DEPLOY_ROLE_ARN }}
+          aws-region: ap-northeast-2
+      - name: Promote version to v1
+        working-directory: sdk
+        env:
+          SDK_VERSION: ${{ steps.v.outputs.version }}
+          SDK_CHANNEL: v1
+          SDK_S3_BUCKET: ${{ vars.SDK_S3_BUCKET }}
+          SDK_S3_PREFIX: ${{ vars.SDK_S3_PREFIX }}
+          SDK_CF_DISTRIBUTION: ${{ vars.SDK_CF_DISTRIBUTION }}
+        run: npm run promote
