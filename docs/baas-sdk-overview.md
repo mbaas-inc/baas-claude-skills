@@ -73,14 +73,18 @@
 
 ## 5. 배포 (자동화 — 우리 CI 소유)
 
-- **트리거**: `sdk-vX.Y.Z` 태그 push 또는 Actions 수동 실행 → 빌드·typecheck·test·업로드(불변+별칭)·무효화. (`.github/workflows/sdk-release.yml`)
-- **대상 인프라** (deploy.mjs 기본값): S3 `mbaas-file-bucket/public/baas-integration-sdk/`, CloudFront `E3O4WUZ5YOS1S`(cdn.mbaas.kr `/public/*` 동작), 별칭 `v1`.
-- **최초 1회 설정**: GitHub Secret `SDK_DEPLOY_ROLE_ARN`(S3 put + CloudFront 무효화 권한 OIDC role).
-- **롤백**: 별칭을 이전 불변 버전으로 되돌림 →
+**정상 = 브랜치 CD** (`.github/workflows/sdk-cd.yml`, 버전 소스 = `sdk/package.json`):
+- `stage` 머지 → `next` 채널 + 불변 `/<version>/` 배포(빌드·typecheck·test 후). **dev 환경 앱이 `next` 를 소비해 검증.** `v1` 무영향.
+- `main` 머지 → 검증된 불변 `/<version>/` 를 `v1` 로 **승격**(재빌드 없이 S3 복사 + 무효화, `promote.mjs`). prod 앱이 다음 로드부터 자동 반영(O(1)).
+- 흐름: `feature → stage(next·검증) → main(v1 승격)`.
+
+**예외 = 태그/수동** (`.github/workflows/sdk-release.yml`, `/sdk-release` 스킬): 핫픽스·특정 버전 수동 배포·새 메이저 채널·롤백. `sdk-vX.Y.Z` 태그 push 또는 workflow_dispatch.
+
+- **대상 인프라** (deploy.mjs 기본값): S3 `mbaas-file-bucket/public/baas-integration-sdk/`, CloudFront `E3O4WUZ5YOS1S`(cdn.mbaas.kr `/public/*` 동작), 채널 `v1`(prod)·`next`(dev).
+- **최초 1회 설정**: GitHub Secret `SDK_DEPLOY_ROLE_ARN`(S3 put + CloudFront 무효화 권한 OIDC role — 공통 롤 `GitHubAction-AssumeRoleWithAction` 재사용).
+- **롤백**: 별칭을 이전 정상 불변 버전으로 되돌림(재빌드 없음) — `promote.mjs`:
   ```
-  aws s3 cp s3://mbaas-file-bucket/public/baas-integration-sdk/<이전>/baas-react.js \
-            s3://mbaas-file-bucket/public/baas-integration-sdk/v1/baas-react.js --cache-control max-age=60
-  aws cloudfront create-invalidation --distribution-id E3O4WUZ5YOS1S --paths "/public/baas-integration-sdk/v1/*"
+  cd sdk && SDK_VERSION=<이전정상버전> SDK_CHANNEL=v1 npm run promote
   ```
 
 ---
