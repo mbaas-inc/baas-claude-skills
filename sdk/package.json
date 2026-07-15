@@ -8,7 +8,8 @@
     "build": "node build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --test test/*.test.mjs",
-    "deploy": "node deploy.mjs"
+    "deploy": "node deploy.mjs",
+    "promote": "node promote.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.24.0",
