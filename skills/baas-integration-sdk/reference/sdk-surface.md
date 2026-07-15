@@ -168,6 +168,38 @@ await s.cancel(orderId, reason);
 
 ---
 
+## 동적 컬렉션 (collection)
+
+**사용자 정의 커스텀 데이터**(고정 기능이 커버 못 하는 것). 데이터 프리미티브만 제공 — **범용 자동
+렌더 없음**. 앱은 요구에 맞춰 UI를 설계하고 이 훅으로 데이터만 연결한다.
+
+**전제**: `collection name`·필드(스키마)는 **baas-cli로 먼저 생성**(`baas collection create --name inventory
+--field item_name:string:req,idx …` / `baas collection field add …`). 스키마 변경은 CLI/에이전트 소유(콘솔·앱에서 변경 아님).
+```tsx
+const { records, record, loading, error,
+        fetchRecords, fetchPublicRecords, fetchRecord, submitRecord, editRecord, removeRecord } = BaasSDK.useCollection();
+
+// 회원(로그인) 경로 — require_login/owner_scope 정책은 서버가 강제
+await fetchRecords("inventory", { limit: 20, offset: 0, sort: "-created_at",
+                                  filter: { quantity: { lt: 5 }, category: { eq: "전자" } } });
+// records = { items, total_count, offset, limit }; item = { id, collection, data:{...}, account_id, created_at }
+await fetchRecord("inventory", recordId);
+await submitRecord("inventory", { item_name: "노트북", quantity: 3, category: "전자" });  // 로그인 필수
+await editRecord("inventory", recordId, { quantity: 10 });                                 // 로그인 필수
+await removeRecord("inventory", recordId);                                                  // 로그인 필수
+
+// 공개(비로그인) 읽기 — public_read 정책 컬렉션 전용
+await fetchPublicRecords("inventory", { filter: { category: { eq: "전자" } } });
+```
+- **필터 DSL**: `filter: { field: { op: value } }`, op ∈ `eq|ne|gt|gte|lt|lte|like|in`. sort는 `field`/`-field`.
+- **필드 타입↔UI 관례**(에이전트 설계 시): string→텍스트, number→숫자입력/범위필터, boolean→토글,
+  date→날짜피커, enum→select(options.values), reference→검색선택.
+- `records.items`가 비면 빈 상태 UI. 작성/수정 성공 후 `fetchRecords`로 새로고침.
+- 표현 가능 범위(필드 타입·정책·제약)의 **권위 원본은 SDK 타입 + 런타임 컬렉션 스키마** — 이 문서는
+  프리미티브 사용법만. 스키마 자체는 CLI로 조회(`baas collection get <name>`).
+
+---
+
 ## 에러코드 → UI 분기
 
 `catch (e) { if (e instanceof BaasSDK.BaasError) ... }` 또는 훅의 `error`.

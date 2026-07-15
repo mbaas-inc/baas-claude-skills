@@ -16,7 +16,7 @@ BaaS 백엔드와 대화하는 transport·훅은 **런타임 CDN SDK**(`window.B
 
 ## 생성 흐름
 
-1. **`features.json`을 읽어** 요청에 맞는 기능 그룹을 파악한다(현재 `account`, `board`).
+1. **`features.json`을 읽어** 요청에 맞는 기능 그룹을 파악한다(`account`·`recipient`·`notice`·`board`·`survey`·`reservation`·`store`·`collection`).
 2. 해당 기능의 **`reference/sdk-surface.md`** 섹션을 읽어 SDK 훅/함수 시그니처·반환 타입·에러→UI 규약을 확인한다.
 3. **백엔드 리소스가 필요하면 `baas` CLI로 먼저 만든다** (예: 게시판 → `baas board create`). 반환된 id를 UI 코드에 상수로 주입한다.
 4. **`scaffold/wiring.md`의 배선 보일러플레이트를 그대로** index.html·앱 진입점에 포함한다(창작 금지 — SDK 로딩·host React 노출·init).
@@ -46,6 +46,21 @@ SDK는 CDN에서 로드되고 앱의 React 인스턴스를 공유한다. 이 배
 - 로그인/로그아웃은 `useLogin()`/`useLogout()` — 성공 시 전역 상태가 자동 갱신된다(내부적으로 refetch/clear).
 - **비로그인 상태의 401은 에러가 아닌 정상 신호다.** 에러 UI·강제 리다이렉트 금지. `useAuth()`가 `{isLoggedIn:false}`로 알려준다.
 - 로그인 후 다른 API의 401은 세션 만료 → 재로그인 유도.
+
+## 동적 컬렉션 (커스텀 데이터) — UI↔스키마 공동 설계
+
+컬렉션 프리미티브는 **고정 기능(회원·발송대상·게시판·설문·예약·스토어)에 스펙이 없는
+데이터 전용**이다. 어떤 데이터가 고정 기능으로 커버되는지의 판단(기술 선택)은 이 스킬이
+아니라 **에이전트(운영 지침) 소관** — 이 스킬은 선택된 기술의 스펙만 정의한다.
+
+- **공동 설계 흐름**: 요구 → (표현 범위·제약을 알고) **UI 설계 + 그에 맞는 스키마 구성** →
+  `baas collection create/field add`로 스키마 생성 → `useCollection` 프리미티브로 UI 연결.
+  UI는 SDK 프리미티브·표현 범위(필드 타입·필터 DSL·정책) **안에서 구현 가능하게** 직접
+  설계한다(범용 자동 렌더 아님 — 그건 관리자 콘솔 몫).
+- **스키마 권한**: 컬렉션/필드 생성·변경은 **baas-cli(에이전트) 소유**. 요구가 바뀌면 UI와 스키마를
+  함께 재설계한다. 신규 필드는 optional만 추가 가능.
+- **표현 범위의 원본**: 필드 타입·정책·필터 능력은 SDK 타입 + `baas collection get <name>`(런타임
+  스키마)이 권위 원본. 프리미티브 사용법은 `reference/sdk-surface.md`의 "동적 컬렉션" 참조.
 
 ## UI/UX 생성 원칙
 
