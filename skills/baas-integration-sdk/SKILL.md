@@ -55,14 +55,18 @@ SDK는 CDN에서 로드되고 앱의 React 인스턴스를 공유한다. 이 배
 데이터 전용**이다. 어떤 데이터가 고정 기능으로 커버되는지의 판단(기술 선택)은 이 스킬이
 아니라 **에이전트(운영 지침) 소관** — 이 스킬은 선택된 기술의 스펙만 정의한다.
 
-- **공동 설계 흐름**: 요구 → (표현 범위·제약을 알고) **UI 설계 + 그에 맞는 스키마 구성** →
+- **공동 설계 흐름**: 요구 → (표현 범위·제약을 알고) **UI 설계 + 그에 맞는 스키마·접근 정책 구성** →
   `baas collection create/field add`로 스키마 생성 → `useCollection` 프리미티브로 UI 연결.
   UI는 SDK 프리미티브·표현 범위(필드 타입·필터 DSL·정책) **안에서 구현 가능하게** 직접
   설계한다(범용 자동 렌더 아님 — 그건 관리자 콘솔 몫).
-- **스키마 권한**: 컬렉션/필드 생성·변경은 **baas-cli(에이전트) 소유**. 요구가 바뀌면 UI와 스키마를
-  함께 재설계한다. 신규 필드는 optional만 추가 가능.
+- **접근 정책 = CRUD 연산별**: `settings.access = {create, read, update, delete}`, 각 scope ∈
+  `public|member|owner`(기본 create:member/read:member/update:owner/delete:owner). 에이전트가
+  설계한 각 화면 액션(목록·상세·작성·수정·삭제)의 대상에 맞춰 **달라지는 연산만** `--access-json`으로
+  덮어쓴다(예: 공개 목록+작성자수정 → `{"read":"public"}`). 서버가 강제하므로 UI는 게이트/버튼 노출만 맞춘다.
+- **스키마·정책 권한**: 컬렉션/필드/정책 생성·변경은 **baas-cli(에이전트) 소유**. 요구가 바뀌면 UI와
+  스키마·정책을 함께 재설계한다. 신규 필드는 optional만 추가 가능.
 - **표현 범위의 원본**: 필드 타입·정책·필터 능력은 SDK 타입 + `baas collection get <name>`(런타임
-  스키마)이 권위 원본. 프리미티브 사용법은 `reference/sdk-surface.md`의 "동적 컬렉션" 참조.
+  스키마 + settings.access)이 권위 원본. 프리미티브 사용법은 `reference/sdk-surface.md`의 "동적 컬렉션" 참조.
 
 ## UI/UX 생성 원칙
 
