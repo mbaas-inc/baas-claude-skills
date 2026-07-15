@@ -35,6 +35,8 @@ SDK는 CDN에서 로드되고 앱의 React 인스턴스를 공유한다. 이 배
 - 앱 진입점에서 render **이전에** `window.__BAAS_HOST__ = { React, ReactDOM }` 노출
 - `window.BaasSDK.init({ baseUrl: '/aiapp-baas' })` 호출 (project_id는 meta에서 자동 해석)
 
+**불변식**: SDK `<script src>`는 `%VITE_BAAS_SDK_URL%` 플레이스홀더를 그대로 두고 concrete URL 을 하드코딩하지 않는다. 실제 값 주입은 인프라 몫이라 에이전트/스킬은 관여하지 않는다.
+
 ---
 
 ## 인증 상태 전역 관리 (필수 원칙 — 기존 스킬 계승)
