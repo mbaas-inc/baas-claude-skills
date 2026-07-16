@@ -143,7 +143,8 @@
 ## 10. 현재 상태 · 남은 것 · 범위
 
 - ✅ SDK 전 기능 이식(core+react, 18 테스트) · 스킬 작성 · CI 배포 자동화 · dev DB 티켓/CLI 검증 · PoC(A/B/C)·글루 E2E·A/B 벤치마크.
-- ⬜ 첫 CDN 시딩(v0.3.0) · GitHub `SDK_DEPLOY_ROLE_ARN` 설정 · AI Studio 앱빌더 배선/매니페스트 UI · 기존 템플릿 JSDoc 버그 수정(별도).
+- ✅ 첫 CDN 시딩(v0.3.0) · `SDK_DEPLOY_ROLE_ARN`(공통 OIDC 롤) 설정 · 브랜치 CD(sdk-cd) 가동 — SDK 0.4.0 `next` 채널 배포·검증.
+- ⬜ AI Studio 앱빌더 배선(SDK URL 환경 주입, §3.1 핸드오프)/매니페스트 비교 UI · (별도) 기존 `baas-integration` 스킬 JSDoc 템플릿 버그.
 - **범위 밖**: 기존 스킬·운영 프로젝트 무변경(서버 구경로 호환으로 레거시 보호), baas-cli/티켓 시스템은 형제 관계로 별도.
 
 ## 참고 파일

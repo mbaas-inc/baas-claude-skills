@@ -1,6 +1,6 @@
 ---
 name: baas-integration-sdk
-description: "(BaaS SDK) 런타임 CDN SDK 위에서 BaaS UI/UX를 생성하는 가이드. 제공 기능: 회원 인증(회원가입/로그인/로그아웃/내정보/비밀번호변경 + AuthProvider 전역 상태), 발송대상(연락처) 등록, 공지사항/FAQ 조회, 동적 게시판(FREE/REVIEW 게시글 CRUD)·댓글, 설문조사, 예약(슬롯 캘린더/신청/내 예약/토스 결제), 스토어(디지털 상품/토스 결제/내 주문). transport는 SDK(@mbaas/baas-web-sdk)가 CDN에서 담당하므로 fetch 코드를 직접 만들지 않는다. Use when: 로그인/회원가입, 인증 시스템, 연락처/문의/뉴스레터 폼, 공지사항/FAQ, 자유게시판/리뷰/커뮤니티, 댓글, 설문조사, 슬롯 기반 예약, 상품 판매/결제 — baas-cli로 백엔드 리소스를 만들고 SDK 훅으로 UI를 조립하는 신규 프로젝트 (transport를 vendored로 복사하지 않는 SDK 방식)"
+description: "(BaaS SDK) 런타임 CDN SDK 위에서 BaaS UI/UX를 생성하는 가이드. 제공 기능: 회원 인증(회원가입/로그인/로그아웃/내정보/비밀번호변경 + AuthProvider 전역 상태), 발송대상(연락처) 등록, 공지사항/FAQ 조회, 동적 게시판(FREE/REVIEW 게시글 CRUD)·댓글, 설문조사, 예약(슬롯 캘린더/신청/내 예약/토스 결제), 스토어(디지털 상품/토스 결제/내 주문), 동적 컬렉션(사용자 정의 데이터 모델 — 스키마 정의 + 레코드 CRUD, 고정 기능에 없는 임의 도메인 데이터를 DB처럼 다룸). transport는 SDK(@mbaas/baas-web-sdk)가 CDN에서 담당하므로 fetch 코드를 직접 만들지 않는다. Use when: 로그인/회원가입, 인증 시스템, 연락처/문의/뉴스레터 폼, 공지사항/FAQ, 자유게시판/리뷰/커뮤니티, 댓글, 설문조사, 슬롯 기반 예약, 상품 판매/결제, 그리고 위 고정 기능(인증·발송대상·게시판·설문·예약·스토어)에 없는 어떤 도메인 데이터든 저장·조회·목록·CRUD가 필요할 때(동적 컬렉션 — 예: 메뉴·포트폴리오·재고·예약목록·고객·일정 등 무엇이든) — baas-cli로 백엔드 리소스를 만들고 SDK 훅으로 UI를 조립하는 신규 프로젝트 (transport를 vendored로 복사하지 않는 SDK 방식)"
 ---
 
 # BaaS SDK 통합 스킬 (UI 생성 가이드)
@@ -79,9 +79,9 @@ SDK는 CDN에서 로드되고 앱의 React 인스턴스를 공유한다. 이 배
 
 프로젝트 루트에 `baas-manifest.json`을 만든다 — 이후 업데이트 판단의 근거(LLM 없이 diff):
 ```json
-{ "skill": "baas-integration-sdk", "skill_version": "0.2.0", "sdk_channel": "v1", "features_used": ["account", "notice", "recipient", "board"] }
+{ "skill": "baas-integration-sdk", "skill_version": "0.3.0", "sdk_channel": "v1", "features_used": ["account", "notice", "recipient", "board"] }
 ```
-- `features_used`에는 **실제 사용한 기능 그룹만** 적는다(그룹 키: `account`, `notice`(공지+FAQ), `recipient`, `board`, `survey`, `reservation`, `store`).
+- `features_used`에는 **실제 사용한 기능 그룹만** 적는다(그룹 키: `account`, `notice`(공지+FAQ), `recipient`, `board`, `survey`, `reservation`, `store`, `collection`).
 - `skill_version`은 이 앱을 생성/갱신할 때 사용한 스킬 버전(`features.json`의 `version`)을 적는다.
 - **⚠️ 기능을 추가·제거하면 `features_used`를 반드시 함께 갱신한다.** manifest가 실제 사용 기능과 어긋나면(stale) 업데이트 비교기의 교집합 계산이 틀어져 **해당 기능의 업데이트가 누락된다.** 예: 나중에 로그인·게시판을 덧붙였는데 `features_used`에 `account`·`board`를 안 넣으면, 그 기능들의 스킬 변경이 이 앱엔 반영되지 않는다.
 

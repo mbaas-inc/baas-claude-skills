@@ -14,7 +14,7 @@ BaaS 프론트 SDK — 런타임 CDN에서 로드되는 **부패 방지 계층**
 npm install
 npm run typecheck        # tsc --noEmit
 npm test                 # core 계약 테스트 (node --test)
-SDK_VERSION=0.3.0 npm run build   # → dist/
+SDK_VERSION=0.4.0 npm run build   # → dist/
 ```
 
 ## 버전·전파 모델
@@ -22,7 +22,7 @@ SDK_VERSION=0.3.0 npm run build   # → dist/
 
 | 경로 | 성격 | 캐시 | 용도 |
 |---|---|---|---|
-| `/<prefix>/<version>/baas-react.js` (예: `/0.3.0/`) | **불변**(고정 버전) | 1년(immutable) | 롤백 대상·버전 고정 |
+| `/<prefix>/<version>/baas-react.js` (예: `/0.4.0/`) | **불변**(고정 버전) | 1년(immutable) | 롤백 대상·버전 고정 |
 | `/<prefix>/<channel>/baas-react.js` (예: `/v1/`) | **가변 별칭**(최신 v1.x) | 60s + 무효화 | **생성 앱이 참조** → CDN push로 자동 업데이트 |
 
 - **왜 둘 다**: 별칭(`v1`)만 있으면 O(1) 전파는 되지만 ① 깨졌을 때 되돌릴 대상이 없고 ② 특정 앱을 특정 버전에 묶을 수 없다. 불변 경로가 그 안전장치(롤백 소스·버전 핀).
