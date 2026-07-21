@@ -183,6 +183,8 @@ const { records, record, loading, error,
 await fetchRecords("inventory", { limit: 20, offset: 0, sort: "-created_at",
                                   filter: { quantity: { lt: 5 }, category: { eq: "전자" } } });
 // records = { items, total_count, offset, limit }; item = { id, collection, data:{...}, account_id, created_at }
+// ⚠️ 렌더는 records 가 아니라 records.items 를 map 한다 (records 는 배열이 아니라 봉투):
+//    (records?.items ?? []).map((r) => r.data.item_name)   // records.map(...) 는 TypeError
 await fetchRecord("inventory", recordId);
 await submitRecord("inventory", { item_name: "노트북", quantity: 3, category: "전자" });  // create 정책 member/owner면 로그인 필수
 await editRecord("inventory", recordId, { quantity: 10 });                                 // update 정책 owner면 작성자만
@@ -197,10 +199,17 @@ await fetchPublicRecords("inventory", { filter: { category: { eq: "전자" } } }
   기본값 create:member/read:member/update:owner/delete:owner, create 는 public|member 만.
   - `read:public` → `fetchPublicRecords`로 비로그인 조회. 그 외엔 `fetchRecords`(로그인).
   - `read:owner` → `fetchRecords`가 **본인 레코드만** 반환(개인 데이터).
-  - `read:["owner","ref_owner:post_id"]` → `fetchRecords`가 **내 레코드 + 내가 주인인 부모(post_id)에
-    달린 레코드**를 반환 — 신청/댓글 관리 화면은 추가 파라미터 없이 이 목록을 그대로 렌더.
+  - `read:["owner","ref_owner:post_id"]` → `fetchRecords`는 **내 레코드(owner)** ∪ **내가 주인인 부모
+    (post_id)에 달린 레코드(ref_owner)** 의 **합집합**을 반환한다. ⚠️ 응답은 **각 행이 어느 자격으로
+    매칭됐는지 표시하지 않는다** → 이 목록을 "받은 신청 관리 뷰"로 **그대로 렌더하면 안 된다**(내가 낸
+    신청까지 섞여 나옴). 관점으로 나눠 소비한다:
+    - `r.account_id === user.id` → **내가 낸** 레코드(내 신청 현황).
+    - `r.account_id !== user.id` → **내가 주인인 부모에 달린** 레코드(받은 신청) = 수락/거절 대상.
+    "받은 신청 관리"와 "내 신청 현황"은 **별도 화면·별도 부분집합**으로 분리하는 게 안전하다.
   - `update/delete` 에 `owner`/`ref_owner:<f>` → 해당 주체가 아닌 회원의 `editRecord`/`removeRecord`는
-    서버가 403(클라 버튼 숨김은 보조). 예: 신청 수락(update)=글주인만, 신청 취소(delete)=신청자 본인.
+    서버가 403(클라 버튼 숨김은 보조). 예: 신청 수락(update)=`ref_owner`(부모 소유자)만, 신청 취소
+    (delete)=`owner`(작성자 본인). **ref_owner 전용 액션 버튼은 위 `account_id !== user.id` 부분집합에만
+    노출**한다 — 내가 낸 신청에 "수락" 버튼을 붙이면 누를 때 403(실제 발생 오류).
   - UI는 이 정책을 **읽어서** 로그인 게이트·버튼 노출을 맞춘다(정책 자체는 서버가 강제).
 - **reference 무결성(서버 강제)**: `reference` 필드 값은 대상 컬렉션의 실존 레코드 id 여야 하며
   아니면 `submitRecord`/`editRecord`가 400. self-reference(같은 컬렉션) 허용 — 트리는 root anchor
