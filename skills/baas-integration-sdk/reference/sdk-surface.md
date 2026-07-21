@@ -214,16 +214,19 @@ await fetchPublicRecords("inventory", { filter: { category: { eq: "전자" } } }
 
 ---
 
-## 에러코드 → UI 분기
+## 에러코드 (의미 참조)
 
 `catch (e) { if (e instanceof BaasSDK.BaasError) ... }` 또는 훅의 `error`.
 
-| errorCode | HTTP | 대응 UI |
-|-----------|------|---------|
-| `INVALID_USER` | 400 | 로그인 폼: "아이디 또는 비밀번호를 확인하세요" |
-| `UNAUTHORIZED` | 401 | 보호 기능이면 로그인 페이지로. 단 `useAuth`의 비로그인 401은 정상(에러 처리 금지) |
-| `TOKEN_EXPIRED`/`INVALID_TOKEN` | 401 | "세션이 만료되었습니다. 다시 로그인해주세요" |
-| `ALREADY_EXISTS` | 409 | 회원가입: "이미 사용 중인 아이디입니다" |
-| `VALIDATION_ERROR` | 400 | 필드별 에러 메시지 표시 |
-| `NOT_FOUND` | 404 | "대상을 찾을 수 없습니다" |
-| `INTERNAL_SERVER_ERROR` | 500 | "잠시 후 다시 시도해주세요" |
+실패 시 `BaasError`(`.message` 한국어 · `.errorCode` · `.status`)를 throw. **`.message`는 서버가 준 한국어 문구이므로 그대로 노출**하고, **어떤 UI(토스트·모달·인라인·리다이렉트·문구)로 보여줄지는 사용자 요구에 따라 에이전트가 결정**한다. 아래는 각 코드의 의미(사실)·사용 주의일 뿐 UI 규정이 아니다.
+
+| errorCode | HTTP | 의미 | 사용 주의 |
+|-----------|------|------|----------|
+| `VALIDATION_ERROR` | 400 | 입력이 규칙 위반 | 상세는 `.message` |
+| `INVALID_USER` | 400 | 로그인 자격증명 불일치 | 로그인 맥락 |
+| `UNAUTHORIZED` | 401 | 미인증(로그인 안 됨) | `useAuth`의 비로그인 401은 **정상**(에러 처리 금지) |
+| `TOKEN_EXPIRED`/`INVALID_TOKEN` | 401 | 세션 만료·무효 | 재로그인 유도 대상 |
+| `FORBIDDEN` | 403 | 인증됐으나 권한 없음 | **401과 달리 재로그인 대상 아님.** 컬렉션 access(owner/ref_owner) 백스톱 — 클라 버튼 숨김이 1차 |
+| `NOT_FOUND` | 404 | 대상 없음 | |
+| `ALREADY_EXISTS` | 409 | 중복·충돌 | 회원가입 아이디 중복 등 |
+| `INTERNAL_SERVER_ERROR` | 500 | 서버 오류 | 재시도 가능 |
