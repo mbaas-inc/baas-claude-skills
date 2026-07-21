@@ -1,5 +1,5 @@
 {
-  "version": "0.4.0",
+  "version": "0.5.0",
   "sdk": "@mbaas/baas-web-sdk",
   "sdk_global": "window.BaasSDK",
   "surface_ref": "reference/sdk-surface.md",
@@ -15,7 +15,7 @@
     "survey": "useSurvey().fetchSurveys → survey_id → fetchSurvey → submitResponse(공개)",
     "reservation": "useReservation().fetchTargets → target_id → fetchTarget/fetchSlots → (로그인) book(무료·현장) 또는 prepare→토스위젯→confirm(카드) → myBookings/cancel",
     "store": "useStore().fetchConfig(store_enabled 확인) → fetchProducts → product_id → fetchProduct → (로그인) prepare→토스위젯→confirm(=주문생성) → myOrders → confirmPurchase · [필수] 모든 페이지 푸터에 통신판매중개업자 고지",
-    "collection": "요구에 맞춰 UI 설계 → baas-cli로 컬렉션/필드+접근정책 생성(스키마, settings.access=CRUD 연산별 grants — atom 또는 배열(OR), atom=public|member|owner|ref_owner:<field>, --access-json으로 달라지는 연산만 덮어씀) → collection name 주입 → useCollection().fetchRecords(name,{filter,sort}) 또는 fetchPublicRecords(read:public일 때) → submitRecord/editRecord/removeRecord(정책·reference 무결성은 서버 강제) · 관계 패턴: 자식 컬렉션(신청·댓글)=reference+ref_owner, 트리=anchor+parent 이중 참조(평면 조회+클라 조립), N:M=정션 컬렉션 · UI는 앱이 요구에 맞춰 설계(범용 자동 렌더 아님), 스키마·정책 변경은 CLI/에이전트 소유"
+    "collection": "요구에 맞춰 UI 설계 → baas-cli로 컬렉션/필드+접근정책 생성(스키마, settings.access=CRUD 연산별 grants — atom 또는 배열(OR), atom=public|member|owner|ref_owner:<field>, --access-json으로 달라지는 연산만 덮어씀) → collection name 주입 → useCollection().fetchRecords(name,{filter,sort})는 records={items,total_count,...} 봉투 반환(렌더는 records.items map, records.map 아님) 또는 fetchPublicRecords(read:public일 때) → submitRecord/editRecord/removeRecord(정책·reference 무결성은 서버 강제) · 관계 패턴: 자식 컬렉션(신청·댓글)=reference+ref_owner, 트리=anchor+parent 이중 참조(평면 조회+클라 조립), N:M=정션 컬렉션 · union read(owner∪ref_owner)는 행별 자격 미표시라 관리 뷰로 그대로 렌더 금지 — account_id로 내 것/받은 것 분리, ref_owner 전용 액션은 받은 것 부분집합만 · UI는 앱이 요구에 맞춰 설계(범용 자동 렌더 아님), 스키마·정책 변경은 CLI/에이전트 소유"
   },
   "groups": {
     "account": {
