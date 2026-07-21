@@ -191,12 +191,20 @@ await removeRecord("inventory", recordId);                                      
 // 공개(비로그인) 읽기 — read 정책이 public 인 컬렉션 전용
 await fetchPublicRecords("inventory", { filter: { category: { eq: "전자" } } });
 ```
-- **접근 정책 (settings.access — CRUD 연산별, 서버 강제)**: `{create, read, update, delete}`, 각 scope ∈
-  `public`(누구나) | `member`(로그인) | `owner`(레코드 작성자). 기본값 create:member/read:member/update:owner/delete:owner.
+- **접근 정책 (settings.access — CRUD 연산별 grants, 서버 강제)**: `{create, read, update, delete}`,
+  값 = **atom 또는 배열(OR 합집합)**. atom ∈ `public`(누구나) | `member`(로그인) | `owner`(레코드 작성자)
+  | `ref_owner:<field>`(그 레코드의 reference 필드가 가리키는 **부모 레코드의 작성자** — #626).
+  기본값 create:member/read:member/update:owner/delete:owner, create 는 public|member 만.
   - `read:public` → `fetchPublicRecords`로 비로그인 조회. 그 외엔 `fetchRecords`(로그인).
   - `read:owner` → `fetchRecords`가 **본인 레코드만** 반환(개인 데이터).
-  - `update/delete:owner` → 작성자 아닌 회원의 `editRecord`/`removeRecord`는 서버가 403(클라 버튼 숨김은 보조).
+  - `read:["owner","ref_owner:post_id"]` → `fetchRecords`가 **내 레코드 + 내가 주인인 부모(post_id)에
+    달린 레코드**를 반환 — 신청/댓글 관리 화면은 추가 파라미터 없이 이 목록을 그대로 렌더.
+  - `update/delete` 에 `owner`/`ref_owner:<f>` → 해당 주체가 아닌 회원의 `editRecord`/`removeRecord`는
+    서버가 403(클라 버튼 숨김은 보조). 예: 신청 수락(update)=글주인만, 신청 취소(delete)=신청자 본인.
   - UI는 이 정책을 **읽어서** 로그인 게이트·버튼 노출을 맞춘다(정책 자체는 서버가 강제).
+- **reference 무결성(서버 강제)**: `reference` 필드 값은 대상 컬렉션의 실존 레코드 id 여야 하며
+  아니면 `submitRecord`/`editRecord`가 400. self-reference(같은 컬렉션) 허용 — 트리는 root anchor
+  (`post_id`)+parent(`parent_id`) 이중 참조로 설계하고 anchor 평면 조회 후 클라에서 조립한다.
 - **필터 DSL**: `filter: { field: { op: value } }`, op ∈ `eq|ne|gt|gte|lt|lte|like|in`. sort는 `field`/`-field`.
 - **필드 타입↔UI 관례**(에이전트 설계 시): string→텍스트, number→숫자입력/범위필터, boolean→토글,
   date→날짜피커, enum→select(options.values), reference→검색선택.

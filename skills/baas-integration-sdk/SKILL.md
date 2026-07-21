@@ -59,10 +59,21 @@ SDK는 CDN에서 로드되고 앱의 React 인스턴스를 공유한다. 이 배
   `baas collection create/field add`로 스키마 생성 → `useCollection` 프리미티브로 UI 연결.
   UI는 SDK 프리미티브·표현 범위(필드 타입·필터 DSL·정책) **안에서 구현 가능하게** 직접
   설계한다(범용 자동 렌더 아님 — 그건 관리자 콘솔 몫).
-- **접근 정책 = CRUD 연산별**: `settings.access = {create, read, update, delete}`, 각 scope ∈
-  `public|member|owner`(기본 create:member/read:member/update:owner/delete:owner). 에이전트가
-  설계한 각 화면 액션(목록·상세·작성·수정·삭제)의 대상에 맞춰 **달라지는 연산만** `--access-json`으로
-  덮어쓴다(예: 공개 목록+작성자수정 → `{"read":"public"}`). 서버가 강제하므로 UI는 게이트/버튼 노출만 맞춘다.
+- **접근 정책 = CRUD 연산별 grants**: `settings.access = {create, read, update, delete}`, 값은
+  **atom 또는 배열(OR 합집합)**. atom ∈ `public|member|owner|ref_owner:<field>`(참조 부모 레코드의
+  소유자 — #626). 기본 create:member/read:member/update:owner/delete:owner, create 는 public|member 만.
+  에이전트가 설계한 각 화면 액션(목록·상세·작성·수정·삭제)의 대상에 맞춰 **달라지는 연산만**
+  `--access-json`으로 덮어쓴다(예: 공개 목록+작성자수정 → `{"read":"public"}`). 서버가 강제하므로
+  UI는 게이트/버튼 노출만 맞춘다.
+- **관계 설계 패턴** (관계 값은 `reference` 필드 — 서버가 대상 실존을 강제(dangling 400), 1-hop):
+  - **자식 컬렉션**(신청·참가·문의 등 "부모 글에 달리는 데이터"): `post_id:reference:<부모>` +
+    `--access-json '{"read":["owner","ref_owner:post_id"],"update":["ref_owner:post_id"],"delete":["owner","ref_owner:post_id"]}'`
+    → 작성자는 자기 것 열람·취소, **부모 글 주인은 목록·수락/거절** — 서버가 강제.
+    (전제: 부모 컬렉션이 owner 를 스탬프해야 함 — 기본 update/delete:owner 면 충족.)
+  - **트리**(댓글→답글→∞): 노드마다 **root anchor**(`post_id`→루트 글) + **parent**(`parent_id`→자기
+    컬렉션 self-reference) 이중 참조. 조회는 anchor 평면 1회(`filter:{post_id:{eq}}`+`sort:created_at`)
+    후 클라에서 parent_id 로 조립 — 깊이 무한. 글주인 모더레이션은 `ref_owner:post_id`(깊이 무관).
+  - **N:M**(좋아요·참가자·태그): reference 2개짜리 **정션 컬렉션**으로 표현(서버 기계 불필요).
 - **스키마·정책 권한**: 컬렉션/필드/정책 생성·변경은 **baas-cli(에이전트) 소유**. 요구가 바뀌면 UI와
   스키마·정책을 함께 재설계한다. 신규 필드는 optional만 추가 가능.
 - **표현 범위의 원본**: 필드 타입·정책·필터 능력은 SDK 타입 + `baas collection get <name>`(런타임
