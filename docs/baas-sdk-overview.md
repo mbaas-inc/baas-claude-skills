@@ -54,7 +54,7 @@
 | 경로 | 성격 | 캐시 | 용도 |
 |---|---|---|---|
 | `/public/baas-integration-sdk/<version>/baas-react.js` | 불변(고정) | 1년 immutable | 롤백 대상·버전 핀 |
-| `/public/baas-integration-sdk/v1/baas-react.js` | 가변 별칭(최신 v1.x) | 60s + 무효화 | **앱이 참조** → 자동 업데이트 |
+| `/public/baas-integration-sdk/v1/baas-react.js` | 가변 별칭(v1 채널 최신 빌드, 현재 0.x) | 60s + 무효화 | **앱이 참조** → 자동 업데이트 |
 
 **왜 둘 다**: 별칭만 있으면 O(1) 전파는 되지만 ① 깨졌을 때 되돌릴 대상이 없고 ② 특정 앱을 특정 버전에 못 묶는다. 불변 경로가 안전장치.
 

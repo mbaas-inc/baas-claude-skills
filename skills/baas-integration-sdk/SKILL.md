@@ -90,7 +90,7 @@ SDK는 CDN에서 로드되고 앱의 React 인스턴스를 공유한다. 이 배
 
 프로젝트 루트에 `baas-manifest.json`을 만든다 — 이후 업데이트 판단의 근거(LLM 없이 diff):
 ```json
-{ "skill": "baas-integration-sdk", "skill_version": "0.3.0", "sdk_channel": "v1", "features_used": ["account", "notice", "recipient", "board"] }
+{ "skill": "baas-integration-sdk", "skill_version": "0.4.0", "sdk_channel": "v1", "features_used": ["account", "notice", "recipient", "board"] }
 ```
 - `features_used`에는 **실제 사용한 기능 그룹만** 적는다(그룹 키: `account`, `notice`(공지+FAQ), `recipient`, `board`, `survey`, `reservation`, `store`, `collection`).
 - `skill_version`은 이 앱을 생성/갱신할 때 사용한 스킬 버전(`features.json`의 `version`)을 적는다.
