@@ -16,7 +16,7 @@ BaaS 백엔드와 대화하는 transport·훅은 **런타임 CDN SDK**(`window.B
 
 ## 생성 흐름
 
-1. **`features.json`을 읽어** 요청에 맞는 기능 그룹을 파악한다(`account`·`recipient`·`notice`·`board`·`survey`·`reservation`·`store`·`collection`).
+1. **`features.json`을 읽어** 요청에 맞는 기능 그룹을 파악한다(`account`·`recipient`·`notice`·`board`·`survey`·`reservation`·`store`·`collection`·`storage`).
 2. 해당 기능의 **`reference/sdk-surface.md`** 섹션을 읽어 SDK 훅/함수 시그니처·반환 타입·에러→UI 규약을 확인한다.
 3. **백엔드 리소스가 필요하면 `baas` CLI로 먼저 만든다** (예: 게시판 → `baas board create`). 반환된 id를 UI 코드에 상수로 주입한다.
 4. **`scaffold/wiring.md`의 배선 보일러플레이트를 그대로** index.html·앱 진입점에 포함한다(창작 금지 — SDK 로딩·host React 노출·init).

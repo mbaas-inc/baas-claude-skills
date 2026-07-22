@@ -231,10 +231,37 @@ await BaasSDK.getPublicRecord("inventory", recordId);                           
   (`post_id`)+parent(`parent_id`) 이중 참조로 설계하고 anchor 평면 조회 후 클라에서 조립한다.
 - **필터 DSL**: `filter: { field: { op: value } }`, op ∈ `eq|ne|gt|gte|lt|lte|like|in`. sort는 `field`/`-field`.
 - **필드 타입↔UI 관례**(에이전트 설계 시): string→텍스트, number→숫자입력/범위필터, boolean→토글,
-  date→날짜피커, enum→select(options.values), reference→검색선택.
+  date→날짜피커, enum→select(options.values), reference→검색선택. **이미지/파일**은 아래
+  [파일 업로드(storage)](#파일-업로드-storage) 절의 `useFileUpload` 로 `cdn_url` 을 얻어 string(url) 필드에 저장한다.
 - `records.items`가 비면 빈 상태 UI. 작성/수정 성공 후 `fetchRecords`로 새로고침.
 - 표현 가능 범위(필드 타입·정책·제약)의 **권위 원본은 SDK 타입 + 런타임 컬렉션 스키마** — 이 문서는
   프리미티브 사용법만. 스키마·정책은 CLI로 조회(`baas collection get <name>` → fields + settings.access).
+
+---
+
+## 파일 업로드 (storage)
+
+이미지·파일을 **presign 방식**으로 업로드한다 — 작은 JSON 으로 업로드 URL 을 발급받아 파일 본체는
+S3 로 직접 PUT 한다(큰 바이너리가 CloudFront/Lambda 우회, 413/403·지연 없음). 반환된 `cdn_url` 을
+콘텐츠에 저장해 영구 조회한다. **동적 컬렉션의 이미지 필드**에 넣을 URL을 이 훅으로 얻는다.
+
+```tsx
+const { upload, isUploading, error } = BaasSDK.useFileUpload();
+
+// <input type="file"> 의 File 을 그대로 넘긴다. category 기본 "images".
+const res = await upload(file);                 // → { cdn_url, download_url, key, file_id? } | null
+if (res) {
+  // 컬렉션 레코드 이미지 필드에 cdn_url 저장 (동적 컬렉션 절 참고)
+  await BaasSDK.useCollection().submitRecord("products", { name, image_url: res.cdn_url });
+}
+```
+- **category**(저장 분류, 기본 `images`): `images`(이미지 확장자 jpg/png/gif/webp·최대 10MB) |
+  `store` | `reservation` | `board_import` | `board_attachment`. 일반 이미지는 `images` 로 충분.
+- **반환**: `cdn_url`(인라인 표시용 `<img src>`) · `download_url`(첨부 다운로드) · `key`(S3 경로) ·
+  `file_id`(board_attachment 에서만 — 게시글 `file_ids` 연결용).
+- 훅은 `isUploading`(로딩)·`error`(실패 시 `BaasError`)를 노출하고 실패 시 `null` 반환(에러 표시 방식은 앱 UX 소관).
+- 훅 없이 직접 호출: `await BaasSDK.uploadFile(file, { category })` (성공 시 결과 resolve, 실패 시 throw).
+- 업로드는 **로그인 필요**(프로젝트 소속). `<input accept="image/*">` 로 클라 사전 필터 권장.
 
 ---
 

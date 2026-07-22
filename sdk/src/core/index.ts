@@ -36,6 +36,7 @@ export {
   listPublicRecords,
   getPublicRecord,
 } from "./collection";
+export { uploadFile } from "./storage";
 export { registerRecipient } from "./recipient";
 export { listSurveys, getSurvey, submitSurveyResponse } from "./survey";
 export {
@@ -85,6 +86,12 @@ export type {
   RecordFilter,
   RecordListOptions,
 } from "./collection";
+export type {
+  UploadTarget,
+  UploadCategory,
+  UploadOptions,
+  UploadResult,
+} from "./storage";
 export type { RecipientInput } from "./recipient";
 export type { Survey } from "./survey";
 export type { ReservationTarget } from "./reservation";

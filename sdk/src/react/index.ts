@@ -7,6 +7,7 @@ import { AuthProvider, useAuth, RequireAuth } from "./AuthProvider";
 import { useLogin, useSignup, useLogout } from "./hooks";
 import { useBoard } from "./useBoard";
 import { useCollection } from "./useCollection";
+import { useFileUpload } from "./useFileUpload";
 import {
   useRecipient,
   useNotice,
@@ -45,6 +46,8 @@ export const BaasSDK = {
   deleteRecord: core.deleteRecord,
   listPublicRecords: core.listPublicRecords,
   getPublicRecord: core.getPublicRecord,
+  // storage (파일 업로드 — presign→S3 PUT, cdn_url 반환)
+  uploadFile: core.uploadFile,
   // notice/faq/comments
   listNoticePosts: core.listNoticePosts,
   getNoticePost: core.getNoticePost,
@@ -90,6 +93,7 @@ export const BaasSDK = {
   useLogout,
   useBoard,
   useCollection,
+  useFileUpload,
   useRecipient,
   useNotice,
   useFaq,
@@ -101,6 +105,7 @@ export const BaasSDK = {
 
 export {
   AuthProvider, useAuth, RequireAuth, useLogin, useSignup, useLogout, useBoard, useCollection,
+  useFileUpload,
   useRecipient, useNotice, useFaq, useComments, useSurvey, useReservation, useStore,
 };
 export * from "../core/index";
