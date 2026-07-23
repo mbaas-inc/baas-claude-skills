@@ -135,18 +135,35 @@ await submitResponse(surveyId, answers);   // 공개 제출
 
 ## 예약 (reservation)
 
-슬롯/캘린더 기반. 무료·현장 예약은 즉시 생성, 카드 예약은 prepare→토스위젯→confirm 3단계(토스 위젯 호출은 앱 UI가 `config`의 키로 수행).
+슬롯/캘린더 기반. 무료·현장 예약은 즉시 생성, 카드 예약은 `checkout()`이 원스톱 처리(store 와 동일 계약).
 ```tsx
 const r = BaasSDK.useReservation();
 await r.fetchTargets();                          // 예약 대상 목록(공개)
 await r.fetchTarget(targetId);                   // 운영설정·폼·결제정책
 await r.fetchSlots(targetId, { date });          // 가용 슬롯(공개)
-await r.book(targetId, { reserved_at, form_data, payment_method });  // 무료·현장, 로그인 필수
-// 카드: const p = await r.prepare(targetId, { reserved_at, form_data }); → 토스 위젯 → r.confirm(targetId, { order_id, payment_key, amount, reserved_at, form_data })
+await r.book(targetId, { reserved_at, form_data });  // 무료·현장 즉시 예약, 로그인 필수
+
+// 카드예약: SDK가 prepare→토스 결제창까지 원스톱(토스 SDK/키타입 앱이 몰라도 됨).
+await r.checkout(targetId, {
+  reserved_at, form_data,
+  orderName: `${target.name} 예약`,
+  successUrl: `${location.origin}/reservation-payment-success`,
+  failUrl: `${location.origin}/reservation-payment-fail`,
+  customerKey, customerName, customerEmail,
+});
+// → 성공 시 successUrl 로 리다이렉트(토스가 paymentKey/amount 쿼리 부착). reserved_at/form_data 는
+//   SDK가 sessionStorage 에 보관 → 복귀 페이지에서:
+const ctx = r.getCheckoutContext();  // { target_id, order_id, reserved_at, form_data }
+await r.confirm(ctx.target_id, { order_id: ctx.order_id, payment_key, amount, reserved_at: ctx.reserved_at, form_data: ctx.form_data });
+r.clearCheckoutContext();
+
 await r.myBookings();                            // 내 예약(로그인)
 await r.cancel(reservationId);
 ```
-결제 복귀 라우트는 **평면 경로**(`/reservation-payment-success`)로 둘 것(SPA 자산 경로 안정).
+- 결제 복귀 라우트는 **평면 경로**(`/reservation-payment-success`, `/reservation-payment-fail`)로 둘 것.
+- store 와 달리 예약은 `prepareBooking` 응답 안에 `client_key`가 포함되며, `confirm` 은 `order_no`가 아니라
+  `order_id` 를 쓴다 — 위 `checkout()`/`getCheckoutContext()` 가 이 차이를 흡수한다.
+- 결제창 닫힘은 `code === "USER_CANCEL"` 에러로 온다(앱에서 무시 처리).
 
 ---
 

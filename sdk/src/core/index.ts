@@ -51,6 +51,9 @@ export {
   getBooking,
   updateBooking,
   cancelBooking,
+  startReservationCheckout,
+  getReservationCheckoutContext,
+  clearReservationCheckoutContext,
 } from "./reservation";
 export {
   getStoreConfig,
@@ -95,5 +98,9 @@ export type {
 } from "./storage";
 export type { RecipientInput } from "./recipient";
 export type { Survey } from "./survey";
-export type { ReservationTarget } from "./reservation";
+export type {
+  ReservationTarget,
+  ReservationCheckoutOptions,
+  ReservationCheckoutContext,
+} from "./reservation";
 export type { StoreConfig, Product, StoreCheckoutOptions } from "./store";

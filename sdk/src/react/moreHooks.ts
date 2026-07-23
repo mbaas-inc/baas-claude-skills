@@ -125,7 +125,17 @@ export function useReservation() {
   const confirm = React.useCallback((id: string, payload: any) => run(() => core.confirmBooking(id, payload)), []);
   const myBookings = React.useCallback((p: Record<string, string> = {}) => run(() => core.listMyBookings(p)), []);
   const cancel = React.useCallback((rid: string) => run(() => core.cancelBooking(rid)), []);
-  return { targets, loading, error, fetchTargets, fetchTarget, fetchSlots, fetchSlotRange, book, prepare, confirm, myBookings, cancel };
+  // 카드예약 원스톱(prepare→토스 결제창). store.checkout 과 동일하게 run() 미래핑(USER_CANCEL 구분).
+  const checkout = React.useCallback(
+    (id: string, opts: core.ReservationCheckoutOptions) => core.startReservationCheckout(id, opts),
+    [],
+  );
+  return {
+    targets, loading, error, fetchTargets, fetchTarget, fetchSlots, fetchSlotRange,
+    book, prepare, confirm, checkout, myBookings, cancel,
+    getCheckoutContext: core.getReservationCheckoutContext,
+    clearCheckoutContext: core.clearReservationCheckoutContext,
+  };
 }
 
 export function useStore() {
