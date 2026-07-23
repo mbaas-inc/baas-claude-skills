@@ -4,7 +4,7 @@
  */
 import { request, BaasError } from "./http";
 import { getProjectId } from "./config";
-import { loadTossPayments } from "./toss";
+import { requestCardPayment } from "./toss";
 
 export interface ReservationTarget {
   id: string;
@@ -137,14 +137,13 @@ export async function startReservationCheckout(
     /* sessionStorage 불가 환경이면 앱이 successUrl 쿼리로 대체 전달해야 함 */
   }
 
-  const TossPayments = await loadTossPayments();
-  await TossPayments(clientKey).payment({ customerKey: opts.customerKey ?? TossPayments.ANONYMOUS }).requestPayment({
-    method: "CARD",
-    amount: { currency: "KRW", value: amount },
+  await requestCardPayment(clientKey, {
+    amount,
     orderId,
     orderName: opts.orderName ?? "예약",
     successUrl: opts.successUrl,
     failUrl: opts.failUrl,
+    customerKey: opts.customerKey,
     customerName: opts.customerName,
     customerEmail: opts.customerEmail,
   });

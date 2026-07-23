@@ -1,6 +1,6 @@
 {
   "name": "@mbaas/baas-web-sdk",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "private": true,
   "description": "런타임 CDN 로드 BaaS 프론트 SDK (부패 방지 계층) — transport/훅을 한 곳에 두고 O(1) 전파",
   "type": "module",

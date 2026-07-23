@@ -5,7 +5,7 @@
  */
 import { request, BaasError } from "./http";
 import { getProjectId } from "./config";
-import { loadTossPayments } from "./toss";
+import { requestCardPayment } from "./toss";
 
 export interface StoreConfig {
   store_enabled: boolean;
@@ -106,15 +106,13 @@ export async function startStoreCheckout(
     );
   }
   const prepared = await prepareOrder(productId, quantity);
-  const TossPayments = await loadTossPayments();
-  const tossPayments = TossPayments(clientKey);
-  await tossPayments.payment({ customerKey: opts.customerKey ?? TossPayments.ANONYMOUS }).requestPayment({
-    method: "CARD",
-    amount: { currency: "KRW", value: prepared.amount },
+  await requestCardPayment(clientKey, {
+    amount: prepared.amount,
     orderId: prepared.order_no,
     orderName: prepared.order_name,
     successUrl: opts.successUrl,
     failUrl: opts.failUrl,
+    customerKey: opts.customerKey,
     customerName: opts.customerName,
     customerEmail: opts.customerEmail,
   });

@@ -7,6 +7,8 @@
  * (test_gck_)" 전용이라 이 키로는 "결제위젯 연동 키의 클라이언트 키로 SDK를 연동해주세요" 에러가 난다.)
  */
 
+import { BaasError } from "./http";
+
 const TOSS_SDK_URL = "https://js.tosspayments.com/v2/standard";
 
 export interface TossRequestPaymentParams {
@@ -62,4 +64,37 @@ export function loadTossPayments(): Promise<TossPaymentsCtor> {
     document.head.appendChild(script);
   });
   return tossPromise;
+}
+
+/**
+ * 카드결제 공용 프리미티브 — clientKey 와 주문정보만 주면 토스 결제창을 띄운다.
+ * store/reservation 등 "결제가 필요한 기능"이 각자의 prepare 로 주문을 만든 뒤 이 함수를 호출한다.
+ * (SDK 내부 전용 — 백엔드 prepare 없이 단독 호출하면 주문 없는 결제가 되므로 공개 표면으로 노출하지 않는다.)
+ * 성공 시 successUrl 로 리다이렉트되고, 사용자가 창을 닫으면 code === "USER_CANCEL" 에러가 throw 된다.
+ */
+export interface CardPaymentParams {
+  amount: number;
+  orderId: string;
+  orderName: string;
+  successUrl: string;
+  failUrl: string;
+  customerKey?: string;
+  customerName?: string;
+  customerEmail?: string;
+}
+export async function requestCardPayment(clientKey: string, params: CardPaymentParams): Promise<void> {
+  if (!clientKey) {
+    throw new BaasError("결제 클라이언트 키가 없습니다(toss client key).", "TOSS_CLIENT_KEY_MISSING", 400);
+  }
+  const TossPayments = await loadTossPayments();
+  await TossPayments(clientKey).payment({ customerKey: params.customerKey ?? TossPayments.ANONYMOUS }).requestPayment({
+    method: "CARD",
+    amount: { currency: "KRW", value: params.amount },
+    orderId: params.orderId,
+    orderName: params.orderName,
+    successUrl: params.successUrl,
+    failUrl: params.failUrl,
+    customerName: params.customerName,
+    customerEmail: params.customerEmail,
+  });
 }
