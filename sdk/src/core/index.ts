@@ -64,6 +64,7 @@ export {
   getOrder,
   confirmPurchase,
   cancelOrder,
+  startStoreCheckout,
 } from "./store";
 export { SDK_VERSION } from "../version";
 export type {
@@ -95,4 +96,4 @@ export type {
 export type { RecipientInput } from "./recipient";
 export type { Survey } from "./survey";
 export type { ReservationTarget } from "./reservation";
-export type { StoreConfig, Product } from "./store";
+export type { StoreConfig, Product, StoreCheckoutOptions } from "./store";

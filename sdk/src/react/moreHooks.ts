@@ -141,5 +141,12 @@ export function useStore() {
   const myOrders = React.useCallback((p: Record<string, string> = {}) => run(() => core.listMyOrders(p)), []);
   const confirmPurchase = React.useCallback((orderId: string) => run(() => core.confirmPurchase(orderId)), []);
   const cancel = React.useCallback((orderId: string, reason: string) => run(() => core.cancelOrder(orderId, reason)), []);
-  return { config, products, loading, error, fetchConfig, fetchProducts, fetchProduct, prepare, confirm, myOrders, confirmPurchase, cancel };
+  // 카드결제 원스톱(config→prepare→토스 결제창). run() 로 감싸지 않는다 — 성공 시 리다이렉트되고,
+  // 사용자가 결제창을 닫으면 USER_CANCEL 에러가 throw 되므로 앱이 직접 try/catch 로 구분하게 둔다.
+  const checkout = React.useCallback(
+    (productId: string, qty: number, opts: core.StoreCheckoutOptions) =>
+      core.startStoreCheckout(productId, qty, opts),
+    [],
+  );
+  return { config, products, loading, error, fetchConfig, fetchProducts, fetchProduct, prepare, confirm, checkout, myOrders, confirmPurchase, cancel };
 }

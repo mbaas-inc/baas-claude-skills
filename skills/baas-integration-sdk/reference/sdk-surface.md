@@ -155,16 +155,32 @@ await r.cancel(reservationId);
 디지털 상품 판매. **[필수] 통신판매중개 특성상 모든 페이지 푸터에 중개업자 고지·사업자정보를 고정 표기**한다.
 ```tsx
 const s = BaasSDK.useStore();
-await s.fetchConfig();                    // config.store_enabled 확인 후 진입, config.toss_client_key 로 결제
-await s.fetchProducts({ category_id });   // products = 배열
+await s.fetchConfig();                    // config.store_enabled 확인 후 진입(false면 "준비 중")
+await s.fetchProducts({ category_id });   // s.products = Product[] (SDK가 items/data/배열 정규화)
 await s.fetchProduct(productId);
-// 결제: const p = await s.prepare(productId, qty); → 토스 위젯(config.toss_client_key) → s.confirm({ order_no, payment_key, amount, product_id, quantity })
+
+// 카드결제: SDK가 원스톱 처리 — 토스 SDK 로드·버전·키타입을 앱이 몰라도 된다.
+await s.checkout(productId, qty, {
+  successUrl: `${location.origin}/checkout-success?product_id=${productId}&quantity=${qty}`,
+  failUrl: `${location.origin}/checkout-fail`,
+  customerKey,           // 로그인 계정 식별자(user.id 등). 생략 시 토스 ANONYMOUS
+  customerName, customerEmail,
+});
+// → 성공 시 successUrl 로 리다이렉트(토스가 paymentKey/orderId/amount 쿼리 부착).
+//   복귀 페이지(/checkout-success)에서 confirm 으로 승인 완료:
+await s.confirm({ order_no, payment_key, amount, product_id, quantity }); // orderId=order_no, paymentKey=payment_key
+
 await s.myOrders();                        // 내 주문(로그인)
 await s.confirmPurchase(orderId);          // 구매확정
 await s.cancel(orderId, reason);
 ```
-- 진입 전 `config.store_enabled`가 false면 "준비 중" 안내.
-- 결제 복귀 라우트도 평면 경로(`/checkout-success`, `/checkout-fail`).
+- **`checkout()`가 `getStoreConfig → prepare → 토스 결제창(v2 payment().requestPayment)`을 대신 수행**한다.
+  앱은 토스 스크립트를 직접 로드하거나 `widgets()`/`payment()`를 고르지 않는다(그 선택이 키 타입과
+  안 맞으면 "결제위젯 연동 키의 클라이언트 키로 SDK를 연동해주세요" 에러). `toss_client_key`(API 개별
+  연동 키)로 SDK가 알아서 올바른 방식을 쓴다.
+- 사용자가 결제창을 닫으면 `checkout()`이 `code === "USER_CANCEL"` 에러를 throw → 앱에서 무시 처리.
+- 결제 복귀 라우트는 **평면 경로**(`/checkout-success`, `/checkout-fail`)로 둘 것(SPA 자산 경로 안정).
+- 예약(`useReservation`) 카드결제도 동일 계약(prepare→토스→confirm) — 필요 시 같은 패턴 적용.
 
 ---
 
