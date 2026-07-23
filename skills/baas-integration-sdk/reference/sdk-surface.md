@@ -170,14 +170,16 @@ await r.cancel(reservationId);
 
 ## 스토어 (store)
 
-디지털 상품 판매. **[필수] 통신판매중개 특성상 모든 페이지 푸터에 중개업자 고지·사업자정보를 고정 표기**한다.
+디지털 상품 판매. 결제는 **결제위젯(인라인) 단일 방식**. **[필수] ①구매약관 동의 ②통신판매중개 고지 푸터**(아래 규약).
 ```tsx
 const s = BaasSDK.useStore();
 await s.fetchConfig();                    // config.store_enabled 확인 후 진입(false면 "준비 중")
 await s.fetchProducts({ category_id });   // s.products = Product[] (SDK가 items/data/배열 정규화)
 await s.fetchProduct(productId);
 
-// 카드결제(위젯 인라인) — 앱 화면 안에서 결제(뒤로가기 유지). 결제는 위젯 방식으로 통일.
+// [필수] 구매약관: 결제 전 /terms 를 표시하고 동의 체크를 받는다(동의 전 결제 진입 금지).
+const terms = await s.fetchTerms();       // { content, ... } — 결제 영역 위에 표시 + 동의 체크박스
+// 카드결제(위젯 인라인) — 앱 화면 안에서 결제(뒤로가기 유지). 동의 완료 후:
 // 1) 앱에 결제수단/약관 컨테이너 div 2개를 두고, 준비 시작:
 const w = await s.beginWidgetCheckout({ productId, quantity: qty,
   methodsSelector: "#toss-payment-methods", agreementSelector: "#toss-agreement", customerKey });
@@ -189,19 +191,34 @@ await w.requestPayment({ successUrl: `${location.origin}/checkout-success?produc
 await s.confirm({ order_no, payment_key, amount, product_id, quantity });
 
 await s.myOrders();                        // 내 주문(로그인)
-await s.confirmPurchase(orderId);          // 구매확정
-await s.cancel(orderId, reason);
+await s.confirmPurchase(orderId);          // 구매확정(환불 불가 — 확인 다이얼로그 필수)
+await s.cancel(orderId, reason);           // 취소=전액 환불
 ```
-- 결제는 **결제위젯(인라인) 단일 방식**이다 — `toss_client_key` 는 결제위젯 키(`gck_`)여야 하며,
-  `beginWidgetCheckout` 이 위젯을 앱 DOM(셀렉터 2개)에 렌더하므로 결제수단 선택 중에도 앱 뒤로가기가 유지된다.
+- 결제위젯: `toss_client_key` 는 결제위젯 키(`gck_`), `beginWidgetCheckout` 이 위젯을 앱 DOM(셀렉터 2개)에
+  렌더 → 결제 도중 앱 뒤로가기 유지. 복귀 라우트는 **평면 경로**(`/checkout-success`, `/checkout-fail`).
   결제창 닫힘/취소는 `code === "USER_CANCEL"` 에러(앱에서 무시).
-- **`checkout()`가 `getStoreConfig → prepare → 토스 결제창(v2 payment().requestPayment)`을 대신 수행**한다.
-  앱은 토스 스크립트를 직접 로드하거나 `widgets()`/`payment()`를 고르지 않는다(그 선택이 키 타입과
-  안 맞으면 "결제위젯 연동 키의 클라이언트 키로 SDK를 연동해주세요" 에러). `toss_client_key`(API 개별
-  연동 키)로 SDK가 알아서 올바른 방식을 쓴다.
-- 사용자가 결제창을 닫으면 `checkout()`이 `code === "USER_CANCEL"` 에러를 throw → 앱에서 무시 처리.
-- 결제 복귀 라우트는 **평면 경로**(`/checkout-success`, `/checkout-fail`)로 둘 것(SPA 자산 경로 안정).
-- 예약(`useReservation`) 카드결제도 동일 계약(prepare→토스→confirm) — 필요 시 같은 패턴 적용.
+- **[필수] 구매약관 동의**: `fetchTerms()`(`GET /terms`)의 `content` 를 결제 버튼 위 약관 영역(접기/펼치기 권장)에
+  표시하고, **동의 체크 전에는 결제(beginWidgetCheckout)로 진입하지 말 것.** (서버 prepare 는 동의를 요구한다.)
+- **구매확정하면 환불 불가** — 구매확정 전 확인 다이얼로그 필수. 취소는 전액 환불(부분 환불 없음).
+
+### [필수] 통신판매중개업 고지 (푸터)
+스토어를 제공하는 **모든 페이지 하단 푸터**에 아래 **통신판매중개업자(=플랫폼 운영사) 고정 정보**를 그대로
+표기한다(전자상거래법 제20조① 통신판매중개자 고지). **셀러/앱 운영주체(예: 협회·클라이언트)의 정보가 아니라
+플랫폼 운영사 정보이며, API로 내려오지 않으니 아래 문구를 그대로 넣는다.** 개별 셀러 신원정보는 노출하지 않는다.
+```text
+상호: 주식회사 엠바스 (대표: 김정현)
+사업자등록번호: 128-88-02089 | 통신판매업신고번호: 제2026-부산금정-0312호
+주소: 부산광역시 금정구 부산대학로50번길 68, 404호 (장전동)
+문의: 070-8648-2750 / help@aiapp.help
+사업자정보확인: https://www.ftc.go.kr/bizCommPop.do?wrkr_no=1288802089
+
+본 서비스는 통신판매중개자로서 통신판매의 당사자가 아니며, 상품의 판매·배송·환불 등 거래에 관한 의무와 책임은 판매자에게 있습니다.
+```
+- "당사자 아님" 문구는 **생략 불가**. 「사업자정보확인」은 위 공정위 URL로 **새 창 링크**(`target="_blank" rel="noopener noreferrer"`),
+  앵커 텍스트는 `사업자정보확인`(`wrkr_no`=사업자번호 하이픈 제거). 신고번호 등 텍스트는 그대로 두고 링크만 덧붙인다.
+- 위 사업자 정보는 변경될 수 있으니 변경 시 이 스킬 문구를 갱신한다.
+- 예약(reservation) 카드결제는 서비스 예약이라 위 "통신판매중개 상품거래" 고지와 성격이 다르다 — 필요한 약관은
+  서비스 성격에 맞게 별도 판단(위 상품 판매 푸터를 그대로 복사하지 말 것).
 
 ---
 
