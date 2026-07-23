@@ -114,7 +114,7 @@ await removePost(postId);                          // 로그인 필수
 ## 댓글 (comments)
 ```tsx
 const { comments, loading, error, fetchComments, addComment, editComment, removeComment } = BaasSDK.useComments();
-await fetchComments(postId, "latest");     // 공개 읽기
+await fetchComments(postId, "latest");     // 공개 읽기 → comments = { items: [...], total } (board.posts 와 동일 형태, 배열 아님)
 await addComment(postId, content);         // 로그인 필수
 await editComment(postId, commentId, content);
 await removeComment(postId, commentId);
