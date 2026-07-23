@@ -143,16 +143,16 @@ await r.fetchTarget(targetId);                   // 운영설정·폼·결제정
 await r.fetchSlots(targetId, { date });          // 가용 슬롯(공개)
 await r.book(targetId, { reserved_at, form_data });  // 무료·현장 즉시 예약, 로그인 필수
 
-// 카드예약: SDK가 prepare→토스 결제창까지 원스톱(토스 SDK/키타입 앱이 몰라도 됨).
-await r.checkout(targetId, {
+// 카드예약(위젯 인라인 — store 와 동일 계약). 앱에 결제수단/약관 컨테이너 div 2개를 두고:
+const w = await r.beginWidgetCheckout(targetId, {
   reserved_at, form_data,
-  orderName: `${target.name} 예약`,
+  methodsSelector: "#toss-payment-methods", agreementSelector: "#toss-agreement", customerKey });
+//   → 결제수단/약관 위젯이 앱 DOM 에 렌더됨(w.amount, w.orderId). 결제 버튼 클릭 시:
+await w.requestPayment({
   successUrl: `${location.origin}/reservation-payment-success`,
-  failUrl: `${location.origin}/reservation-payment-fail`,
-  customerKey, customerName, customerEmail,
-});
-// → 성공 시 successUrl 로 리다이렉트(토스가 paymentKey/amount 쿼리 부착). reserved_at/form_data 는
-//   SDK가 sessionStorage 에 보관 → 복귀 페이지에서:
+  failUrl: `${location.origin}/reservation-payment-fail`, orderName: `${target.name} 예약` });
+// → 성공 시 successUrl 로 리다이렉트(paymentKey/amount 쿼리). reserved_at/form_data 는 SDK가
+//   sessionStorage 에 보관 → 복귀 페이지에서:
 const ctx = r.getCheckoutContext();  // { target_id, order_id, reserved_at, form_data }
 await r.confirm(ctx.target_id, { order_id: ctx.order_id, payment_key, amount, reserved_at: ctx.reserved_at, form_data: ctx.form_data });
 r.clearCheckoutContext();
@@ -162,8 +162,9 @@ await r.cancel(reservationId);
 ```
 - 결제 복귀 라우트는 **평면 경로**(`/reservation-payment-success`, `/reservation-payment-fail`)로 둘 것.
 - store 와 달리 예약은 `prepareBooking` 응답 안에 `client_key`가 포함되며, `confirm` 은 `order_no`가 아니라
-  `order_id` 를 쓴다 — 위 `checkout()`/`getCheckoutContext()` 가 이 차이를 흡수한다.
-- 결제창 닫힘은 `code === "USER_CANCEL"` 에러로 온다(앱에서 무시 처리).
+  `order_id` 를 쓴다 — 위 `beginWidgetCheckout()`/`getCheckoutContext()` 가 이 차이를 흡수한다.
+- 결제는 store·reservation 모두 **결제위젯(인라인) 단일 방식**이다(뒤로가기 유지). 결제창 닫힘은
+  `code === "USER_CANCEL"` 에러(앱에서 무시).
 
 ---
 
@@ -176,22 +177,24 @@ await s.fetchConfig();                    // config.store_enabled 확인 후 진
 await s.fetchProducts({ category_id });   // s.products = Product[] (SDK가 items/data/배열 정규화)
 await s.fetchProduct(productId);
 
-// 카드결제: SDK가 원스톱 처리 — 토스 SDK 로드·버전·키타입을 앱이 몰라도 된다.
-await s.checkout(productId, qty, {
-  successUrl: `${location.origin}/checkout-success?product_id=${productId}&quantity=${qty}`,
-  failUrl: `${location.origin}/checkout-fail`,
-  customerKey,           // 로그인 계정 식별자(user.id 등). 생략 시 토스 ANONYMOUS
-  customerName, customerEmail,
-});
-// → 성공 시 successUrl 로 리다이렉트(토스가 paymentKey/orderId/amount 쿼리 부착).
-//   복귀 페이지(/checkout-success)에서 confirm 으로 승인 완료:
-await s.confirm({ order_no, payment_key, amount, product_id, quantity }); // orderId=order_no, paymentKey=payment_key
+// 카드결제(위젯 인라인) — 앱 화면 안에서 결제(뒤로가기 유지). 결제는 위젯 방식으로 통일.
+// 1) 앱에 결제수단/약관 컨테이너 div 2개를 두고, 준비 시작:
+const w = await s.beginWidgetCheckout({ productId, quantity: qty,
+  methodsSelector: "#toss-payment-methods", agreementSelector: "#toss-agreement", customerKey });
+//    → 결제수단/약관 위젯이 앱 DOM 에 렌더됨(w.amount, w.orderNo).
+// 2) 결제 버튼 클릭 시:
+await w.requestPayment({ successUrl: `${location.origin}/checkout-success?product_id=${productId}&quantity=${qty}`,
+  failUrl: `${location.origin}/checkout-fail`, orderName });
+//    → 성공 시 successUrl 로 리다이렉트(paymentKey/orderId/amount 쿼리). 복귀 페이지에서 confirm:
+await s.confirm({ order_no, payment_key, amount, product_id, quantity });
 
 await s.myOrders();                        // 내 주문(로그인)
 await s.confirmPurchase(orderId);          // 구매확정
 await s.cancel(orderId, reason);
 ```
-- **키 타입별 결제 방식**: `config.toss_client_key` 가 개별연동 키(`ck_`)면 `checkout()`(리다이렉트 결제창), 결제위젯 키(`gck_`)면 `beginWidgetCheckout({productId, quantity, methodsSelector, agreementSelector, customerKey})` 로 **앱 화면 안 인라인 위젯**(뒤로가기 유지) 사용 → 반환 handle 의 `requestPayment({successUrl, failUrl, orderName})` 를 결제 버튼에서 호출. 위젯은 결제수단/약관을 앱 DOM(셀렉터)에 렌더하므로 앱이 컨테이너 div 2개를 제공한다.
+- 결제는 **결제위젯(인라인) 단일 방식**이다 — `toss_client_key` 는 결제위젯 키(`gck_`)여야 하며,
+  `beginWidgetCheckout` 이 위젯을 앱 DOM(셀렉터 2개)에 렌더하므로 결제수단 선택 중에도 앱 뒤로가기가 유지된다.
+  결제창 닫힘/취소는 `code === "USER_CANCEL"` 에러(앱에서 무시).
 - **`checkout()`가 `getStoreConfig → prepare → 토스 결제창(v2 payment().requestPayment)`을 대신 수행**한다.
   앱은 토스 스크립트를 직접 로드하거나 `widgets()`/`payment()`를 고르지 않는다(그 선택이 키 타입과
   안 맞으면 "결제위젯 연동 키의 클라이언트 키로 SDK를 연동해주세요" 에러). `toss_client_key`(API 개별

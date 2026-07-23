@@ -125,14 +125,15 @@ export function useReservation() {
   const confirm = React.useCallback((id: string, payload: any) => run(() => core.confirmBooking(id, payload)), []);
   const myBookings = React.useCallback((p: Record<string, string> = {}) => run(() => core.listMyBookings(p)), []);
   const cancel = React.useCallback((rid: string) => run(() => core.cancelBooking(rid)), []);
-  // 카드예약 원스톱(prepare→토스 결제창). store.checkout 과 동일하게 run() 미래핑(USER_CANCEL 구분).
-  const checkout = React.useCallback(
-    (id: string, opts: core.ReservationCheckoutOptions) => core.startReservationCheckout(id, opts),
+  // 예약 결제위젯(인라인). 앱이 셀렉터 제공 → handle.requestPayment 로 결제(앱 화면 유지).
+  const beginWidgetCheckout = React.useCallback(
+    (id: string, params: core.ReservationWidgetCheckoutParams) =>
+      core.beginReservationWidgetCheckout(id, params),
     [],
   );
   return {
     targets, loading, error, fetchTargets, fetchTarget, fetchSlots, fetchSlotRange,
-    book, prepare, confirm, checkout, myBookings, cancel,
+    book, prepare, confirm, beginWidgetCheckout, myBookings, cancel,
     getCheckoutContext: core.getReservationCheckoutContext,
     clearCheckoutContext: core.clearReservationCheckoutContext,
   };
@@ -151,17 +152,10 @@ export function useStore() {
   const myOrders = React.useCallback((p: Record<string, string> = {}) => run(() => core.listMyOrders(p)), []);
   const confirmPurchase = React.useCallback((orderId: string) => run(() => core.confirmPurchase(orderId)), []);
   const cancel = React.useCallback((orderId: string, reason: string) => run(() => core.cancelOrder(orderId, reason)), []);
-  // 카드결제 원스톱(config→prepare→토스 결제창). run() 로 감싸지 않는다 — 성공 시 리다이렉트되고,
-  // 사용자가 결제창을 닫으면 USER_CANCEL 에러가 throw 되므로 앱이 직접 try/catch 로 구분하게 둔다.
-  const checkout = React.useCallback(
-    (productId: string, qty: number, opts: core.StoreCheckoutOptions) =>
-      core.startStoreCheckout(productId, qty, opts),
-    [],
-  );
-  // 위젯(인라인) 결제 — gck 키일 때. 앱이 셀렉터 제공 → handle.requestPayment 로 결제(앱 화면 유지).
+  // 결제위젯(인라인). 앱이 셀렉터 제공 → handle.requestPayment 로 결제(앱 화면 유지).
   const beginWidgetCheckout = React.useCallback(
     (params: core.StoreWidgetCheckoutParams) => core.beginStoreWidgetCheckout(params),
     [],
   );
-  return { config, products, loading, error, fetchConfig, fetchProducts, fetchProduct, prepare, confirm, checkout, beginWidgetCheckout, myOrders, confirmPurchase, cancel };
+  return { config, products, loading, error, fetchConfig, fetchProducts, fetchProduct, prepare, confirm, beginWidgetCheckout, myOrders, confirmPurchase, cancel };
 }

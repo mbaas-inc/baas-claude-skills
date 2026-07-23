@@ -51,7 +51,7 @@ export {
   getBooking,
   updateBooking,
   cancelBooking,
-  startReservationCheckout,
+  beginReservationWidgetCheckout,
   getReservationCheckoutContext,
   clearReservationCheckoutContext,
 } from "./reservation";
@@ -67,7 +67,6 @@ export {
   getOrder,
   confirmPurchase,
   cancelOrder,
-  startStoreCheckout,
   beginStoreWidgetCheckout,
 } from "./store";
 export { SDK_VERSION } from "../version";
@@ -101,13 +100,13 @@ export type { RecipientInput } from "./recipient";
 export type { Survey } from "./survey";
 export type {
   ReservationTarget,
-  ReservationCheckoutOptions,
+  ReservationWidgetCheckoutParams,
+  ReservationWidgetHandle,
   ReservationCheckoutContext,
 } from "./reservation";
 export type {
   StoreConfig,
   Product,
-  StoreCheckoutOptions,
   StoreWidgetCheckoutParams,
   StoreWidgetHandle,
 } from "./store";

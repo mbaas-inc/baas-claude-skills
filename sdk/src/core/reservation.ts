@@ -4,7 +4,7 @@
  */
 import { request, BaasError } from "./http";
 import { getProjectId } from "./config";
-import { requestCardPayment } from "./toss";
+import { renderPaymentWidget } from "./toss";
 
 export interface ReservationTarget {
   id: string;
@@ -54,7 +54,7 @@ export const updateBooking = (reservationId: string, data: Record<string, unknow
 export const cancelBooking = (reservationId: string) =>
   request<boolean>(`/reservation/bookings/${reservationId}`, { method: "DELETE" });
 
-// ── 회원: 카드예약 원스톱(prepare → 토스 결제창) ──
+// ── 회원: 예약 결제위젯(인라인) — 앱 화면 안에서 결제(뒤로가기 유지). 결제는 위젯 방식으로 통일 ──
 const RSV_CHECKOUT_CTX = "baas_reservation_checkout_ctx";
 
 export interface ReservationCheckoutContext {
@@ -63,17 +63,25 @@ export interface ReservationCheckoutContext {
   reserved_at: string;
   form_data: Record<string, unknown>;
 }
-export interface ReservationCheckoutOptions {
+export interface ReservationWidgetCheckoutParams {
   reserved_at: string;
   form_data: Record<string, unknown>;
-  /** 결제 성공 복귀 경로(평면 경로 권장: /reservation-payment-success). 토스가 paymentKey/amount 쿼리 부착. */
-  successUrl: string;
-  failUrl: string;
-  /** 결제창에 표시할 주문명(예: `${target.name} 예약`). 생략 시 "예약". */
-  orderName?: string;
+  /** 결제수단 위젯을 렌더할 앱 DOM 셀렉터. */
+  methodsSelector: string;
+  /** 약관 위젯을 렌더할 셀렉터. */
+  agreementSelector: string;
   customerKey?: string;
-  customerName?: string;
-  customerEmail?: string;
+}
+export interface ReservationWidgetHandle {
+  amount: number;
+  orderId: string;
+  requestPayment(opts: {
+    successUrl: string;
+    failUrl: string;
+    orderName?: string;
+    customerName?: string;
+    customerEmail?: string;
+  }): Promise<void>;
 }
 
 /** 결제 복귀 페이지에서 confirm 에 필요한 컨텍스트(reserved_at/form_data 등)를 읽는다. */
@@ -94,22 +102,22 @@ export function clearReservationCheckoutContext(): void {
 }
 
 /**
- * 예약 카드결제를 SDK가 원스톱으로 처리한다: `prepareBooking()`(응답에 client_key/order_id/amount 포함)
- * → 토스 결제창(v2 payment().requestPayment). 앱은 토스 SDK/버전/키타입을 몰라도 된다.
+ * 예약 결제위젯 시작 — `prepareBooking()`(응답에 client_key/order_id/amount 포함)로 주문을 만들고,
+ * 결제수단/약관 위젯을 앱 DOM(셀렉터)에 렌더한다. 반환 handle 을 앱이 보관했다가 결제 버튼 클릭 시
+ * `handle.requestPayment({ successUrl, failUrl })` 호출. 결제수단 선택 UI가 앱 화면 안에 있어 뒤로가기가 유지된다.
  *
- * confirm 에 필요한 reserved_at/form_data 는 리다이렉트 사이에 유지돼야 하므로 sessionStorage 에
- * 저장한다 → 복귀 페이지에서 `getReservationCheckoutContext()` 로 읽고, 토스 쿼리(paymentKey/amount)와
- * 합쳐 `confirm(target_id, { order_id, payment_key, amount, reserved_at, form_data })` 호출 후
- * `clearReservationCheckoutContext()`.
- * 사용자가 결제창을 닫으면 `code === "USER_CANCEL"` 에러가 throw 된다.
+ * confirm 에 필요한 reserved_at/form_data 는 결제 성공 리다이렉트 사이에 유지돼야 하므로 sessionStorage 에
+ * 저장한다 → 복귀 페이지에서 `getReservationCheckoutContext()` 로 읽고 토스 쿼리(paymentKey/amount)와 합쳐
+ * `confirm(target_id, { order_id, payment_key, amount, reserved_at, form_data })` 후 `clearReservationCheckoutContext()`.
+ * 예약은 `toss_client_key` 를 config 가 아니라 `prepareBooking` 응답으로 받는다(store 와의 차이).
  */
-export async function startReservationCheckout(
+export async function beginReservationWidgetCheckout(
   targetId: string,
-  opts: ReservationCheckoutOptions
-): Promise<void> {
+  params: ReservationWidgetCheckoutParams
+): Promise<ReservationWidgetHandle> {
   const prepared = (await prepareBooking(targetId, {
-    reserved_at: opts.reserved_at,
-    form_data: opts.form_data,
+    reserved_at: params.reserved_at,
+    form_data: params.form_data,
   })) as { order_id?: string; amount?: number; client_key?: string } | null;
 
   const clientKey = prepared?.client_key;
@@ -129,22 +137,32 @@ export async function startReservationCheckout(
       JSON.stringify({
         target_id: targetId,
         order_id: orderId,
-        reserved_at: opts.reserved_at,
-        form_data: opts.form_data,
+        reserved_at: params.reserved_at,
+        form_data: params.form_data,
       })
     );
   } catch {
     /* sessionStorage 불가 환경이면 앱이 successUrl 쿼리로 대체 전달해야 함 */
   }
 
-  await requestCardPayment(clientKey, {
+  const widget = await renderPaymentWidget({
+    clientKey,
+    amount,
+    methodsSelector: params.methodsSelector,
+    agreementSelector: params.agreementSelector,
+    customerKey: params.customerKey,
+  });
+  return {
     amount,
     orderId,
-    orderName: opts.orderName ?? "예약",
-    successUrl: opts.successUrl,
-    failUrl: opts.failUrl,
-    customerKey: opts.customerKey,
-    customerName: opts.customerName,
-    customerEmail: opts.customerEmail,
-  });
+    requestPayment: (opts) =>
+      widget.requestPayment({
+        orderId,
+        orderName: opts.orderName ?? "예약",
+        successUrl: opts.successUrl,
+        failUrl: opts.failUrl,
+        customerName: opts.customerName,
+        customerEmail: opts.customerEmail,
+      }),
+  };
 }

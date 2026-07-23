@@ -5,7 +5,7 @@
  */
 import { request, BaasError } from "./http";
 import { getProjectId } from "./config";
-import { requestCardPayment, loadTossPayments } from "./toss";
+import { renderPaymentWidget } from "./toss";
 
 export interface StoreConfig {
   store_enabled: boolean;
@@ -71,54 +71,7 @@ export const confirmPurchase = (orderId: string) =>
 export const cancelOrder = (orderId: string, reason: string) =>
   request(`/store/orders/${orderId}/cancel`, { method: "POST", body: { reason } });
 
-// ── 회원: 카드결제 원스톱(config → prepare → 토스 결제창) ──
-export interface StoreCheckoutOptions {
-  /** 결제 성공 시 복귀 경로(평면 경로 권장: /checkout-success). 토스가 paymentKey/orderId/amount 쿼리를 붙여 리다이렉트한다. */
-  successUrl: string;
-  /** 결제 실패/취소 시 복귀 경로(예: /checkout-fail). */
-  failUrl: string;
-  /** 비회원/게스트면 생략(토스 ANONYMOUS 사용). 회원이면 계정 식별자 전달 권장. */
-  customerKey?: string;
-  customerName?: string;
-  customerEmail?: string;
-}
-
-/**
- * 스토어 카드결제를 SDK가 원스톱으로 처리한다: `getStoreConfig()` → `prepareOrder()` → 토스 결제창 호출.
- * 앱은 토스 SDK 로드/버전/키 타입을 몰라도 된다(이 함수가 v2 `payment().requestPayment()` 로 고정).
- *
- * 성공 시 브라우저가 `successUrl` 로 리다이렉트되며(paymentKey/orderId/amount 쿼리 포함), 복귀 페이지에서
- * `confirmOrder({ order_no, payment_key, amount, product_id, quantity })` 를 호출해 승인을 완료한다.
- * 사용자가 결제창을 닫으면 `code === "USER_CANCEL"` 인 에러가 throw 되므로 앱에서 무시 처리할 수 있다.
- */
-export async function startStoreCheckout(
-  productId: string,
-  quantity: number,
-  opts: StoreCheckoutOptions
-): Promise<void> {
-  const cfg = await getStoreConfig();
-  const clientKey = cfg.toss_client_key;
-  if (!clientKey) {
-    throw new BaasError(
-      "스토어 결제 설정이 없습니다(toss_client_key 미설정).",
-      "STORE_NOT_CONFIGURED",
-      400
-    );
-  }
-  const prepared = await prepareOrder(productId, quantity);
-  await requestCardPayment(clientKey, {
-    amount: prepared.amount,
-    orderId: prepared.order_no,
-    orderName: prepared.order_name,
-    successUrl: opts.successUrl,
-    failUrl: opts.failUrl,
-    customerKey: opts.customerKey,
-    customerName: opts.customerName,
-    customerEmail: opts.customerEmail,
-  });
-}
-
-// ── 회원: 위젯(인라인) 결제 — 앱 화면 안에서 결제(뒤로가기 유지). config.toss_client_key 가 gck_ 일 때 사용 ──
+// ── 회원: 결제위젯(인라인) — 앱 화면 안에서 결제(뒤로가기 유지). 결제는 위젯 방식으로 통일 ──
 export interface StoreWidgetCheckoutParams {
   productId: string;
   quantity: number;
@@ -142,9 +95,11 @@ export interface StoreWidgetHandle {
 }
 
 /**
- * 위젯 결제 시작 — `prepareOrder` 로 금액을 서버 확정한 뒤 결제수단/약관 위젯을 앱 DOM 에 렌더한다.
- * 반환된 handle 을 앱이 보관했다가, 결제 버튼 클릭 시 `handle.requestPayment(...)` 를 호출한다.
- * `toss_client_key` 가 결제위젯 키(gck_)여야 한다(개별연동 키 ck_ 는 `startStoreCheckout`(리다이렉트) 사용).
+ * 스토어 결제위젯 시작 — `getStoreConfig()` 로 위젯 키를 얻고 `prepareOrder()` 로 금액을 서버 확정한 뒤,
+ * 결제수단/약관 위젯을 앱 DOM(셀렉터)에 렌더한다. 반환 handle 을 앱이 보관했다가 결제 버튼 클릭 시
+ * `handle.requestPayment({ successUrl, failUrl })` 호출 → 성공 시 successUrl 로 리다이렉트(paymentKey/
+ * orderId/amount 쿼리 포함), 복귀 페이지에서 `confirm({ order_no, payment_key, amount, product_id, quantity })`.
+ * 결제수단 선택 UI가 앱 화면 안에 있어 결제 도중 뒤로가기가 유지된다. `toss_client_key` 는 결제위젯 키(gck_)여야 한다.
  */
 export async function beginStoreWidgetCheckout(
   params: StoreWidgetCheckoutParams
@@ -155,20 +110,18 @@ export async function beginStoreWidgetCheckout(
     throw new BaasError("스토어 결제 설정이 없습니다(toss_client_key 미설정).", "STORE_NOT_CONFIGURED", 400);
   }
   const prepared = await prepareOrder(params.productId, params.quantity);
-  const TossPayments = await loadTossPayments();
-  const widgets = TossPayments(clientKey).widgets({
-    customerKey: params.customerKey ?? TossPayments.ANONYMOUS,
+  const widget = await renderPaymentWidget({
+    clientKey,
+    amount: prepared.amount,
+    methodsSelector: params.methodsSelector,
+    agreementSelector: params.agreementSelector,
+    customerKey: params.customerKey,
   });
-  await widgets.setAmount({ currency: "KRW", value: prepared.amount });
-  await Promise.all([
-    widgets.renderPaymentMethods({ selector: params.methodsSelector, variantKey: "DEFAULT" }),
-    widgets.renderAgreement({ selector: params.agreementSelector, variantKey: "AGREEMENT" }),
-  ]);
   return {
     amount: prepared.amount,
     orderNo: prepared.order_no,
     requestPayment: (opts) =>
-      widgets.requestPayment({
+      widget.requestPayment({
         orderId: prepared.order_no,
         orderName: opts.orderName ?? prepared.order_name,
         successUrl: opts.successUrl,
