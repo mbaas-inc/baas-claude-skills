@@ -24,8 +24,16 @@ export interface TossRequestPaymentParams {
 export interface TossPaymentInstance {
   requestPayment(params: TossRequestPaymentParams): Promise<void>;
 }
+/** 위젯(인라인) — 결제수단/약관을 앱 DOM 에 렌더한 뒤 requestPayment. 앱 화면을 벗어나지 않아 뒤로가기가 유지된다. */
+export interface TossWidgetsInstance {
+  setAmount(amount: { currency: string; value: number }): Promise<void>;
+  renderPaymentMethods(opts: { selector: string; variantKey?: string }): Promise<unknown>;
+  renderAgreement(opts: { selector: string; variantKey?: string }): Promise<unknown>;
+  requestPayment(params: Omit<TossRequestPaymentParams, "method" | "amount">): Promise<void>;
+}
 export interface TossPaymentsInstance {
   payment(options: { customerKey: string }): TossPaymentInstance;
+  widgets(options: { customerKey: string }): TossWidgetsInstance;
 }
 export interface TossPaymentsCtor {
   (clientKey: string): TossPaymentsInstance;

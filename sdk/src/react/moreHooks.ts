@@ -158,5 +158,10 @@ export function useStore() {
       core.startStoreCheckout(productId, qty, opts),
     [],
   );
-  return { config, products, loading, error, fetchConfig, fetchProducts, fetchProduct, prepare, confirm, checkout, myOrders, confirmPurchase, cancel };
+  // 위젯(인라인) 결제 — gck 키일 때. 앱이 셀렉터 제공 → handle.requestPayment 로 결제(앱 화면 유지).
+  const beginWidgetCheckout = React.useCallback(
+    (params: core.StoreWidgetCheckoutParams) => core.beginStoreWidgetCheckout(params),
+    [],
+  );
+  return { config, products, loading, error, fetchConfig, fetchProducts, fetchProduct, prepare, confirm, checkout, beginWidgetCheckout, myOrders, confirmPurchase, cancel };
 }

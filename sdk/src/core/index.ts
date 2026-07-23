@@ -68,6 +68,7 @@ export {
   confirmPurchase,
   cancelOrder,
   startStoreCheckout,
+  beginStoreWidgetCheckout,
 } from "./store";
 export { SDK_VERSION } from "../version";
 export type {
@@ -103,4 +104,10 @@ export type {
   ReservationCheckoutOptions,
   ReservationCheckoutContext,
 } from "./reservation";
-export type { StoreConfig, Product, StoreCheckoutOptions } from "./store";
+export type {
+  StoreConfig,
+  Product,
+  StoreCheckoutOptions,
+  StoreWidgetCheckoutParams,
+  StoreWidgetHandle,
+} from "./store";

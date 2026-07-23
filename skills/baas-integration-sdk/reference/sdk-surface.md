@@ -191,6 +191,7 @@ await s.myOrders();                        // 내 주문(로그인)
 await s.confirmPurchase(orderId);          // 구매확정
 await s.cancel(orderId, reason);
 ```
+- **키 타입별 결제 방식**: `config.toss_client_key` 가 개별연동 키(`ck_`)면 `checkout()`(리다이렉트 결제창), 결제위젯 키(`gck_`)면 `beginWidgetCheckout({productId, quantity, methodsSelector, agreementSelector, customerKey})` 로 **앱 화면 안 인라인 위젯**(뒤로가기 유지) 사용 → 반환 handle 의 `requestPayment({successUrl, failUrl, orderName})` 를 결제 버튼에서 호출. 위젯은 결제수단/약관을 앱 DOM(셀렉터)에 렌더하므로 앱이 컨테이너 div 2개를 제공한다.
 - **`checkout()`가 `getStoreConfig → prepare → 토스 결제창(v2 payment().requestPayment)`을 대신 수행**한다.
   앱은 토스 스크립트를 직접 로드하거나 `widgets()`/`payment()`를 고르지 않는다(그 선택이 키 타입과
   안 맞으면 "결제위젯 연동 키의 클라이언트 키로 SDK를 연동해주세요" 에러). `toss_client_key`(API 개별

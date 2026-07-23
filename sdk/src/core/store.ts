@@ -5,7 +5,7 @@
  */
 import { request, BaasError } from "./http";
 import { getProjectId } from "./config";
-import { requestCardPayment } from "./toss";
+import { requestCardPayment, loadTossPayments } from "./toss";
 
 export interface StoreConfig {
   store_enabled: boolean;
@@ -116,4 +116,65 @@ export async function startStoreCheckout(
     customerName: opts.customerName,
     customerEmail: opts.customerEmail,
   });
+}
+
+// ── 회원: 위젯(인라인) 결제 — 앱 화면 안에서 결제(뒤로가기 유지). config.toss_client_key 가 gck_ 일 때 사용 ──
+export interface StoreWidgetCheckoutParams {
+  productId: string;
+  quantity: number;
+  /** 결제수단 위젯을 렌더할 앱 DOM 셀렉터(예: "#toss-payment-methods"). */
+  methodsSelector: string;
+  /** 약관 위젯을 렌더할 셀렉터(예: "#toss-agreement"). */
+  agreementSelector: string;
+  customerKey?: string;
+}
+export interface StoreWidgetHandle {
+  amount: number;
+  orderNo: string;
+  /** 사용자가 결제 버튼을 누를 때 호출 — 성공 시 successUrl 로 리다이렉트, USER_CANCEL 은 throw. */
+  requestPayment(opts: {
+    successUrl: string;
+    failUrl: string;
+    orderName?: string;
+    customerName?: string;
+    customerEmail?: string;
+  }): Promise<void>;
+}
+
+/**
+ * 위젯 결제 시작 — `prepareOrder` 로 금액을 서버 확정한 뒤 결제수단/약관 위젯을 앱 DOM 에 렌더한다.
+ * 반환된 handle 을 앱이 보관했다가, 결제 버튼 클릭 시 `handle.requestPayment(...)` 를 호출한다.
+ * `toss_client_key` 가 결제위젯 키(gck_)여야 한다(개별연동 키 ck_ 는 `startStoreCheckout`(리다이렉트) 사용).
+ */
+export async function beginStoreWidgetCheckout(
+  params: StoreWidgetCheckoutParams
+): Promise<StoreWidgetHandle> {
+  const cfg = await getStoreConfig();
+  const clientKey = cfg.toss_client_key;
+  if (!clientKey) {
+    throw new BaasError("스토어 결제 설정이 없습니다(toss_client_key 미설정).", "STORE_NOT_CONFIGURED", 400);
+  }
+  const prepared = await prepareOrder(params.productId, params.quantity);
+  const TossPayments = await loadTossPayments();
+  const widgets = TossPayments(clientKey).widgets({
+    customerKey: params.customerKey ?? TossPayments.ANONYMOUS,
+  });
+  await widgets.setAmount({ currency: "KRW", value: prepared.amount });
+  await Promise.all([
+    widgets.renderPaymentMethods({ selector: params.methodsSelector, variantKey: "DEFAULT" }),
+    widgets.renderAgreement({ selector: params.agreementSelector, variantKey: "AGREEMENT" }),
+  ]);
+  return {
+    amount: prepared.amount,
+    orderNo: prepared.order_no,
+    requestPayment: (opts) =>
+      widgets.requestPayment({
+        orderId: prepared.order_no,
+        orderName: opts.orderName ?? prepared.order_name,
+        successUrl: opts.successUrl,
+        failUrl: opts.failUrl,
+        customerName: opts.customerName,
+        customerEmail: opts.customerEmail,
+      }),
+  };
 }
