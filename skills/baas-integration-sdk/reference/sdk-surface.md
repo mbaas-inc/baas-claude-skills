@@ -145,6 +145,8 @@ await submitResponse(surveyId, answers);   // 공개 제출
 - `toss_client_key` 는 **결제위젯 키**(`test_gck_/live_gck_`)여야 한다(개별연동 `ck_` 키는 위젯 미지원).
 - 결제 복귀 라우트는 **평면 경로**(`/checkout-success` 등)로 둔다.
 - 결제창 닫힘/취소는 `code === "USER_CANCEL"` 에러 → 앱에서 무시(토스트 금지).
+- **결제 실행 버튼 라벨은 "결제하기"**(또는 "N원 결제하기") — 위젯이 카드·계좌이체·간편결제 등 **결제수단 선택**을
+  제공하므로 **"카드로 결제하기" 같은 수단 한정 문구는 쓰지 말 것.** (위젯 = 다중 결제수단, 카드 전용 아님)
 - **위젯 생명주기 주의**: 동의 토글 등으로 위젯 컨테이너(셀렉터 div)를 **조건부 언마운트**하면, 동의 해제 시
   위젯 상태(ready 플래그·handle ref)를 **리셋**해 재동의 시 `beginWidgetCheckout` 를 다시 호출·재렌더해야 한다.
   리셋 없이 "이미 렌더함" 가드만 두면 **재체크 시 빈 컨테이너로 위젯이 안 뜬다**(실측 결함). 컨테이너를 항상
@@ -231,8 +233,7 @@ await r.myBookings();                            // 내 예약(로그인)
 await r.cancel(reservationId);
 ```
 - 결제 복귀 라우트는 **평면 경로**(`/reservation-payment-success`, `/reservation-payment-fail`)로 둘 것.
-- 예약은 `prepareBooking` 응답 안에 `client_key`가 포함된다(store 는 config 로 별도). confirm 은 store·예약 모두
-  `order_id`(토스 orderId)로 호출한다 — `beginWidgetCheckout()`/`getCheckoutContext()` 가 세부 배선을 흡수한다.
+- 예약은 `prepareBooking` 응답 안에 `client_key`가 포함된다(store 는 config 로 별도). confirm 필드는 store=`order_no`, 예약=`order_id`(값은 둘 다 토스 orderId) — `beginWidgetCheckout()`/`getCheckoutContext()` 가 세부 배선을 흡수한다.
 - 결제 방식(위젯 인라인)·`USER_CANCEL` 처리, **[필수] ①구매약관 동의 ②통신판매중개 고지 푸터**는 위
   **"결제 (payment) — 공통 규약"** 을 따른다(예약 결제 화면에도 ①②를 동일 적용).
 
@@ -249,7 +250,7 @@ await s.fetchProduct(productId);
 
 // [필수] 구매약관은 결제 공통 훅으로 — const terms = await BaasSDK.usePayment().fetchTerms();
 //   content 를 결제 영역 위에 표시 + 동의 체크(동의 전 결제 진입 금지). 위 "결제 공통 규약 ①" 참조.
-// 카드결제(위젯 인라인) — 앱 화면 안에서 결제(뒤로가기 유지). 동의 완료 후:
+// 결제(위젯 인라인) — 앱 화면 안에서 결제(뒤로가기 유지, 위젯이 결제수단 선택 제공). 동의 완료 후:
 // 1) 앱에 결제수단/약관 컨테이너 div 2개를 두고, 준비 시작:
 const w = await s.beginWidgetCheckout({ productId, quantity: qty,
   methodsSelector: "#toss-payment-methods", agreementSelector: "#toss-agreement", customerKey });
@@ -258,8 +259,8 @@ const w = await s.beginWidgetCheckout({ productId, quantity: qty,
 await w.requestPayment({ successUrl: `${location.origin}/checkout-success?product_id=${productId}&quantity=${qty}`,
   failUrl: `${location.origin}/checkout-fail`, orderName });
 //    → 성공 시 successUrl 로 리다이렉트(paymentKey/orderId/amount 쿼리). 복귀 페이지에서 confirm:
-//    orderId 는 복귀 쿼리의 토스 orderId. terms_agreed 는 넘길 필요 없다(SDK 가 처리).
-await s.confirm({ order_id: orderId, payment_key, amount, product_id, quantity });
+//    order_no 는 복귀 쿼리의 토스 orderId(= prepare 응답 order_no). terms_agreed 는 넘길 필요 없다(SDK 가 처리).
+await s.confirm({ order_no: orderId, payment_key, amount, product_id, quantity });
 
 await s.myOrders();                        // 내 주문(로그인)
 await s.confirmPurchase(orderId);          // 구매확정(환불 불가 — 확인 다이얼로그 필수)

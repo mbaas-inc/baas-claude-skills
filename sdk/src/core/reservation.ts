@@ -1,6 +1,6 @@
 /**
  * 예약 — 공개(대상/슬롯 조회) + 회원(예약 생성/결제/내 예약).
- * 카드 결제는 prepare→(앱이 토스 위젯 호출)→confirm 3단계. 토스 위젯은 앱 UI 담당.
+ * 결제(위젯)는 prepare→(앱이 토스 위젯 호출)→confirm 3단계. 토스 위젯은 앱 UI 담당.
  */
 import { request, BaasError } from "./http";
 import { getProjectId } from "./config";
@@ -29,7 +29,7 @@ export const createBooking = (
   data: { reserved_at: string; form_data: Record<string, unknown>; payment_method?: string }
 ) => request(`/reservation/targets/${targetId}/bookings`, { method: "POST", body: data });
 
-// ── 회원: 카드 결제 준비(예약 미생성) → 앱이 토스 위젯 호출 ──
+// ── 회원: 결제(위젯) 준비(예약 미생성) → 앱이 토스 위젯 호출 ──
 export const prepareBooking = (
   targetId: string,
   data: { reserved_at: string; form_data: Record<string, unknown> }
@@ -38,7 +38,7 @@ export const prepareBooking = (
   body: { ...data, payment_method: "online" },
 });
 
-// ── 회원: 카드 결제 승인 = 예약 생성 ──
+// ── 회원: 결제(위젯) 승인 = 예약 생성 ──
 export const confirmBooking = (
   targetId: string,
   payload: { order_id: string; payment_key: string; amount: number; reserved_at: string; form_data: Record<string, unknown> }

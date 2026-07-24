@@ -1,6 +1,6 @@
 /**
  * 스토어 — 공개(config/상품/약관) + 회원(주문 결제/내 주문).
- * 카드 결제: prepare→(앱이 토스 위젯)→confirm. config.toss_client_key 로 앱이 위젯 호출.
+ * 결제(위젯): prepare→(앱이 토스 위젯, 결제수단 선택)→confirm. config.toss_client_key 로 앱이 위젯 호출.
  * 주의: 통신판매중개 특성상 모든 페이지 푸터에 중개업자 고지 필수(스킬 store 표면 규약).
  */
 import { request, BaasError } from "./http";
@@ -51,12 +51,11 @@ export const prepareOrder = (productId: string, quantity: number) =>
   });
 
 // ── 회원: 결제 승인 = 주문 생성 ──
-// 앱은 토스 복귀 쿼리의 orderId 를 `order_id` 로 넘긴다(토스/예약과 일관된 앱-표면 명칭).
-// 백엔드 store confirm 필드는 `order_no`(prepare 응답의 order_no = 그 orderId 값)이므로 SDK 가
-// order_id → order_no 로 전송한다. 이 필드명 번역이 SDK(transport)의 역할이라 앱은 CDN 갱신만으로 반영된다.
-// terms_agreed 는 위젯 결제가 동의 게이트 통과 후 진입 + prepare 도 terms_agreed:true 검증이라 기본 true.
+// 백엔드 /store/orders/confirm 계약과 1:1: order_no(prepare 응답의 order_no = 토스 orderId)·payment_key·
+// amount·product_id·quantity·terms_agreed(필수). terms_agreed 는 위젯 결제가 동의 게이트 통과 후 진입 +
+// prepare 도 terms_agreed:true 검증이라 기본 true(호출부가 명시 시 그 값 사용). store 는 order_no 로 일관.
 export const confirmOrder = (data: {
-  order_id: string;
+  order_no: string;
   payment_key: string;
   amount: number;
   product_id: string;
@@ -66,7 +65,7 @@ export const confirmOrder = (data: {
   request(`/store/orders/confirm`, {
     method: "POST",
     body: {
-      order_no: data.order_id,
+      order_no: data.order_no,
       payment_key: data.payment_key,
       amount: data.amount,
       product_id: data.product_id,
