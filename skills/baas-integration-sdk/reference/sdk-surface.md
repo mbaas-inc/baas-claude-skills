@@ -231,8 +231,8 @@ await r.myBookings();                            // 내 예약(로그인)
 await r.cancel(reservationId);
 ```
 - 결제 복귀 라우트는 **평면 경로**(`/reservation-payment-success`, `/reservation-payment-fail`)로 둘 것.
-- store 와 달리 예약은 `prepareBooking` 응답 안에 `client_key`가 포함되며, `confirm` 은 `order_no`가 아니라
-  `order_id` 를 쓴다 — 위 `beginWidgetCheckout()`/`getCheckoutContext()` 가 이 차이를 흡수한다.
+- 예약은 `prepareBooking` 응답 안에 `client_key`가 포함된다(store 는 config 로 별도). confirm 은 store·예약 모두
+  `order_id`(토스 orderId)로 호출한다 — `beginWidgetCheckout()`/`getCheckoutContext()` 가 세부 배선을 흡수한다.
 - 결제 방식(위젯 인라인)·`USER_CANCEL` 처리, **[필수] ①구매약관 동의 ②통신판매중개 고지 푸터**는 위
   **"결제 (payment) — 공통 규약"** 을 따른다(예약 결제 화면에도 ①②를 동일 적용).
 
@@ -258,7 +258,7 @@ const w = await s.beginWidgetCheckout({ productId, quantity: qty,
 await w.requestPayment({ successUrl: `${location.origin}/checkout-success?product_id=${productId}&quantity=${qty}`,
   failUrl: `${location.origin}/checkout-fail`, orderName });
 //    → 성공 시 successUrl 로 리다이렉트(paymentKey/orderId/amount 쿼리). 복귀 페이지에서 confirm:
-//    (앱은 토스 orderId 를 order_id 로 넘기면 된다 — SDK 가 백엔드 store 필드 order_no 로 전송. terms_agreed 는 SDK 기본 true.)
+//    orderId 는 복귀 쿼리의 토스 orderId. terms_agreed 는 넘길 필요 없다(SDK 가 처리).
 await s.confirm({ order_id: orderId, payment_key, amount, product_id, quantity });
 
 await s.myOrders();                        // 내 주문(로그인)
