@@ -24,10 +24,24 @@ const { isLoggedIn, user, loading, error, refetch, clear } = BaasSDK.useAuth();
 
 ### `RequireAuth` — 로그인 필수 화면 가드
 ```tsx
-<BaasSDK.RequireAuth fallback={<LoginPrompt/>} loadingFallback={<Spinner/>}>
+<BaasSDK.RequireAuth fallback={<Navigate to="/login" replace/>} loadingFallback={<Spinner/>}>
   <ProtectedContent/>
 </BaasSDK.RequireAuth>
 ```
+**가드 배치 규율 (누락 방지 — 실측 결함 재발 방지):**
+- **영역 단위로 감쌀 것**: 로그인 필수 구역은 **공용 레이아웃/라우트 그룹 자체**를 `RequireAuth` 로 감싼다.
+  leaf 라우트만 개별로 감싸면 형제(탭 레이아웃·목록 등)를 빠뜨려 로그아웃 상태로 접근되는 결함이 난다.
+  ```tsx
+  // 로그인 필수 영역 = 레이아웃째로 가드 → 하위 라우트 전부 자동 보호
+  <Route element={<RequireAuth fallback={<Navigate to="/login" replace/>}><AppLayout/></RequireAuth>}>
+    <Route path="/mypage" element={<MyPage/>} />
+    <Route path="/home"   element={<Home/>} />
+  </Route>
+  ```
+- **범위는 기획에서 판단**: 회원 전용(login-first, 스플래시→로그인) 이면 인증 영역 전체를 가드,
+  공개 브라우징 허용이면 회원 액션(마이페이지·글쓰기·결제 등)만 가드. 생성 전에 이 축을 먼저 정한다.
+- **일관성 체크**: 한 그룹에서 일부 라우트를 가드했으면 그 그룹의 공용/목록 화면도 같은 기준으로 가드해야 한다
+  (일부만 가드하고 레이아웃/형제를 빼먹으면 결함). 미인증 fallback 은 `<Navigate to="/login" replace/>` 로 로그인 유도.
 
 ### `useLogin()` / `useSignup()` / `useLogout()`
 ```tsx
