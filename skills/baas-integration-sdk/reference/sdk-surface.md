@@ -145,6 +145,10 @@ await submitResponse(surveyId, answers);   // 공개 제출
 - `toss_client_key` 는 **결제위젯 키**(`test_gck_/live_gck_`)여야 한다(개별연동 `ck_` 키는 위젯 미지원).
 - 결제 복귀 라우트는 **평면 경로**(`/checkout-success` 등)로 둔다.
 - 결제창 닫힘/취소는 `code === "USER_CANCEL"` 에러 → 앱에서 무시(토스트 금지).
+- **위젯 생명주기 주의**: 동의 토글 등으로 위젯 컨테이너(셀렉터 div)를 **조건부 언마운트**하면, 동의 해제 시
+  위젯 상태(ready 플래그·handle ref)를 **리셋**해 재동의 시 `beginWidgetCheckout` 를 다시 호출·재렌더해야 한다.
+  리셋 없이 "이미 렌더함" 가드만 두면 **재체크 시 빈 컨테이너로 위젯이 안 뜬다**(실측 결함). 컨테이너를 항상
+  마운트하고 CSS로만 숨기는 방식도 가능.
 
 ### [필수] ① 구매약관 동의 — 결제 있는 모든 화면
 `usePayment().fetchTerms()` 의 `content` 를 **결제 진입 전** 표시하고
@@ -158,10 +162,12 @@ const terms = await pay.fetchTerms();   // { title, content, version }
 - **동의 체크 전에는 결제(`beginWidgetCheckout`)로 진입하지 말 것.** (서버 prepare 는 동의를 전제한다.)
 - 스토어·예약뿐 아니라 **결제를 붙이는 어떤 화면에서든** 이 동의 게이트를 둔다.
 
-### [필수] ② 통신판매중개업 고지 (푸터) — 결제 있는 모든 화면
-결제가 엠바스 경유로 일어나는 **모든 페이지 하단 푸터**에 아래 **통신판매중개업자(=플랫폼 운영사) 고정 정보**를
-그대로 표기한다(전자상거래법 제20조① 통신판매중개자 고지). **셀러/앱 운영주체(예: 협회·클라이언트)의 정보가
-아니라 플랫폼 운영사 정보이며, API로 내려오지 않으니 아래 문구를 그대로 넣는다.** 개별 셀러 신원정보는 노출하지 않는다.
+### [필수] ② 통신판매중개업 고지 (푸터) — 웹 앱 전역 푸터에 1회
+스토어/결제가 있는 앱은 **웹 앱의 전역 푸터(앱 레이아웃 Footer)에 딱 1회** 아래 **통신판매중개업자(=플랫폼
+운영사) 고정 정보**를 표기한다(전자상거래법 제20조① 통신판매중개자 고지). **스토어 목록·상세·체크아웃 등
+페이지 컴포넌트마다 중복 배치하지 말 것** — 전역 레이아웃 Footer 한 곳이면 모든 페이지에서 노출된다(목록→상세
+이동 시 매번 따로 뜨면 안티패턴). **셀러/앱 운영주체(예: 협회·클라이언트)의 정보가 아니라 플랫폼 운영사
+정보이며, API로 내려오지 않으니 아래 문구를 그대로 넣는다.** 개별 셀러 신원정보는 노출하지 않는다.
 ```text
 상호: 주식회사 엠바스 (대표: 김정현)
 사업자등록번호: 128-88-02089 | 통신판매업신고번호: 제2026-부산금정-0312호
@@ -176,7 +182,18 @@ const terms = await pay.fetchTerms();   // { title, content, version }
 - 「사업자정보확인」은 위 공정위 URL로 **새 창 링크**(`target="_blank" rel="noopener noreferrer"`),
   앵커 텍스트는 `사업자정보확인`(`wrkr_no`=사업자번호 하이픈 제거). 신고번호 등 텍스트는 그대로 두고 링크만 덧붙인다.
 - 상호·사업자번호·신고번호·주소·연락처는 API로 내려오지 않는 플랫폼 운영사 고정 정보다(변경 시 이 스킬 문구 갱신).
-  (앱은 예: `StoreDisclosureFooter` 컴포넌트로 구현)
+- **배치**: 전역 레이아웃이 모든 화면을 감싸면 그 Footer에 1회. **탭/비탭 라우트가 나뉘는 모바일 앱**은
+  공용 푸터 컴포넌트를 만들어 스토어/결제 화면에 **일관 배치**(모바일은 하단 탭바와 겹치지 않게). 어느 경우든
+  **스토어 페이지 컴포넌트마다 즉석 삽입은 금지**(목록→상세 중복 노출 안티패턴).
+- **구조 권장(정돈된 커머스 푸터, 예: 네이버 스타일)**: `고지 문구 → 사업자정보(라벨·값 인라인, 구분점 ·) →
+  고객센터(전화·이메일) → 저작권` 순으로 구획화한다. 밋밋한 `<p>` 나열보다 라벨을 흐리게·항목을 `·` 로 구분해
+  가독성을 높인다.
+  ```text
+  주식회사 엠바스는 통신판매중개자이며, 통신판매의 당사자가 아닙니다. 상품, 상품정보, 거래에 관한 의무와 책임은 판매자에게 있습니다.
+  상호 주식회사 엠바스 · 대표 김정현 · 사업자등록번호 128-88-02089 · 통신판매업신고번호 제2026-부산금정-0312호 · 주소 부산광역시 금정구 부산대학로50번길 68, 404호 (장전동) · [사업자정보확인]
+  고객문의 070-8648-2750 · 이메일 help@aiapp.help
+  © 주식회사 엠바스 (mBaaS). All Rights Reserved.
+  ```
 
 ### 커스텀 화면에 결제를 붙일 때
 현재 SDK 는 결제 금액을 안전하게 다루는 prepare/confirm 을 **store·reservation 에만** 제공한다. 따라서
@@ -241,7 +258,8 @@ const w = await s.beginWidgetCheckout({ productId, quantity: qty,
 await w.requestPayment({ successUrl: `${location.origin}/checkout-success?product_id=${productId}&quantity=${qty}`,
   failUrl: `${location.origin}/checkout-fail`, orderName });
 //    → 성공 시 successUrl 로 리다이렉트(paymentKey/orderId/amount 쿼리). 복귀 페이지에서 confirm:
-await s.confirm({ order_no, payment_key, amount, product_id, quantity });
+//    (confirm 은 백엔드 계약대로 order_id 필드로 토스 orderId 를 넘긴다. terms_agreed 는 SDK 가 기본 true.)
+await s.confirm({ order_id: orderId, payment_key, amount, product_id, quantity });
 
 await s.myOrders();                        // 내 주문(로그인)
 await s.confirmPurchase(orderId);          // 구매확정(환불 불가 — 확인 다이얼로그 필수)

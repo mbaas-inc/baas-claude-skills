@@ -51,13 +51,28 @@ export const prepareOrder = (productId: string, quantity: number) =>
   });
 
 // ── 회원: 결제 승인 = 주문 생성 ──
+// 백엔드 /store/orders/confirm 계약과 1:1: order_id(토스 orderId = prepare 응답의 order_no 값)·
+// payment_key·amount·product_id·quantity·terms_agreed(필수). terms_agreed 는 위젯 결제가 동의 게이트
+// 통과 후에만 진입하고 prepare 도 terms_agreed:true 로 검증하므로 기본 true(호출부가 명시 시 그 값 사용).
 export const confirmOrder = (data: {
-  order_no: string;
+  order_id: string;
   payment_key: string;
   amount: number;
   product_id: string;
   quantity: number;
-}) => request(`/store/orders/confirm`, { method: "POST", body: data });
+  terms_agreed?: boolean;
+}) =>
+  request(`/store/orders/confirm`, {
+    method: "POST",
+    body: {
+      order_id: data.order_id,
+      payment_key: data.payment_key,
+      amount: data.amount,
+      product_id: data.product_id,
+      quantity: data.quantity,
+      terms_agreed: data.terms_agreed ?? true,
+    },
+  });
 
 // ── 회원: 내 주문 ──
 export const listMyOrders = (params: Record<string, string> = {}) => {
