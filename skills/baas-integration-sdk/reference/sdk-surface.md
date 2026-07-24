@@ -258,7 +258,7 @@ const w = await s.beginWidgetCheckout({ productId, quantity: qty,
 await w.requestPayment({ successUrl: `${location.origin}/checkout-success?product_id=${productId}&quantity=${qty}`,
   failUrl: `${location.origin}/checkout-fail`, orderName });
 //    → 성공 시 successUrl 로 리다이렉트(paymentKey/orderId/amount 쿼리). 복귀 페이지에서 confirm:
-//    (confirm 은 백엔드 계약대로 order_id 필드로 토스 orderId 를 넘긴다. terms_agreed 는 SDK 가 기본 true.)
+//    (앱은 토스 orderId 를 order_id 로 넘기면 된다 — SDK 가 백엔드 store 필드 order_no 로 전송. terms_agreed 는 SDK 기본 true.)
 await s.confirm({ order_id: orderId, payment_key, amount, product_id, quantity });
 
 await s.myOrders();                        // 내 주문(로그인)
