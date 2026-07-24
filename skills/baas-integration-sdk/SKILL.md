@@ -92,9 +92,9 @@ SDK는 CDN에서 로드되고 앱의 React 인스턴스를 공유한다. 이 배
 ```json
 { "skill": "baas-integration-sdk", "skill_version": "0.4.0", "sdk_channel": "v1", "features_used": ["account", "notice", "recipient", "board"] }
 ```
-- `features_used`에는 **실제 사용한 기능 그룹만** 적는다(그룹 키: `account`, `notice`(공지+FAQ), `recipient`, `board`, `survey`, `reservation`, `store`, `collection`).
-- `skill_version`은 이 앱을 생성/갱신할 때 사용한 스킬 버전(`features.json`의 `version`)을 적는다.
-- **⚠️ 기능을 추가·제거하면 `features_used`를 반드시 함께 갱신한다.** manifest가 실제 사용 기능과 어긋나면(stale) 업데이트 비교기의 교집합 계산이 틀어져 **해당 기능의 업데이트가 누락된다.** 예: 나중에 로그인·게시판을 덧붙였는데 `features_used`에 `account`·`board`를 안 넣으면, 그 기능들의 스킬 변경이 이 앱엔 반영되지 않는다.
+- `features_used`(그룹 키: `account`, `notice`(공지+FAQ), `recipient`, `board`, `survey`, `reservation`, `store`, `payment`, `collection`, `storage`)와 `skill_version`(=`features.json`의 `version`)은 **손으로 유지하지 않는다.**
+- **자동 동기화(권장·고정 배선)**: `scripts/sync-manifest.mjs` 가 `src/` 의 `BaasSDK.<name>` 사용을 스캔해 `features.json.hook_groups` 매핑으로 `features_used` 를 도출하고 `skill_version` 을 맞춘다. `package.json` 의 `prebuild` 에 물려 **build 마다 자동 갱신**, `validate` 엔 `--check`(불일치 시 실패)로 건다(배선: `scaffold/wiring.md` §4).
+- **왜 자동인가**: `features_used` 를 손으로 유지하면 stale 이 나서(예: store 를 쓰는데 목록에서 빠짐) 업데이트 비교기의 교집합이 틀어져 **해당 기능의 업데이트가 조용히 누락된다.** 코드에서 도출하면 구조적으로 stale 이 불가능하다. (신규 훅을 SDK 에 추가할 때만 `features.json.hook_groups` 에 매핑을 추가하면 된다.)
 
 스킬/SDK 업데이트 시 앱빌더가 이 파일과 최신 버전을 비교해 영향 여부·마이그레이션 Tier를 판정한다(`migrations/README.md` 참조).
 

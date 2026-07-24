@@ -9,6 +9,7 @@ import { useBoard } from "./useBoard";
 import { useCollection } from "./useCollection";
 import { useFileUpload } from "./useFileUpload";
 import {
+  usePayment,
   useRecipient,
   useNotice,
   useFaq,
@@ -73,11 +74,12 @@ export const BaasSDK = {
   getBooking: core.getBooking,
   updateBooking: core.updateBooking,
   cancelBooking: core.cancelBooking,
+  // payment (결제 공통 — 약관 조회. 금액 실행은 store/reservation 소유)
+  getPurchaseTerms: core.getPurchaseTerms,
   getStoreConfig: core.getStoreConfig,
   listProducts: core.listProducts,
   listCategories: core.listCategories,
   getProduct: core.getProduct,
-  getStoreTerms: core.getStoreTerms,
   prepareOrder: core.prepareOrder,
   confirmOrder: core.confirmOrder,
   listMyOrders: core.listMyOrders,
@@ -94,6 +96,7 @@ export const BaasSDK = {
   useBoard,
   useCollection,
   useFileUpload,
+  usePayment,
   useRecipient,
   useNotice,
   useFaq,
@@ -106,6 +109,6 @@ export const BaasSDK = {
 export {
   AuthProvider, useAuth, RequireAuth, useLogin, useSignup, useLogout, useBoard, useCollection,
   useFileUpload,
-  useRecipient, useNotice, useFaq, useComments, useSurvey, useReservation, useStore,
+  usePayment, useRecipient, useNotice, useFaq, useComments, useSurvey, useReservation, useStore,
 };
 export * from "../core/index";

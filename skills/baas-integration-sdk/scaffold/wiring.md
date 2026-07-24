@@ -64,3 +64,23 @@ export default function App() {
 ## TypeScript 편의(선택)
 `window.BaasSDK` 타입은 배포된 `baas.d.ts` 를 참조하면 tsc 가 표면 오타(환각)를 빌드 시 잡는다.
 없어도 동작에는 문제없다.
+
+## 4. `baas-manifest.json` 자동 동기화 (stale 방지 — 고정 배선)
+마이그레이션 판정(업데이트 비교기)은 `baas-manifest.json` 의 `features_used`/`skill_version` 을 근거로 한다.
+이를 **손으로 유지하면 stale 이 나서 업데이트가 조용히 누락**되므로(예: store 를 쓰는데 목록에서 빠짐),
+**코드에서 자동 도출**해 구조적으로 stale 을 막는다. hook→group 매핑의 SSOT 는 `features.json.hook_groups`.
+
+- `scripts/sync-manifest.mjs` — `src/` 의 `BaasSDK.<name>` 사용을 스캔 → `features.json.hook_groups` 매핑으로
+  `features_used` 도출, `skill_version` 을 `features.json.version` 으로 세팅해 `baas-manifest.json` 갱신.
+- **`package.json` 배선(고정)**: `prebuild` 에 물려 **`npm run build` 직전 자동 실행**(배포는 build 가
+  불가피하므로 건너뛸 수 없는 관문이 된다). `validate` 엔 `--check`(불일치 시 exit 1)로 건다.
+```jsonc
+"scripts": {
+  "prebuild": "node scripts/sync-manifest.mjs",
+  "build": "vite build",
+  "validate": "npm run typecheck && npm run lint && node scripts/sync-manifest.mjs --check"
+}
+```
+- 새 훅/기능을 붙이면 코드만 바꾸면 되고 manifest 는 다음 build 에서 자동 반영된다(에이전트가 manifest 를
+  손대야 한다는 규약 자체가 불필요해진다). 단 **신규 훅을 SDK 에 추가할 때는 `features.json.hook_groups` 에
+  그 훅→group 매핑을 넣어야** 한다(매핑 없으면 sync 가 경고).

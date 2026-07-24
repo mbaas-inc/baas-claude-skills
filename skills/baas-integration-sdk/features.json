@@ -1,10 +1,23 @@
 {
-  "version": "0.7.0",
+  "version": "0.10.0",
   "sdk": "@mbaas/baas-web-sdk",
   "sdk_global": "window.BaasSDK",
   "surface_ref": "reference/sdk-surface.md",
   "scaffold_ref": "scaffold/wiring.md",
   "fallback": "표면에 없는 기능은 이 스킬 범위 밖입니다. 임의 fetch 코드를 만들지 말고 사용자에게 미지원임을 알리세요(raw API 이스케이프 해치 없음 — 모든 백엔드 호출은 SDK 경유).",
+  "hook_groups": {
+    "useAuth": "account", "useLogin": "account", "useSignup": "account", "useLogout": "account", "changePassword": "account", "AuthProvider": "account", "RequireAuth": "account",
+    "useRecipient": "recipient", "registerRecipient": "recipient",
+    "useCollection": "collection", "getPublicRecord": "collection",
+    "useNotice": "notice", "useFaq": "notice",
+    "useBoard": "board", "useComments": "board",
+    "useSurvey": "survey",
+    "useReservation": "reservation",
+    "useStore": "store",
+    "usePayment": "payment", "getPurchaseTerms": "payment",
+    "useFileUpload": "storage", "uploadFile": "storage"
+  },
+  "hook_groups_note": "baas-manifest.json 의 features_used 자동 도출용 — 코드의 BaasSDK.<name> 사용을 스캔해 이 매핑으로 그룹을 산출한다(scripts/sync-manifest.mjs). 새 훅/기능을 추가하면 이 맵도 갱신한다.",
   "data_flow": {
     "account": "앱 루트 AuthProvider가 인증 상태 1회 조회 → 회원가입 → 로그인(자동 refetch) → 화면은 useAuth()로 읽기만 → 로그아웃(자동 clear)",
     "recipient": "폼 입력(이름·전화) → useRecipient().register",
@@ -13,8 +26,9 @@
     "board": "baas-cli로 게시판 생성(board_id) → 코드 주입 → useBoard().fetchPosts(boardId) → post_id → fetchPost → (로그인) submitPost",
     "comments": "게시글 post_id → useComments().fetchComments → (로그인) addComment/editComment/removeComment",
     "survey": "useSurvey().fetchSurveys → survey_id → fetchSurvey → submitResponse(공개)",
-    "reservation": "useReservation().fetchTargets → target_id → fetchTarget/fetchSlots → (로그인) book(무료·현장) 또는 prepare→토스위젯→confirm(카드) → myBookings/cancel",
-    "store": "useStore().fetchConfig(store_enabled 확인) → fetchProducts → product_id → fetchProduct → (로그인) prepare→토스위젯→confirm(=주문생성) → myOrders → confirmPurchase · [필수] 모든 페이지 푸터에 통신판매중개업자 고지",
+    "payment": "결제 공통(usePayment) — 결제 있는 모든 화면(store·예약·커스텀): fetchTerms()로 표준 구매약관(통신판매중개 고지·결제진행 동의·환불정책·개인정보 제공) content 표시+동의(동의 전 결제 진입 금지) · [필수] 모든 페이지 푸터에 통신판매중개업자(엠바스) 고지 · 위젯 인라인 단일방식(gck_ 키, 뒤로가기 유지, USER_CANCEL 무시) · 실결제(금액 서버확정 prepare+시크릿키 confirm)는 store/reservation 소유 — 커스텀은 결과 id를 reference로 연결(금액·결제상태를 커스텀 필드에 두고 클라가 쓰는 것 금지=위변조)",
+    "reservation": "useReservation().fetchTargets → target_id → fetchTarget/fetchSlots → (로그인) book(무료·현장) 또는 beginWidgetCheckout(카드, 위젯 인라인)→confirm → myBookings/cancel · 결제 약관/고지·위젯 규칙은 payment 공통 규약",
+    "store": "useStore().fetchConfig(store_enabled 확인) → fetchProducts → product_id → fetchProduct → (로그인) beginWidgetCheckout(위젯 인라인)→confirm(=주문생성) → myOrders → confirmPurchase · 결제 약관/고지·위젯 규칙은 payment 공통 규약(fetchTerms 동의 + 모든 페이지 푸터 통신판매중개업자 고지)",
     "collection": "요구에 맞춰 UI 설계 → baas-cli로 컬렉션/필드+접근정책 생성(스키마, settings.access=CRUD 연산별 grants — atom 또는 배열(OR), atom=public|member|owner|ref_owner:<field>, --access-json으로 달라지는 연산만 덮어씀) → collection name 주입 → useCollection().fetchRecords(name,{filter,sort})는 records={items,total_count,...} 봉투 반환(렌더는 records.items map, records.map 아님) 또는 fetchPublicRecords(read:public 목록)/BaasSDK.getPublicRecord(read:public 단건) — fetchRecords/fetchRecord는 read:public이어도 로그인 필수이고 비로그인 401시 null resolve(반환값 null 가드) → submitRecord/editRecord/removeRecord(정책·reference 무결성은 서버 강제) · 관계 패턴: 자식 컬렉션(신청·댓글)=reference+ref_owner, 트리=anchor+parent 이중 참조(평면 조회+클라 조립), N:M=정션 컬렉션 · union read(owner∪ref_owner)는 행별 자격 미표시라 관리 뷰로 그대로 렌더 금지 — account_id로 내 것/받은 것 분리, ref_owner 전용 액션은 받은 것 부분집합만 · 이미지 필드는 storage(useFileUpload)로 cdn_url 얻어 string(url) 저장 · UI는 앱이 요구에 맞춰 설계(범용 자동 렌더 아님), 스키마·정책 변경은 CLI/에이전트 소유",
     "storage": "<input type=file>의 File → useFileUpload().upload(file,{category}) (기본 images) → presign 발급 후 S3 직접 PUT → { cdn_url, download_url, key, file_id? } 반환 → cdn_url을 <img src> 또는 동적 컬렉션 이미지 필드(string url)에 저장. 업로드는 로그인 필요. category=images는 이미지 확장자·최대 10MB"
   },
@@ -62,6 +76,12 @@
       "surface_sections": ["설문조사 (survey)"],
       "features": [
         { "id": "survey", "label": "설문조사", "auth": false, "keywords": ["설문", "설문조사", "survey", "폼", "응답"] }
+      ]
+    },
+    "payment": {
+      "surface_sections": ["결제 (payment) — 공통 규약"],
+      "features": [
+        { "id": "payment", "label": "결제 공통(약관·고지·위젯)", "auth": "mixed", "keywords": ["결제", "payment", "토스", "구매약관", "약관 동의", "통신판매중개", "고지", "푸터", "환불정책", "개인정보 제공", "결제위젯"] }
       ]
     },
     "reservation": {

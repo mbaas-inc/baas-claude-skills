@@ -37,6 +37,7 @@ export {
   getPublicRecord,
 } from "./collection";
 export { uploadFile } from "./storage";
+export { getPurchaseTerms } from "./payment";
 export { registerRecipient } from "./recipient";
 export { listSurveys, getSurvey, submitSurveyResponse } from "./survey";
 export {
@@ -60,7 +61,6 @@ export {
   listProducts,
   listCategories,
   getProduct,
-  getStoreTerms,
   prepareOrder,
   confirmOrder,
   listMyOrders,
@@ -96,6 +96,7 @@ export type {
   UploadOptions,
   UploadResult,
 } from "./storage";
+export type { PurchaseTerms } from "./payment";
 export type { RecipientInput } from "./recipient";
 export type { Survey } from "./survey";
 export type {

@@ -41,8 +41,7 @@ export const listCategories = () =>
   request(`/public/store/${getProjectId()}/categories`);
 export const getProduct = (productId: string) =>
   request<Product>(`/public/store/${getProjectId()}/products/${productId}`);
-export const getStoreTerms = () =>
-  request(`/public/store/${getProjectId()}/terms`);
+// 구매약관 조회는 결제 공통 표면으로 이동 → core/payment.ts getPurchaseTerms (usePayment().fetchTerms)
 
 // ── 회원: 결제 준비(주문 미생성) → 앱이 토스 위젯 호출 ──
 export const prepareOrder = (productId: string, quantity: number) =>

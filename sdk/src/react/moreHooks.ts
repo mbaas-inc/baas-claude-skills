@@ -24,6 +24,14 @@ function useAsync() {
   return { loading, error, run };
 }
 
+/** 결제 공통 훅 — fetchTerms()로 표준 구매약관을 받아 결제 전 표시+동의. 결제 실행은 store/reservation 소유. */
+export function usePayment() {
+  const React = getReact();
+  const { loading, error, run } = useAsync();
+  const fetchTerms = React.useCallback(() => run(() => core.getPurchaseTerms()), []);
+  return { fetchTerms, loading, error };
+}
+
 export function useRecipient() {
   const React = getReact();
   const { loading, error, run } = useAsync();
@@ -147,8 +155,7 @@ export function useStore() {
   const fetchConfig = React.useCallback(() => run(async () => { const d = await core.getStoreConfig(); setConfig(d); return d; }), []);
   const fetchProducts = React.useCallback((p: Record<string, string> = {}) => run(async () => { const d = await core.listProducts(p); setProducts((d as any).items ?? []); return d; }), []);
   const fetchProduct = React.useCallback((id: string) => run(() => core.getProduct(id)), []);
-  // 구매약관(/terms) 조회 — 결제 전 표시 + 동의를 받는 데 사용(전자상거래 청약/환불 고지).
-  const fetchTerms = React.useCallback(() => run(() => core.getStoreTerms()), []);
+  // 구매약관 조회는 결제 공통 훅으로 이동 → usePayment().fetchTerms
   const prepare = React.useCallback((productId: string, qty: number) => run(() => core.prepareOrder(productId, qty)), []);
   const confirm = React.useCallback((data: any) => run(() => core.confirmOrder(data)), []);
   const myOrders = React.useCallback((p: Record<string, string> = {}) => run(() => core.listMyOrders(p)), []);
@@ -159,5 +166,5 @@ export function useStore() {
     (params: core.StoreWidgetCheckoutParams) => core.beginStoreWidgetCheckout(params),
     [],
   );
-  return { config, products, loading, error, fetchConfig, fetchProducts, fetchProduct, fetchTerms, prepare, confirm, beginWidgetCheckout, myOrders, confirmPurchase, cancel };
+  return { config, products, loading, error, fetchConfig, fetchProducts, fetchProduct, prepare, confirm, beginWidgetCheckout, myOrders, confirmPurchase, cancel };
 }
