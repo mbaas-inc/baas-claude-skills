@@ -166,5 +166,10 @@ export function useStore() {
     (params: core.StoreWidgetCheckoutParams) => core.beginStoreWidgetCheckout(params),
     [],
   );
-  return { config, products, loading, error, fetchConfig, fetchProducts, fetchProduct, prepare, confirm, beginWidgetCheckout, myOrders, confirmPurchase, cancel };
+  return {
+    config, products, loading, error, fetchConfig, fetchProducts, fetchProduct,
+    prepare, confirm, beginWidgetCheckout, myOrders, confirmPurchase, cancel,
+    getCheckoutContext: core.getStoreCheckoutContext,
+    clearCheckoutContext: core.clearStoreCheckoutContext,
+  };
 }

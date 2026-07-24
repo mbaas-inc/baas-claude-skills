@@ -47,6 +47,7 @@ export {
   getSlotRange,
   createBooking,
   prepareBooking,
+  startBooking,
   confirmBooking,
   listMyBookings,
   getBooking,
@@ -62,12 +63,15 @@ export {
   listCategories,
   getProduct,
   prepareOrder,
+  startOrder,
   confirmOrder,
   listMyOrders,
   getOrder,
   confirmPurchase,
   cancelOrder,
   beginStoreWidgetCheckout,
+  getStoreCheckoutContext,
+  clearStoreCheckoutContext,
 } from "./store";
 export { SDK_VERSION } from "../version";
 export type {
@@ -110,4 +114,5 @@ export type {
   Product,
   StoreWidgetCheckoutParams,
   StoreWidgetHandle,
+  StoreCheckoutContext,
 } from "./store";

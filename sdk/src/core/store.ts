@@ -43,9 +43,18 @@ export const getProduct = (productId: string) =>
   request<Product>(`/public/store/${getProjectId()}/products/${productId}`);
 // 구매약관 조회는 결제 공통 표면으로 이동 → core/payment.ts getPurchaseTerms (usePayment().fetchTerms)
 
-// ── 회원: 결제 준비(주문 미생성) → 앱이 토스 위젯 호출 ──
+// ── 회원: 결제 준비(위젯 금액용, 주문·세션 미생성) → 앱이 토스 위젯 호출 ──
 export const prepareOrder = (productId: string, quantity: number) =>
   request<{ order_no: string; amount: number; order_name: string }>(`/store/orders/prepare`, {
+    method: "POST",
+    body: { product_id: productId, quantity, terms_agreed: true },
+  });
+
+// ── 회원: 결제 개시("결제하기" 클릭 시점) → 결제 세션(CREATED) + 주문(PENDING) 생성, order_no 발급 ──
+// 위젯 열기(prepare)엔 만들지 않고, 실제 결제 요청 시점에만 세션을 만든다(미결제 세션 노이즈 방지).
+// 반환 order_no 를 토스 orderId 로 쓴다 → 카드 confirm(동기) / 가상계좌 웹훅(비동기)이 이 세션을 완결.
+export const startOrder = (productId: string, quantity: number) =>
+  request<{ order_no: string; amount: number; order_name: string }>(`/store/orders/checkout/start`, {
     method: "POST",
     body: { product_id: productId, quantity, terms_agreed: true },
   });
@@ -86,6 +95,30 @@ export const cancelOrder = (orderId: string, reason: string) =>
   request(`/store/orders/${orderId}/cancel`, { method: "POST", body: { reason } });
 
 // ── 회원: 결제위젯(인라인) — 앱 화면 안에서 결제(뒤로가기 유지). 결제는 위젯 방식으로 통일 ──
+const STORE_CHECKOUT_CTX = "baas_store_checkout_ctx";
+
+/** 결제 복귀 페이지에서 confirm 에 필요한 컨텍스트(order_no/상품·수량). start 시점에 저장된다. */
+export interface StoreCheckoutContext {
+  order_no: string;
+  product_id: string;
+  quantity: number;
+}
+export function getStoreCheckoutContext(): StoreCheckoutContext | null {
+  try {
+    const raw = sessionStorage.getItem(STORE_CHECKOUT_CTX);
+    return raw ? (JSON.parse(raw) as StoreCheckoutContext) : null;
+  } catch {
+    return null;
+  }
+}
+export function clearStoreCheckoutContext(): void {
+  try {
+    sessionStorage.removeItem(STORE_CHECKOUT_CTX);
+  } catch {
+    /* noop */
+  }
+}
+
 export interface StoreWidgetCheckoutParams {
   productId: string;
   quantity: number;
@@ -97,8 +130,8 @@ export interface StoreWidgetCheckoutParams {
 }
 export interface StoreWidgetHandle {
   amount: number;
-  orderNo: string;
-  /** 사용자가 결제 버튼을 누를 때 호출 — 성공 시 successUrl 로 리다이렉트, USER_CANCEL 은 throw. */
+  /** 사용자가 결제 버튼을 누를 때 호출 — 이 시점에 결제 세션/주문을 생성(start)한 뒤 토스 결제 요청.
+   *  성공 시 successUrl 로 리다이렉트(paymentKey/orderId/amount 쿼리 포함), USER_CANCEL 은 throw. */
   requestPayment(opts: {
     successUrl: string;
     failUrl: string;
@@ -109,11 +142,14 @@ export interface StoreWidgetHandle {
 }
 
 /**
- * 스토어 결제위젯 시작 — `getStoreConfig()` 로 위젯 키를 얻고 `prepareOrder()` 로 금액을 서버 확정한 뒤,
- * 결제수단/약관 위젯을 앱 DOM(셀렉터)에 렌더한다. 반환 handle 을 앱이 보관했다가 결제 버튼 클릭 시
- * `handle.requestPayment({ successUrl, failUrl })` 호출 → 성공 시 successUrl 로 리다이렉트(paymentKey/
- * orderId/amount 쿼리 포함), 복귀 페이지에서 `confirm({ order_no, payment_key, amount, product_id, quantity })`.
- * 결제수단 선택 UI가 앱 화면 안에 있어 결제 도중 뒤로가기가 유지된다. `toss_client_key` 는 결제위젯 키(gck_)여야 한다.
+ * 스토어 결제위젯 시작 — `getStoreConfig()` 로 위젯 키를 얻고 `prepareOrder()` 로 금액을 서버 확정해
+ * 결제수단/약관 위젯을 앱 DOM(셀렉터)에 렌더한다(이 시점엔 주문·세션을 만들지 않는다 — 위젯만 열고
+ * 이탈해도 잔재 없음). 반환 handle 을 앱이 보관했다가 결제 버튼 클릭 시 `handle.requestPayment(...)` 호출:
+ * **이 시점에** `startOrder()` 로 결제 세션(CREATED)+주문(PENDING)을 만들고 그 order_no 로 토스 결제를 요청한다.
+ *
+ * 복귀 페이지에서는 `getStoreCheckoutContext()`(order_no/product_id/quantity)와 토스 쿼리(paymentKey/amount)를
+ * 합쳐 `confirm({ order_no, payment_key, amount, product_id, quantity })` 후 `clearStoreCheckoutContext()`.
+ * 카드는 이 confirm(동기)이, 가상계좌는 입금 웹훅(비동기)이 결제를 완결한다. `toss_client_key` 는 위젯 키(gck_).
  */
 export async function beginStoreWidgetCheckout(
   params: StoreWidgetCheckoutParams
@@ -123,6 +159,7 @@ export async function beginStoreWidgetCheckout(
   if (!clientKey) {
     throw new BaasError("스토어 결제 설정이 없습니다(toss_client_key 미설정).", "STORE_NOT_CONFIGURED", 400);
   }
+  // 위젯 렌더용 금액만 서버 확정(주문·세션 미생성).
   const prepared = await prepareOrder(params.productId, params.quantity);
   const widget = await renderPaymentWidget({
     clientKey,
@@ -133,15 +170,29 @@ export async function beginStoreWidgetCheckout(
   });
   return {
     amount: prepared.amount,
-    orderNo: prepared.order_no,
-    requestPayment: (opts) =>
-      widget.requestPayment({
-        orderId: prepared.order_no,
-        orderName: opts.orderName ?? prepared.order_name,
+    requestPayment: async (opts) => {
+      // "결제하기" 클릭 시점 = 결제 요청 → 여기서 세션+주문(PENDING) 생성(노이즈 방지).
+      const started = await startOrder(params.productId, params.quantity);
+      try {
+        sessionStorage.setItem(
+          STORE_CHECKOUT_CTX,
+          JSON.stringify({
+            order_no: started.order_no,
+            product_id: params.productId,
+            quantity: params.quantity,
+          })
+        );
+      } catch {
+        /* sessionStorage 불가 환경이면 앱이 successUrl 쿼리로 대체 전달해야 함 */
+      }
+      await widget.requestPayment({
+        orderId: started.order_no,
+        orderName: opts.orderName ?? started.order_name,
         successUrl: opts.successUrl,
         failUrl: opts.failUrl,
         customerName: opts.customerName,
         customerEmail: opts.customerEmail,
-      }),
+      });
+    },
   };
 }

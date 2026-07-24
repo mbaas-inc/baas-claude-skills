@@ -29,7 +29,7 @@ export const createBooking = (
   data: { reserved_at: string; form_data: Record<string, unknown>; payment_method?: string }
 ) => request(`/reservation/targets/${targetId}/bookings`, { method: "POST", body: data });
 
-// ── 회원: 결제(위젯) 준비(예약 미생성) → 앱이 토스 위젯 호출 ──
+// ── 회원: 결제(위젯) 준비(금액·client_key용, 예약·세션 미생성) → 앱이 토스 위젯 호출 ──
 export const prepareBooking = (
   targetId: string,
   data: { reserved_at: string; form_data: Record<string, unknown> }
@@ -37,6 +37,17 @@ export const prepareBooking = (
   method: "POST",
   body: { ...data, payment_method: "online" },
 });
+
+// ── 회원: 결제 개시("결제하기" 클릭 시점) → 결제 세션(CREATED) + 예약(PENDING) 생성, order_no 발급 ──
+// 위젯 열기(prepare)엔 만들지 않고 실제 결제 요청 시점에만 만든다(미결제 세션 노이즈 방지). 이 시점에
+// 정원·폼을 재검증하고 슬롯을 선점(예약 생성)한다. order_no 를 토스 orderId 로 쓴다.
+export const startBooking = (
+  targetId: string,
+  data: { reserved_at: string; form_data: Record<string, unknown> }
+) => request<{ order_no: string; amount: number; client_key?: string }>(
+  `/reservation/targets/${targetId}/bookings/start`,
+  { method: "POST", body: { ...data, payment_method: "online" } }
+);
 
 // ── 회원: 결제(위젯) 승인 = 예약 생성 ──
 export const confirmBooking = (
@@ -74,7 +85,7 @@ export interface ReservationWidgetCheckoutParams {
 }
 export interface ReservationWidgetHandle {
   amount: number;
-  orderId: string;
+  /** 사용자가 결제 버튼을 누를 때 호출 — 이 시점에 예약(PENDING)+결제 세션을 생성(start)한 뒤 토스 결제 요청. */
   requestPayment(opts: {
     successUrl: string;
     failUrl: string;
@@ -102,47 +113,35 @@ export function clearReservationCheckoutContext(): void {
 }
 
 /**
- * 예약 결제위젯 시작 — `prepareBooking()`(응답에 client_key/order_no/amount 포함)로 주문을 만들고,
- * 결제수단/약관 위젯을 앱 DOM(셀렉터)에 렌더한다. 반환 handle 을 앱이 보관했다가 결제 버튼 클릭 시
- * `handle.requestPayment({ successUrl, failUrl })` 호출. 결제수단 선택 UI가 앱 화면 안에 있어 뒤로가기가 유지된다.
+ * 예약 결제위젯 시작 — `prepareBooking()`(응답에 client_key/amount 포함)로 금액을 서버 확정해 결제수단/약관
+ * 위젯을 앱 DOM(셀렉터)에 렌더한다(이 시점엔 예약·세션을 만들지 않는다 — 위젯만 열고 이탈해도 잔재 없음).
+ * 반환 handle 을 앱이 보관했다가 결제 버튼 클릭 시 `handle.requestPayment(...)` 호출: **이 시점에** `startBooking()`
+ * 으로 예약(PENDING)+결제 세션(CREATED)을 만들고(슬롯 선점) 그 order_no 로 토스 결제를 요청한다.
  *
- * confirm 에 필요한 reserved_at/form_data 는 결제 성공 리다이렉트 사이에 유지돼야 하므로 sessionStorage 에
- * 저장한다 → 복귀 페이지에서 `getReservationCheckoutContext()` 로 읽고 토스 쿼리(paymentKey/amount)와 합쳐
- * `confirm(target_id, { order_no, payment_key, amount, reserved_at, form_data })` 후 `clearReservationCheckoutContext()`.
+ * confirm 에 필요한 컨텍스트(order_no/reserved_at/form_data)는 리다이렉트 사이 유지돼야 하므로 start 직후
+ * sessionStorage 에 저장한다 → 복귀 페이지에서 `getReservationCheckoutContext()` 로 읽고 토스 쿼리(paymentKey/
+ * amount)와 합쳐 `confirm(target_id, { order_no, payment_key, amount, reserved_at, form_data })` 후
+ * `clearReservationCheckoutContext()`. 카드는 이 confirm(동기)이, 가상계좌는 입금 웹훅(비동기)이 결제를 완결한다.
  * 예약은 `toss_client_key` 를 config 가 아니라 `prepareBooking` 응답으로 받는다(store 와의 차이).
  */
 export async function beginReservationWidgetCheckout(
   targetId: string,
   params: ReservationWidgetCheckoutParams
 ): Promise<ReservationWidgetHandle> {
+  // 위젯 렌더용 금액/키만 서버 확정(예약·세션 미생성).
   const prepared = (await prepareBooking(targetId, {
     reserved_at: params.reserved_at,
     form_data: params.form_data,
-  })) as { order_no?: string; amount?: number; client_key?: string } | null;
+  })) as { amount?: number; client_key?: string } | null;
 
   const clientKey = prepared?.client_key;
-  const orderId = prepared?.order_no;
   const amount = prepared?.amount;
-  if (!clientKey || !orderId || amount == null) {
+  if (!clientKey || amount == null) {
     throw new BaasError(
-      "예약 결제 준비 정보가 올바르지 않습니다(client_key/order_no/amount 누락).",
+      "예약 결제 준비 정보가 올바르지 않습니다(client_key/amount 누락).",
       "RESERVATION_PREPARE_INVALID",
       400
     );
-  }
-
-  try {
-    sessionStorage.setItem(
-      RSV_CHECKOUT_CTX,
-      JSON.stringify({
-        target_id: targetId,
-        order_no: orderId,
-        reserved_at: params.reserved_at,
-        form_data: params.form_data,
-      })
-    );
-  } catch {
-    /* sessionStorage 불가 환경이면 앱이 successUrl 쿼리로 대체 전달해야 함 */
   }
 
   const widget = await renderPaymentWidget({
@@ -154,15 +153,41 @@ export async function beginReservationWidgetCheckout(
   });
   return {
     amount,
-    orderId,
-    requestPayment: (opts) =>
-      widget.requestPayment({
+    requestPayment: async (opts) => {
+      // "결제하기" 클릭 시점 = 결제 요청 → 여기서 예약+세션(PENDING) 생성(슬롯 선점, 노이즈 방지).
+      const started = await startBooking(targetId, {
+        reserved_at: params.reserved_at,
+        form_data: params.form_data,
+      });
+      const orderId = started?.order_no;
+      if (!orderId) {
+        throw new BaasError(
+          "예약 결제 개시에 실패했습니다(order_no 누락).",
+          "RESERVATION_START_INVALID",
+          400
+        );
+      }
+      try {
+        sessionStorage.setItem(
+          RSV_CHECKOUT_CTX,
+          JSON.stringify({
+            target_id: targetId,
+            order_no: orderId,
+            reserved_at: params.reserved_at,
+            form_data: params.form_data,
+          })
+        );
+      } catch {
+        /* sessionStorage 불가 환경이면 앱이 successUrl 쿼리로 대체 전달해야 함 */
+      }
+      await widget.requestPayment({
         orderId,
         orderName: opts.orderName ?? "예약",
         successUrl: opts.successUrl,
         failUrl: opts.failUrl,
         customerName: opts.customerName,
         customerEmail: opts.customerEmail,
-      }),
+      });
+    },
   };
 }
