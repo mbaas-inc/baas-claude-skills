@@ -127,9 +127,15 @@ POST /payment/confirm
 
 **남은 것(구현 착수 전 확정)**
 - **이행 어댑터 위치**: 백엔드 결제 서비스 내부 등록 vs 도메인 모듈이 결제 도메인에 등록(플러그인).
-- **웹훅 운용**: **토스 개발자센터에 웹훅 URL 등록**(ops/사람 — 코드로 불가)이 전제. 지급대행은 **셀러별
-  서브상점** 단위라 등록·정산이 셀러 단위로 얽힘. 진위 검증(서명 / paymentKey 재조회) + 멱등 키(order_no).
-  기존 `webhook/toss.py`(payout/seller 이벤트)에 `PAYMENT_STATUS_CHANGED`(결제정산) 분기 추가.
+- **웹훅 운용** (토스 공식 스펙 기준, docs.tosspayments.com/guides/v2/webhook):
+  - **이벤트**: 결제정산은 **`PAYMENT_STATUS_CHANGED`**(모든 결제수단 상태 변경). 취소는 `CANCEL_STATUS_CHANGED`,
+    가상계좌 입금은 `DEPOSIT_CALLBACK`. (지급대행 `payout.changed`/`seller.changed`는 기존 처리)
+  - **등록**: 토스 **개발자센터 웹훅 메뉴 → 웹훅 등록하기**(이름·URL·이벤트 선택), **상점(MID)별** 설정.
+    지급대행은 셀러 서브상점 단위 → 등록·정산이 셀러 단위. (ops/사람 — 코드로 불가)
+  - **응답 규약**: **10초 이내 200** 반환 필수. 미수신 시 **최대 7회 재전송**(1·4·16·64·256·1024·4096분, ~3일19시간).
+  - **⇒ 멱등 필수**(재전송 대비): `order_no` 기준 이미 PAID면 무시. body만 신뢰 말고 **paymentKey 재조회
+    (GET /v1/payments/{paymentKey}, 시크릿키)로 상태·금액 확정**(가이드에 서명 규약 없음).
+  - 기존 `webhook/toss.py`에 `PAYMENT_STATUS_CHANGED` 분기 추가 → 재조회 검증 → 멱등 create_paid_session + 이행.
 - (향후) 커스텀 금액 권위(고정가/변동가) 모델.
 
 ---
