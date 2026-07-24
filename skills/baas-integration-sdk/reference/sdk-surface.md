@@ -239,15 +239,15 @@ await w.requestPayment({
   failUrl: `${location.origin}/reservation-payment-fail`, orderName: `${target.name} 예약` });
 // → 성공 시 successUrl 로 리다이렉트(paymentKey/amount 쿼리). reserved_at/form_data 는 SDK가
 //   sessionStorage 에 보관 → 복귀 페이지에서:
-const ctx = r.getCheckoutContext();  // { target_id, order_id, reserved_at, form_data }
-await r.confirm(ctx.target_id, { order_id: ctx.order_id, payment_key, amount, reserved_at: ctx.reserved_at, form_data: ctx.form_data });
+const ctx = r.getCheckoutContext();  // { target_id, order_no, reserved_at, form_data }
+await r.confirm(ctx.target_id, { order_no: ctx.order_no, payment_key, amount, reserved_at: ctx.reserved_at, form_data: ctx.form_data });
 r.clearCheckoutContext();
 
 await r.myBookings();                            // 내 예약(로그인)
 await r.cancel(reservationId);
 ```
 - 결제 복귀 라우트는 **평면 경로**(`/reservation-payment-success`, `/reservation-payment-fail`)로 둘 것.
-- 예약은 `prepareBooking` 응답 안에 `client_key`가 포함된다(store 는 config 로 별도). confirm 필드는 store=`order_no`, 예약=`order_id`(값은 둘 다 토스 orderId) — `beginWidgetCheckout()`/`getCheckoutContext()` 가 세부 배선을 흡수한다.
+- 예약은 `prepareBooking` 응답 안에 `client_key`가 포함된다(store 는 config 로 별도). confirm 필드는 **store·예약 모두 `order_no`**(값은 토스 orderId) — `beginWidgetCheckout()`/`getCheckoutContext()` 가 세부 배선을 흡수한다.
 - 결제 방식(위젯 인라인)·`USER_CANCEL` 처리, **[필수] ①구매약관 동의 ②통신판매중개 고지 푸터**는 위
   **"결제 (payment) — 공통 규약"** 을 따른다(예약 결제 화면에도 ①②를 동일 적용).
 

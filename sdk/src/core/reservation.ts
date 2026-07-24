@@ -41,7 +41,7 @@ export const prepareBooking = (
 // ── 회원: 결제(위젯) 승인 = 예약 생성 ──
 export const confirmBooking = (
   targetId: string,
-  payload: { order_id: string; payment_key: string; amount: number; reserved_at: string; form_data: Record<string, unknown> }
+  payload: { order_no: string; payment_key: string; amount: number; reserved_at: string; form_data: Record<string, unknown> }
 ) => request(`/reservation/targets/${targetId}/bookings/confirm`, { method: "POST", body: payload });
 
 // ── 회원: 내 예약 ──
@@ -59,7 +59,7 @@ const RSV_CHECKOUT_CTX = "baas_reservation_checkout_ctx";
 
 export interface ReservationCheckoutContext {
   target_id: string;
-  order_id: string;
+  order_no: string;
   reserved_at: string;
   form_data: Record<string, unknown>;
 }
@@ -102,13 +102,13 @@ export function clearReservationCheckoutContext(): void {
 }
 
 /**
- * 예약 결제위젯 시작 — `prepareBooking()`(응답에 client_key/order_id/amount 포함)로 주문을 만들고,
+ * 예약 결제위젯 시작 — `prepareBooking()`(응답에 client_key/order_no/amount 포함)로 주문을 만들고,
  * 결제수단/약관 위젯을 앱 DOM(셀렉터)에 렌더한다. 반환 handle 을 앱이 보관했다가 결제 버튼 클릭 시
  * `handle.requestPayment({ successUrl, failUrl })` 호출. 결제수단 선택 UI가 앱 화면 안에 있어 뒤로가기가 유지된다.
  *
  * confirm 에 필요한 reserved_at/form_data 는 결제 성공 리다이렉트 사이에 유지돼야 하므로 sessionStorage 에
  * 저장한다 → 복귀 페이지에서 `getReservationCheckoutContext()` 로 읽고 토스 쿼리(paymentKey/amount)와 합쳐
- * `confirm(target_id, { order_id, payment_key, amount, reserved_at, form_data })` 후 `clearReservationCheckoutContext()`.
+ * `confirm(target_id, { order_no, payment_key, amount, reserved_at, form_data })` 후 `clearReservationCheckoutContext()`.
  * 예약은 `toss_client_key` 를 config 가 아니라 `prepareBooking` 응답으로 받는다(store 와의 차이).
  */
 export async function beginReservationWidgetCheckout(
@@ -118,14 +118,14 @@ export async function beginReservationWidgetCheckout(
   const prepared = (await prepareBooking(targetId, {
     reserved_at: params.reserved_at,
     form_data: params.form_data,
-  })) as { order_id?: string; amount?: number; client_key?: string } | null;
+  })) as { order_no?: string; amount?: number; client_key?: string } | null;
 
   const clientKey = prepared?.client_key;
-  const orderId = prepared?.order_id;
+  const orderId = prepared?.order_no;
   const amount = prepared?.amount;
   if (!clientKey || !orderId || amount == null) {
     throw new BaasError(
-      "예약 결제 준비 정보가 올바르지 않습니다(client_key/order_id/amount 누락).",
+      "예약 결제 준비 정보가 올바르지 않습니다(client_key/order_no/amount 누락).",
       "RESERVATION_PREPARE_INVALID",
       400
     );
@@ -136,7 +136,7 @@ export async function beginReservationWidgetCheckout(
       RSV_CHECKOUT_CTX,
       JSON.stringify({
         target_id: targetId,
-        order_id: orderId,
+        order_no: orderId,
         reserved_at: params.reserved_at,
         form_data: params.form_data,
       })
