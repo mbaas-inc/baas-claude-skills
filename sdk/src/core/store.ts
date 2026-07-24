@@ -130,8 +130,10 @@ export interface StoreWidgetCheckoutParams {
 }
 export interface StoreWidgetHandle {
   amount: number;
-  /** 사용자가 결제 버튼을 누를 때 호출 — 이 시점에 결제 세션/주문을 생성(start)한 뒤 토스 결제 요청.
-   *  성공 시 successUrl 로 리다이렉트(paymentKey/orderId/amount 쿼리 포함), USER_CANCEL 은 throw. */
+  orderNo: string;
+  /** 사용자가 결제 버튼을 누를 때 호출 — 성공 시 successUrl 로 리다이렉트, USER_CANCEL 은 throw.
+   *  ⚠ 반드시 클릭 핸들러 안에서 **동기로** 호출한다(앞에 await 를 두지 말 것) — 현대카드 등 팝업/앱카드
+   *  결제창은 사용자 제스처가 끊기면 안 뜬다. 그래서 세션/주문(order_no)은 결제 요청 전에 미리 만들어 둔다. */
   requestPayment(opts: {
     successUrl: string;
     failUrl: string;
@@ -142,14 +144,16 @@ export interface StoreWidgetHandle {
 }
 
 /**
- * 스토어 결제위젯 시작 — `getStoreConfig()` 로 위젯 키를 얻고 `prepareOrder()` 로 금액을 서버 확정해
- * 결제수단/약관 위젯을 앱 DOM(셀렉터)에 렌더한다(이 시점엔 주문·세션을 만들지 않는다 — 위젯만 열고
- * 이탈해도 잔재 없음). 반환 handle 을 앱이 보관했다가 결제 버튼 클릭 시 `handle.requestPayment(...)` 호출:
- * **이 시점에** `startOrder()` 로 결제 세션(CREATED)+주문(PENDING)을 만들고 그 order_no 로 토스 결제를 요청한다.
+ * 스토어 결제위젯 시작 — `getStoreConfig()` 로 위젯 키를 얻고 `startOrder()` 로 결제 세션(CREATED)+주문(PENDING)을
+ * 만들어 order_no·금액을 서버 확정한 뒤 결제수단/약관 위젯을 앱 DOM(셀렉터)에 렌더한다. 반환 handle 을 앱이
+ * 보관했다가 결제 버튼 클릭 시 `handle.requestPayment(...)` 를 **동기로** 호출한다(클릭~요청 사이에 비동기 작업을
+ * 넣지 않는다 — 현대카드 등 팝업 결제창의 사용자 제스처 유지). 세션/주문은 이 위젯 진입 시점(보통 약관 동의 후)에
+ * 만들어지고, 결제까지 안 간 미완료는 서버 정리 배치가 만료시킨다.
  *
- * 복귀 페이지에서는 `getStoreCheckoutContext()`(order_no/product_id/quantity)와 토스 쿼리(paymentKey/amount)를
- * 합쳐 `confirm({ order_no, payment_key, amount, product_id, quantity })` 후 `clearStoreCheckoutContext()`.
- * 카드는 이 confirm(동기)이, 가상계좌는 입금 웹훅(비동기)이 결제를 완결한다. `toss_client_key` 는 위젯 키(gck_).
+ * 복귀 페이지에서는 `getStoreCheckoutContext()`(order_no/product_id/quantity) 또는 successUrl 쿼리(orderId)와
+ * 토스 쿼리(paymentKey/amount)를 합쳐 `confirm({ order_no, payment_key, amount, product_id, quantity })` 후
+ * `clearStoreCheckoutContext()`. 카드는 이 confirm(동기)이, 가상계좌는 입금 웹훅(비동기)이 결제를 완결한다.
+ * `toss_client_key` 는 위젯 키(gck_).
  */
 export async function beginStoreWidgetCheckout(
   params: StoreWidgetCheckoutParams
@@ -159,40 +163,39 @@ export async function beginStoreWidgetCheckout(
   if (!clientKey) {
     throw new BaasError("스토어 결제 설정이 없습니다(toss_client_key 미설정).", "STORE_NOT_CONFIGURED", 400);
   }
-  // 위젯 렌더용 금액만 서버 확정(주문·세션 미생성).
-  const prepared = await prepareOrder(params.productId, params.quantity);
+  // 결제 세션+주문(PENDING)을 위젯 진입 시점에 생성 → order_no 확보(클릭 시 동기 requestPayment 위해).
+  const started = await startOrder(params.productId, params.quantity);
+  try {
+    sessionStorage.setItem(
+      STORE_CHECKOUT_CTX,
+      JSON.stringify({
+        order_no: started.order_no,
+        product_id: params.productId,
+        quantity: params.quantity,
+      })
+    );
+  } catch {
+    /* sessionStorage 불가 환경이면 앱이 successUrl 쿼리로 대체 전달해야 함 */
+  }
   const widget = await renderPaymentWidget({
     clientKey,
-    amount: prepared.amount,
+    amount: started.amount,
     methodsSelector: params.methodsSelector,
     agreementSelector: params.agreementSelector,
     customerKey: params.customerKey,
   });
   return {
-    amount: prepared.amount,
-    requestPayment: async (opts) => {
-      // "결제하기" 클릭 시점 = 결제 요청 → 여기서 세션+주문(PENDING) 생성(노이즈 방지).
-      const started = await startOrder(params.productId, params.quantity);
-      try {
-        sessionStorage.setItem(
-          STORE_CHECKOUT_CTX,
-          JSON.stringify({
-            order_no: started.order_no,
-            product_id: params.productId,
-            quantity: params.quantity,
-          })
-        );
-      } catch {
-        /* sessionStorage 불가 환경이면 앱이 successUrl 쿼리로 대체 전달해야 함 */
-      }
-      await widget.requestPayment({
+    amount: started.amount,
+    orderNo: started.order_no,
+    // 동기 호출 — 클릭 제스처 유지(현대카드 등 팝업 결제창). start 는 위에서 이미 끝남.
+    requestPayment: (opts) =>
+      widget.requestPayment({
         orderId: started.order_no,
         orderName: opts.orderName ?? started.order_name,
         successUrl: opts.successUrl,
         failUrl: opts.failUrl,
         customerName: opts.customerName,
         customerEmail: opts.customerEmail,
-      });
-    },
+      }),
   };
 }
