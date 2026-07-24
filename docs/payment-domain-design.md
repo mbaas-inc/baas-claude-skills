@@ -2,9 +2,9 @@
 
 > 스코프: **토스페이먼츠 지급대행 기반 "셀러 결제"** 도메인 (PortOne 플랫폼 결제와 별개 — §0 참조).
 
-> 상태: **설계 초안(합의 대상)** — 구현 전. 배경은 CLI+SDK+SDK스킬+에이전트로 기획만 가지고 앱을 생성하는
-> 빌더에서 결제를 어떻게 다룰지에 대한 것. store/reservation을 별도 도메인으로 보던 구조를 **"결제"라는
-> 하나의 도메인**으로 재편하는 방향을 정의한다.
+> 상태: **Phase 1(order_no 단일화) 완료 · Phase 2(앵커+웹훅) 설계 확정** — 구현 착수 대기. 배경은 CLI+SDK+
+> SDK스킬+에이전트로 기획만 가지고 앱을 생성하는 빌더에서 결제를 어떻게 다룰지에 대한 것. store/reservation을
+> 별도 도메인으로 보던 구조를 **"결제"라는 하나의 도메인**으로 재편하는 방향을 정의한다.
 
 ## 1. 배경 · 문제
 현재 결제는 **store와 reservation이 각자 소유**한다(각자 prepare/confirm/금액/이행). 그 결과:
@@ -35,6 +35,10 @@
   (`PAYMENT_STATUS_CHANGED` 등, 재조회 검증 가능) 결제 도메인을 새로 분리하는 이번에 **웹훅 수신부를 도메인
   안에 포함**한다 — 브라우저 이탈(결제됐는데 주문 미생성) 문제를 근본 해결. 웹훅과 confirm 중 먼저 온 것이
   멱등하게 PAID 확정.
+- **앵커 = 주문서(도메인 order/booking) PENDING 적재**(별도 세션 payload/PaymentIntent 테이블 없음). 적재 시점은
+  **결제 요청(결제하기 클릭)** — 위젯 열기(prepare)엔 미적재(노이즈 방지). 상세 §5.5.
+- **이행 어댑터 위치 = (b) 도메인 모듈이 결제 도메인에 플러그인 등록**(결제 도메인은 store/reservation을 모름).
+- **Phase 1(식별자 order_no 단일화) 완료** — store(PR #640)·reservation(PR #642) 머지, SDK 0.10.4 반영.
 
 ## 2. 목표
 - **하나의 결제 계약**: prepare → 위젯 → confirm → 이행. 식별자·약관·위젯·정산을 결제 도메인이 단일 소유.
@@ -86,11 +90,37 @@ POST /payment/confirm
 | custom | (고정가) 관리자 소유 가격 / (변동가) prepare 기록액 | 커스텀 레코드 생성·갱신(paid) |
 
 어댑터 인터페이스(개념): `resolveAmount(target_ref, input) -> amount` + `fulfill(order_no, payment) -> domain_result`.
+- **위치(확정) = (b) 도메인 모듈이 결제 도메인에 플러그인 등록.** 결제 도메인은 store/reservation을 몰라도 되고,
+  새 결제 도메인은 어댑터만 추가(결제 도메인 무수정).
+
+## 5.5 앵커 모델 — 주문서 PENDING 적재 (확정)
+웹훅이 결제 확정을 이행하려면 **결제 완료 전에 서버에 앵커**가 있어야 한다. 앵커 = **주문서(도메인 order/booking)를
+PENDING으로 적재**한 것. 별도 세션 payload/PaymentIntent 테이블을 두지 않는다 — **주문서 자체가 앵커이자 이행 데이터**
+(상품/수량·reserved_at/form_data·**서버확정 금액**·buyer를 이미 담음).
+
+**적재 시점 = 결제 요청(결제하기 클릭).** 위젯 열기(prepare)엔 적재하지 않는다(위젯만 여는 사람 = orphan 노이즈).
+`requestPayment`는 브라우저→토스 직접 호출이라 백엔드를 안 거치므로, 결제하기 클릭 시 백엔드 "결제 개시"를 한 번
+호출해 주문서를 PENDING으로 만든 뒤 requestPayment 한다.
+```
+prepare (위젯)      → 금액 확정 + 위젯 렌더. **미적재.**
+[결제하기 클릭]      → 백엔드 결제개시: 주문서 PENDING 적재(order_no · 서버확정 금액 · 상품/수량·reserved_at/form_data · buyer)
+                      → 응답 { order_no } (세션 내부는 안 내려줌) → 토스 requestPayment(orderId=order_no)
+웹훅 / confirm       → order_no로 PENDING 주문서 조회 → 토스 재조회 검증(실결제액 == 주문서 금액)
+                      → PENDING→PAID (create_paid_session) [멱등: 이미 PAID면 skip]
+cleanup             → 이탈한 PENDING 주문서 만료(주기 job)
+```
+- **주문서 = 서버 앵커** — 클라엔 `order_no`만 반환, 주문서 내부(금액·상세)는 열지 않는다.
+- **모델 영향(최소)**: store order·reservation booking 모두 **PENDING 상태 + 필드(상품/수량·reserved_at/form_data·
+  order_no·amount) 이미 존재** → 새 컬럼/테이블 거의 불필요. 변경은 주로 **동작**(주문서 생성을 confirm→결제요청
+  시점으로, PENDING으로). PaymentSession은 PAID 때 생성(현행). 추가: 버려진 PENDING cleanup job.
 
 ## 6. 안전 불변식 (반드시 유지)
 앞선 논의(백엔드 프리미티브·웹훅)에서 도출한 것들:
 1. **금액 서버 확정**: prepare가 target 원천에서 금액 산출(클라이언트 amount 신뢰 금지).
-2. **시크릿키 정산 검증**: confirm(및/또는 웹훅)이 시크릿키로 토스 실결제액을 조회해 확정액과 일치 검증.
+2. **시크릿키 정산 검증 + 브라우저 위변조 차단**: 브라우저는 신뢰하지 않는다. 서버 정산(confirm/웹훅)은 클라 금액이
+   아니라 **주문서의 서버확정 금액**으로 토스 confirm 하고, **토스가 실결제 승인액 == confirm 금액을 검증** → 불일치면
+   거절(미정산). 브라우저가 위젯 금액을 조작해도 정산 실패로 끝나 **under-pay 불가**. order_no↔주문서 1:1이라 싼 주문서
+   스왑도 불가. (그래서 §5.5처럼 주문서에 서버 금액을 적재해두는 것이 위변조 방지의 신뢰 원천)
 3. **멱등 + 단일사용**: 같은 order_no 재confirm/웹훅 재전송에도 이행 1회만(이미 PAID면 무시).
 4. **금액·구매자 바인딩**: order_no에 묶인 금액(과 가능하면 구매자)이 이행 대상과 일치.
 5. **paid 상태 = 서버 소유**: 커스텀 컬렉션 필드에 결제상태를 두고 클라이언트가 쓰는 것 금지 —
@@ -112,21 +142,22 @@ POST /payment/confirm
 - 위젯 렌더(renderPaymentWidget)·약관·식별자(order_no)는 이미/앞으로 공통.
 
 ## 9. 마이그레이션 경로 (단계적)
-1. **계약 통일(단기)**: reservation confirm/prepare 필드도 `order_no`로 맞춰 store와 통일(작은 백엔드 PR).
-   → 드리프트 제거. SDK 결제 표면을 usePayment로 수렴 시작.
-2. **결제 도메인 서비스(중기)**: 백엔드에 단일 `/payment/prepare|confirm`(+웹훅) + 이행 어댑터(store/reservation
-   기존 로직을 어댑터로 편입). SDK usePayment.prepare/confirm 노출.
+1. ✅ **계약 통일(완료)**: store #640 + reservation #642 로 confirm/prepare 필드 `order_no` 통일, SDK 0.10.4 반영.
+2. **앵커 + 웹훅 정산(진행 예정 = Phase 2)**: (§5.5) 결제 요청 시 주문서 PENDING 적재 + confirm/웹훅으로 PENDING→PAID.
+   기존 `webhook/toss.py`에 `PAYMENT_STATUS_CHANGED` 분기 + paymentKey 재조회 검증 + cleanup job. 이행 어댑터(b) 정식화.
 3. **커스텀 결제 개방(중기)**: custom target_type + 어댑터(read-through/서버 이행). 스킬에 "커스텀 결제 붙이는 법" 규약.
 4. **정리**: store/reservation의 중복 prepare/confirm 제거(어댑터로 대체), 스킬을 결제 단일 도메인 관점으로 재서술.
 
 ## 10. 합의 결과 / 남은 것
 **합의됨**
-- ✅ **식별자 = `order_no` 단일**.
+- ✅ **식별자 = `order_no` 단일** — **Phase 1 완료**(store #640·reservation #642 머지, SDK 0.10.4).
 - ✅ **정산 권위 = 토스 웹훅(권위) + 클라 confirm(UX backstop)** — 웹훅 수신부를 결제 도메인에 포함.
+- ✅ **앵커 = 주문서 PENDING 적재**, 적재 시점 = **결제 요청 시**(§5.5). 세션은 서버 앵커(클라엔 order_no만).
+- ✅ **이행 어댑터 위치 = (b) 도메인 모듈 플러그인 등록**.
+- ✅ **위변조 방지 = 서버금액 주문서 기반 confirm + 토스 실결제액 검증**(§6-2).
 - ✅ **커스텀 결제 미포함**(어댑터 인터페이스로 확장 여지만 확보).
 
-**남은 것(구현 착수 전 확정)**
-- **이행 어댑터 위치**: 백엔드 결제 서비스 내부 등록 vs 도메인 모듈이 결제 도메인에 등록(플러그인).
+**남은 것(Phase 2 구현 세부)**
 - **웹훅 운용** (토스 공식 스펙 기준, docs.tosspayments.com/guides/v2/webhook):
   - **이벤트**: 결제정산은 **`PAYMENT_STATUS_CHANGED`**(모든 결제수단 상태 변경). 취소는 `CANCEL_STATUS_CHANGED`,
     가상계좌 입금은 `DEPOSIT_CALLBACK`. (지급대행 `payout.changed`/`seller.changed`는 기존 처리)
