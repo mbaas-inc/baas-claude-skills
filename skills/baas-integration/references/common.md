@@ -94,9 +94,50 @@ interface ValidationErrorResponse {
 
 ---
 
-## 환경변수 설정
+## project_id 설정
 
-외부 에디터에서 BaaS API 사용 시 **project_id 환경변수 설정 필수**:
+### AI Studio 프로젝트 (기본)
+
+> ⚠️ **AI Studio에는 `.env`를 읽어 주입하는 빌드 단계가 없습니다.**
+> 미리보기는 esbuild 서버 번들러, 릴리스는 정적 배포로 동작하며 둘 다 `.env`를 읽지 않습니다.
+> `import.meta.env.*` / `process.env.*` 는 런타임에 **항상 `undefined`** 입니다.
+
+project_id는 **평문 소스 상수**로 선언한다. 값은 작업 컨텍스트로 주입되는
+`baas_project_uuid` 를 그대로 사용한다.
+
+```typescript
+// src/lib/baas/config.ts
+export const BASE_URL = '/aiapp-baas';
+
+/**
+ * 이 프로젝트에 프로비저닝된 BaaS 프로젝트 식별자.
+ * 환경변수가 아닌 평문 상수로 유지한다 — 미리보기 번들러(esbuild)와
+ * 릴리스 빌드가 동일한 값을 인라인해야 하기 때문.
+ */
+export const BAAS_PROJECT_ID = '<baas_project_uuid 값>';
+
+export function getProjectId(): string {
+  return BAAS_PROJECT_ID;
+}
+```
+
+**금지**
+
+- `.env` / `.env.local` 파일을 만들어 project_id를 넣지 말 것 (읽는 주체가 없음)
+- `import.meta.env.VITE_BAAS_PROJECT_ID`, `process.env.*_BAAS_PROJECT_ID` 참조 금지
+
+**기존 코드 마이그레이션 (필수)**
+
+BaaS 기능을 추가·수정할 때 기존 `config.ts` 가 환경변수에서 project_id를 읽고 있으면,
+그대로 두지 말고 위 상수 방식으로 **교체**한다. 함수 시그니처(`getProjectId()`)는 유지해
+호출부를 건드리지 않는다. 남아 있는 `.env` 파일은 삭제하지 않아도 무방하다(무시됨).
+
+> project_id 외의 비밀값이 필요한 기능은 클라이언트 소스에 넣지 말고 BaaS API를 경유한다.
+> 상수화 규칙은 **공개 식별자인 project_id 에만** 적용된다.
+
+### 외부 에디터 (사용자 로컬 개발)
+
+AI Studio 밖에서 직접 빌드하는 경우에만 환경변수를 사용한다.
 
 | 환경 | 환경변수명 |
 |------|-----------|
@@ -105,7 +146,6 @@ interface ValidationErrorResponse {
 | Next.js | `NEXT_PUBLIC_BAAS_PROJECT_ID` |
 | Vite | `VITE_BAAS_PROJECT_ID` |
 
-### getProjectId() 함수 패턴
 ```typescript
 function getProjectId(): string {
   const projectId =
