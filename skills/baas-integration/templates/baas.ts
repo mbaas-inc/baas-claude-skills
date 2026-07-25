@@ -6,11 +6,12 @@
  * 사용법:
  * import { login, signup, logout, getAccountInfo, registerRecipient } from './baas';
  *
- * 환경변수 설정 필요:
- * - BAAS_PROJECT_ID (Node.js)
- * - REACT_APP_BAAS_PROJECT_ID (React CRA)
- * - NEXT_PUBLIC_BAAS_PROJECT_ID (Next.js)
- * - VITE_BAAS_PROJECT_ID (Vite)
+ * project_id 설정:
+ * - AI Studio 프로젝트: 아래 getProjectId()를 평문 상수 반환으로 교체할 것.
+ *   (.env 주입 단계가 없어 환경변수는 항상 undefined — references/common.md 참조)
+ * - 외부 에디터에서 직접 빌드하는 경우에만 아래 환경변수를 사용:
+ *   BAAS_PROJECT_ID / REACT_APP_BAAS_PROJECT_ID /
+ *   NEXT_PUBLIC_BAAS_PROJECT_ID / VITE_BAAS_PROJECT_ID
  */
 
 // ============================================

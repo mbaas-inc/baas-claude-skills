@@ -31,7 +31,7 @@ description: "(BaaS API) 회원 인증 + 발송대상 + 게시판 + 설문조사
 |------|-----|
 | BASE_URL | `/aiapp-baas` |
 | 인증 | `credentials: 'include'` (모든 fetch 필수) |
-| 환경변수 | `REACT_APP_BAAS_PROJECT_ID` / `NEXT_PUBLIC_BAAS_PROJECT_ID` / `VITE_BAAS_PROJECT_ID` |
+| project_id | **평문 소스 상수**로 선언 (`baas_project_uuid` 값). AI Studio에는 `.env` 주입 단계가 없어 환경변수는 항상 `undefined` — [common.md](references/common.md#project_id-설정) 참조 |
 
 ---
 

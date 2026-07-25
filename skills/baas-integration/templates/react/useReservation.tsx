@@ -13,10 +13,8 @@
  * const { book, isLoading, error } = useReservationBooking(targetId);
  * const { reservations, fetchMine, update, cancel } = useMyReservations();
  *
- * 환경변수 설정 필요:
- * - REACT_APP_BAAS_PROJECT_ID (React CRA)
- * - NEXT_PUBLIC_BAAS_PROJECT_ID (Next.js)
- * - VITE_BAAS_PROJECT_ID (Vite)
+ * project_id는 config.ts의 getProjectId()를 사용합니다.
+ * AI Studio 프로젝트에서는 평문 상수로 선언해야 합니다 (.env 주입 단계 없음).
  */
 
 import { useState, useCallback } from 'react';
