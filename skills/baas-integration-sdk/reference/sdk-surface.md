@@ -63,7 +63,7 @@ UX 규약:
 
 ## 게시판 (board)
 
-board_id 는 **baas-cli로 미리 생성**해 코드에 상수로 주입한다(`baas board create --type FREE --name "..." --ensure --json` → `board.id`).
+board_id 는 **프로비저닝 담당이 미리 생성**한 값을 코드 상수로 주입한다(생성 방식·CLI 문법은 이 문서 범위 밖).
 
 ### `useBoard()`
 ```tsx
@@ -113,7 +113,7 @@ await fetchPost(postId);
 
 ## 게시판 (board)
 
-board_id 는 **baas-cli로 생성**해 코드 상수로 주입(`baas board create --type FREE|REVIEW --name "..." --ensure --json` → `board.id`).
+board_id 는 **프로비저닝 담당이 생성**한 값을 코드 상수로 주입(게시판 종류는 FREE|REVIEW 등 — 생성은 이 문서 범위 밖).
 ```tsx
 const { posts, post, loading, error, fetchPosts, fetchPost, submitPost, editPost, removePost } = BaasSDK.useBoard();
 await fetchPosts(BOARD_ID, { limit: 20, offset: 0, keyword });  // posts = { items, total }
@@ -300,8 +300,10 @@ await s.cancel(orderId, reason);           // 취소=전액 환불
 **사용자 정의 커스텀 데이터**(고정 기능이 커버 못 하는 것). 데이터 프리미티브만 제공 — **범용 자동
 렌더 없음**. 앱은 요구에 맞춰 UI를 설계하고 이 훅으로 데이터만 연결한다.
 
-**전제**: `collection name`·필드(스키마)·접근 정책은 **baas-cli로 먼저 생성**(`baas collection create --name inventory
---field item_name:string:req,idx … [--access-json '{"read":"public"}']` / `baas collection field add …`). 스키마·정책 변경은 CLI/에이전트 소유(콘솔·앱에서 변경 아님).
+**전제**: `collection name`·필드(스키마)·접근 정책은 **프로비저닝 담당이 먼저 생성**한다 — 필드는
+`이름:타입:수식어`(예: `item_name:string` + required/indexed), 접근 정책은 기본값과 달라지는 연산만 명시
+(예: `read: public`). **생성 명령·플래그는 이 문서 범위 밖**이다(권위 = 설치된 CLI 의 `--help`).
+스키마·정책 변경은 프로비저닝 담당 소유(콘솔·앱에서 변경 아님).
 ```tsx
 const { records, record, loading, error,
         fetchRecords, fetchPublicRecords, fetchRecord, submitRecord, editRecord, removeRecord } = BaasSDK.useCollection();
@@ -362,7 +364,7 @@ await BaasSDK.getPublicRecord("inventory", recordId);                           
   [파일 업로드(storage)](#파일-업로드-storage) 절의 `useFileUpload` 로 `cdn_url` 을 얻어 string(url) 필드에 저장한다.
 - `records.items`가 비면 빈 상태 UI. 작성/수정 성공 후 `fetchRecords`로 새로고침.
 - 표현 가능 범위(필드 타입·정책·제약)의 **권위 원본은 SDK 타입 + 런타임 컬렉션 스키마** — 이 문서는
-  프리미티브 사용법만. 스키마·정책은 CLI로 조회(`baas collection get <name>` → fields + settings.access).
+  프리미티브 사용법만. 스키마·정책은 런타임 컬렉션 상세 조회로 확인한다(fields + settings.access).
 
 ---
 

@@ -12,13 +12,27 @@ BaaS 백엔드와 대화하는 transport·훅은 **런타임 CDN SDK**(`window.B
 > 이 스킬은 transport를 SDK로 올려, API가 바뀌어도 **CDN push 1회로 전 앱에 반영**(재생성·재빌드 0)되게 한다.
 > 두 스킬은 병행 존재하되 **한 프로젝트에 섞지 않는다** — SDK 스킬로 만든 앱은 전부 SDK 경유.
 
+## 범위 경계 (이 스킬이 정의하는 것 / 하지 않는 것)
+
+| | 내용 |
+|---|---|
+| **정의한다** | SDK 표면(훅·시그니처·반환 타입·에러→UI), **무엇을 프로비저닝해야 하는가**(리소스 종류·필드 스키마·접근 정책 의미론), 화면 규약(상태·가드·약관·푸터) |
+| **정의하지 않는다** | **`baas` CLI 의 명령·플래그 문법** — 권위는 설치된 CLI 의 `baas <group> <action> --help` 다 |
+
+**왜 나누는가**: SDK 스킬과 CLI 는 **버전 라인이 독립**이다. 스킬에 플래그를 박아두면 CLI 가 바뀔 때
+아무도 잡지 못해 조용히 낡는다(실측: 없는 명령을 안내하던 사례). 또한 역할 분리 환경에서 **CLI 실행은
+프로비저닝 담당(backend_operator) 소유**이고, 이 스킬을 읽는 UI/연동 구현자는 **CLI 변경 명령을 쓰지 않는다**.
+
+접근 정책·관계 패턴 같은 **의미론은 여기 남는다** — 그것이 어떤 SDK 훅을 쓸지 결정하기 때문이다
+(예: `read: public` 이면 `fetchPublicRecords`, 아니면 `fetchRecords`).
+
 ---
 
 ## 생성 흐름
 
 1. **`features.json`을 읽어** 요청에 맞는 기능 그룹을 파악한다(`account`·`recipient`·`notice`·`board`·`survey`·`reservation`·`store`·`collection`·`storage`).
 2. 해당 기능의 **`reference/sdk-surface.md`** 섹션을 읽어 SDK 훅/함수 시그니처·반환 타입·에러→UI 규약을 확인한다.
-3. **백엔드 리소스가 필요하면 `baas` CLI로 먼저 만든다** (예: 게시판 → `baas board create`). 반환된 id를 UI 코드에 상수로 주입한다.
+3. **백엔드 리소스가 필요하면 UI보다 먼저 프로비저닝한다** — 실행은 `baas` CLI를 쓰는 프로비저닝 담당(에이전트 환경의 backend_operator 역할) 소관이다. 이 스킬은 **무엇이 필요한지**(리소스 종류·스키마·접근 정책)를 정의하고, **CLI 문법은 정의하지 않는다**(권위 = 설치된 `baas <group> <action> --help`). 확정된 이름/id를 UI 코드에 주입한다 — 기억으로 다시 타이핑하지 말 것.
 4. **`scaffold/wiring.md`의 배선 보일러플레이트를 그대로** index.html·앱 진입점에 포함한다(창작 금지 — SDK 로딩·host React 노출·init).
 5. SDK 훅으로 UI를 조립한다. UI/UX(레이아웃·상태·로딩·에러 표시)는 이 스킬의 원칙을 따라 생성한다.
 6. 생성 후 **`baas-manifest.json`을 기록**한다(아래 "버전 매니페스트").
@@ -56,28 +70,30 @@ SDK는 CDN에서 로드되고 앱의 React 인스턴스를 공유한다. 이 배
 아니라 **에이전트(운영 지침) 소관** — 이 스킬은 선택된 기술의 스펙만 정의한다.
 
 - **공동 설계 흐름**: 요구 → (표현 범위·제약을 알고) **UI 설계 + 그에 맞는 스키마·접근 정책 구성** →
-  `baas collection create/field add`로 스키마 생성 → `useCollection` 프리미티브로 UI 연결.
+  프로비저닝 담당이 컬렉션·필드를 생성 → `useCollection` 프리미티브로 UI 연결.
   UI는 SDK 프리미티브·표현 범위(필드 타입·필터 DSL·정책) **안에서 구현 가능하게** 직접
   설계한다(범용 자동 렌더 아님 — 그건 관리자 콘솔 몫).
 - **접근 정책 = CRUD 연산별 grants**: `settings.access = {create, read, update, delete}`, 값은
   **atom 또는 배열(OR 합집합)**. atom ∈ `public|member|owner|ref_owner:<field>`(참조 부모 레코드의
   소유자 — #626). 기본 create:member/read:member/update:owner/delete:owner, create 는 public|member 만.
-  에이전트가 설계한 각 화면 액션(목록·상세·작성·수정·삭제)의 대상에 맞춰 **달라지는 연산만**
-  `--access-json`으로 덮어쓴다(예: 공개 목록+작성자수정 → `{"read":"public"}`). 서버가 강제하므로
+  에이전트가 설계한 각 화면 액션(목록·상세·작성·수정·삭제)의 대상에 맞춰 **기본값과 달라지는 연산만**
+  명시한다(예: 공개 목록 + 작성자만 수정 → `read: public` 만 덮어씀). 서버가 강제하므로
   UI는 게이트/버튼 노출만 맞춘다.
 - **관계 설계 패턴** (관계 값은 `reference` 필드 — 서버가 대상 실존을 강제(dangling 400), 1-hop):
-  - **자식 컬렉션**(신청·참가·문의 등 "부모 글에 달리는 데이터"): `post_id:reference:<부모>` +
-    `--access-json '{"read":["owner","ref_owner:post_id"],"update":["ref_owner:post_id"],"delete":["owner","ref_owner:post_id"]}'`
+  - **자식 컬렉션**(신청·참가·문의 등 "부모 글에 달리는 데이터"): `post_id:reference:<부모>` + access
+    `read: [owner, ref_owner:post_id]` · `update: [ref_owner:post_id]` · `delete: [owner, ref_owner:post_id]`
     → 작성자는 자기 것 열람·취소, **부모 글 주인은 목록·수락/거절** — 서버가 강제.
     (전제: 부모 컬렉션이 owner 를 스탬프해야 함 — 기본 update/delete:owner 면 충족.)
   - **트리**(댓글→답글→∞): 노드마다 **root anchor**(`post_id`→루트 글) + **parent**(`parent_id`→자기
     컬렉션 self-reference) 이중 참조. 조회는 anchor 평면 1회(`filter:{post_id:{eq}}`+`sort:created_at`)
     후 클라에서 parent_id 로 조립 — 깊이 무한. 글주인 모더레이션은 `ref_owner:post_id`(깊이 무관).
   - **N:M**(좋아요·참가자·태그): reference 2개짜리 **정션 컬렉션**으로 표현(서버 기계 불필요).
-- **스키마·정책 권한**: 컬렉션/필드/정책 생성·변경은 **baas-cli(에이전트) 소유**. 요구가 바뀌면 UI와
-  스키마·정책을 함께 재설계한다. 신규 필드는 optional만 추가 가능.
-- **표현 범위의 원본**: 필드 타입·정책·필터 능력은 SDK 타입 + `baas collection get <name>`(런타임
-  스키마 + settings.access)이 권위 원본. 프리미티브 사용법은 `reference/sdk-surface.md`의 "동적 컬렉션" 참조.
+- **스키마·정책 권한**: 컬렉션/필드/정책 생성·변경은 **프로비저닝 담당(`baas` CLI) 소유** — 이 스킬을 읽는
+  UI/연동 구현자는 스키마를 바꾸지 않는다. 요구가 바뀌면 UI와 스키마·정책을 함께 재설계한다.
+  신규 필드는 optional만 추가 가능.
+- **표현 범위의 원본**: 필드 타입·정책·필터 능력은 SDK 타입 + **런타임 스키마 조회 결과**(컬렉션 상세 —
+  필드 정의 + settings.access)가 권위 원본이다. 프리미티브 사용법은 `reference/sdk-surface.md`의
+  "동적 컬렉션" 참조.
 
 ## UI/UX 생성 원칙
 
