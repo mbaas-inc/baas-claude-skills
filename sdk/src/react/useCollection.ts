@@ -10,8 +10,6 @@ import {
   createRecord,
   updateRecord,
   deleteRecord,
-  listPublicRecords,
-  getPublicRecord,
 } from "../core/collection";
 import type { DynRecord, RecordListResult, RecordListOptions } from "../core/collection";
 
@@ -45,20 +43,14 @@ export function useCollection() {
     []
   );
 
-  const fetchPublicRecords = React.useCallback(
-    (name: string, options: RecordListOptions = {}) =>
-      run(async () => {
-        const data = await listPublicRecords(name, options);
-        setRecords(data);
-        return data;
-      }),
-    []
-  );
+  /** @deprecated `fetchRecords` 와 동일하다 — 공개/회원 경로가 하나로 합쳐졌다. */
+  const fetchPublicRecords = fetchRecords;
 
+  // isPublic 은 경로 통합으로 무의미해졌다. 인자를 남겨 호출부 호환만 유지한다.
   const fetchRecord = React.useCallback(
-    (name: string, recordId: string, isPublic = false) =>
+    (name: string, recordId: string, _isPublic = false) =>
       run(async () => {
-        const data = isPublic ? await getPublicRecord(name, recordId) : await getRecord(name, recordId);
+        const data = await getRecord(name, recordId);
         setRecord(data);
         return data;
       }),

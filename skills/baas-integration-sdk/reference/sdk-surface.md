@@ -308,40 +308,36 @@ await s.cancel(orderId, reason);           // 취소=전액 환불
 const { records, record, loading, error,
         fetchRecords, fetchPublicRecords, fetchRecord, submitRecord, editRecord, removeRecord } = BaasSDK.useCollection();
 
-// 회원(로그인) 경로 — 접근 정책(settings.access)은 서버가 강제
+// 읽기 — 로그인 여부와 무관하게 같은 함수. 범위는 접근 정책(settings.access)이 서버에서 판정
 await fetchRecords("inventory", { limit: 20, offset: 0, sort: "-created_at",
                                   filter: { quantity: { lt: 5 }, category: { eq: "전자" } } });
 // records = { items, total_count, offset, limit }; item = { id, collection, data:{...}, account_id, created_at }
 // ⚠️ 렌더는 records 가 아니라 records.items 를 map 한다 (records 는 배열이 아니라 봉투):
 //    (records?.items ?? []).map((r) => r.data.item_name)   // records.map(...) 는 TypeError
-await fetchRecord("inventory", recordId);   // 인증 단건 — read:public이어도 로그인 필수(비로그인은 401→null)
+await fetchRecord("inventory", recordId);   // 단건 — 비로그인이면 read:public 범위로 판정
 await submitRecord("inventory", { item_name: "노트북", quantity: 3, category: "전자" });  // create 정책 member/owner면 로그인 필수
 await editRecord("inventory", recordId, { quantity: 10 });                                 // update 정책 owner면 작성자만
 await removeRecord("inventory", recordId);                                                  // delete 정책 owner면 작성자만
 
-// 공개(비로그인) 읽기 — read 정책이 public 인 컬렉션 전용
-await fetchPublicRecords("inventory", { filter: { category: { eq: "전자" } } });   // 목록(다건)
-await BaasSDK.getPublicRecord("inventory", recordId);                              // 단건 — 훅에 래퍼 없어 top-level 사용
+// fetchPublicRecords / BaasSDK.getPublicRecord 는 deprecated 별칭(동작 동일) — 신규 코드에서 쓰지 않는다
 ```
 - **접근 정책 (settings.access — CRUD 연산별 grants, 서버 강제)**: `{create, read, update, delete}`,
   값 = **atom 또는 배열(OR 합집합)**. atom ∈ `public`(누구나) | `member`(로그인) | `owner`(레코드 작성자)
   | `ref_owner:<field>`(그 레코드의 reference 필드가 가리키는 **부모 레코드의 작성자** — #626).
   기본값 create:member/read:member/update:owner/delete:owner, create 는 public|member 만.
-  - **읽기 함수 선택 (인증상태 × 개수)** — `read:public` 이어도 `fetchRecords`/`fetchRecord` 는 **항상
-    로그인 세션 필요**(인증 데이터플레인 라우트, 컬렉션 read 정책과 무관). 비로그인 조회는 공개 함수로만:
+  - **읽기 함수는 하나다** — 목록은 `fetchRecords`, 단건은 `fetchRecord`. 로그인 여부로 함수를 고르지
+    않는다. 비로그인이면 `read:public` 범위, 로그인이면 회원 범위로 **서버가 정책을 보고 판정**한다.
 
     | | 목록(다건) | 단건 |
     |---|---|---|
-    | 비로그인 가능(`read:public`) | `fetchPublicRecords(name, {filter,sort})` | `BaasSDK.getPublicRecord(name, id)` |
-    | 로그인 필요 | `fetchRecords(name, …)` | `fetchRecord(name, id)` |
+    | 로그인 무관 | `fetchRecords(name, {filter,sort})` | `fetchRecord(name, id)` |
 
-    `getPublicRecord` 는 훅(`useCollection`)에 래퍼가 없어 **top-level `BaasSDK.getPublicRecord`** 로 부른다
-    (SDK 표면 — raw fetch 아님). `fetchPublicRecords` 는 레코드 `id` 로 필터가 안 되므로(`unknown_field`)
-    단건 조회에 못 쓴다.
-  - ⚠️ **인증 읽기(`fetchRecords`/`fetchRecord`)는 비로그인(401) 시 `BaasError` throw가 아니라 `null` 을
-    resolve** 한다 → 반환값을 `res?.items ?? []`/null 로 가드(또는 로그인 상태에서만 호출). 쓰기·기타
-    작업은 실패 시 `BaasError`(.message) throw(상단 §성공/실패 규약) — 에러 **표시 방식**(토스트/모달/
-    인라인)은 앱 UX 소관.
+    `fetchPublicRecords`·`BaasSDK.getPublicRecord` 는 **deprecated 별칭**이다(경로 통합으로 동작 동일).
+    기존 앱 호환용이라 신규 코드에서는 쓰지 않는다. 로그인 상태에서 별칭을 부르면 회원 범위로
+    판정되므로, `read: [public, owner]` 같은 혼합 정책에서 공개분만 보려면 `filter` 로 명시해야 한다.
+  - ⚠️ **정책이 거부하면(예: `read:member`/`owner` 인데 비로그인) `BaasError` throw가 아니라 `null` 을
+    resolve** 한다 → 반환값을 `res?.items ?? []`/null 로 가드. 쓰기·기타 작업은 실패 시
+    `BaasError`(.message) throw(상단 §성공/실패 규약) — 에러 **표시 방식**(토스트/모달/인라인)은 앱 UX 소관.
   - `read:owner` → `fetchRecords`가 **본인 레코드만** 반환(개인 데이터).
   - `read:["owner","ref_owner:post_id"]` → `fetchRecords`는 **내 레코드(owner)** ∪ **내가 주인인 부모
     (post_id)에 달린 레코드(ref_owner)** 의 **합집합**을 반환한다. ⚠️ 응답은 **각 행이 어느 자격으로
