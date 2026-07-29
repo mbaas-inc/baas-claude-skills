@@ -9,6 +9,7 @@ import {
   updateRecord,
   deleteRecord,
   listPublicRecords,
+  getPublicRecord,
 } from "../dist/baas-core.esm.js";
 
 const PROJECT = "b59f841d-bfa3-4d63-8969-70420a4298f6";
@@ -75,11 +76,22 @@ test("deleteRecord — DELETE 경로", async () => {
   assert.equal(method, "DELETE");
 });
 
-test("listPublicRecords — 공개 경로에 project_id 주입", async () => {
+test("listPublicRecords — 회원 경로로 통합됨(공개 전용 경로 미사용)", async () => {
   init({ projectId: PROJECT });
   let seen;
   mockFetch((url) => { seen = url; return ok({ items: [], total_count: 0, offset: 0, limit: 20 }); });
   await listPublicRecords("inventory", { filter: { category: { eq: "전자" } } });
-  assert.match(seen, new RegExp(`/public/collections/${PROJECT}/inventory/records\\?`));
+  assert.match(seen, /\/collections\/inventory\/records\?/);
+  assert.doesNotMatch(seen, /\/public\/collections/, "deprecated 공개 경로를 더 이상 호출하지 않아야 한다");
+  assert.doesNotMatch(seen, new RegExp(PROJECT), "경로에 project_id 를 넣지 않아야 한다(host 로 해석)");
   assert.match(seen, /filter%5Bcategory%5D%5Beq%5D=/);
+});
+
+test("getPublicRecord — getRecord 와 동일 경로", async () => {
+  init({ projectId: PROJECT });
+  let seen;
+  mockFetch((url) => { seen = url; return ok({ id: "r1", collection: "inventory", data: {} }); });
+  await getPublicRecord("inventory", "r1");
+  assert.match(seen, /\/collections\/inventory\/records\/r1$/);
+  assert.doesNotMatch(seen, /\/public\/collections/);
 });
