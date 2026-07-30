@@ -300,7 +300,8 @@ const r = BaasSDK.useReservation();
 await r.fetchTargets();                          // 예약 대상 목록(공개) → 훅 state `targets` 에 담김
 await r.fetchTarget(targetId);                   // 대상 상세 — ⚠️ state 없음, 반환값을 로컬 state 로
 await r.fetchSlots(targetId, { date });          // 가용 슬롯 — ⚠️ state 없음 + 봉투 반환(아래)
-await r.book(targetId, { reserved_at, form_data });  // 무료·현장 즉시 예약, 로그인 필수
+await r.book(targetId, { reserved_at, form_data, payment_method });  // 무료·현장 즉시 예약, 로그인 필수
+//   ⚠️ payment_method 는 유료 + 결제수단 복수 제공일 때 **필수**다(아래 "결제 경로 선택" 표).
 ```
 
 **`fetchTarget()` 반환 shape — 가격·정원·소요시간은 평평하지 않고 `reservation_settings` 안에 중첩된다.**
@@ -325,6 +326,27 @@ await r.book(targetId, { reserved_at, form_data });  // 무료·현장 즉시 �
 | 참가비 | `target.reservation_settings.payment_policy.amount` |
 | 정원 | `target.reservation_settings.slot_policy.slot_capacity` |
 | 소요시간 | `target.reservation_settings.slot_policy.slot_duration_min` |
+| **제공 결제수단** | `payment_policy.online` · `payment_policy.onsite` → **예약 경로를 이 값으로 고른다**(아래) |
+
+### 결제 경로 선택 — `payment_policy` 를 읽어 분기한다 (한쪽으로 고정하지 말 것)
+
+**`online`/`onsite` 는 대상마다 다르고, 운영자가 콘솔에서 언제든 켜고 끈다.** 앱 생성 시점에 관측한
+값으로 경로를 고정하면 정책이 바뀌는 순간 조용히 깨진다 — 화면은 멀쩡히 그려지고 **예약 버튼만 죽는다.**
+매번 `fetchTarget()` 결과를 읽어 분기한다.
+
+| `amount` | `online` | `onsite` | 화면이 해야 할 것 |
+|---|---|---|---|
+| `0` | – | – | **무료** — `book(id, { reserved_at, form_data })` (`payment_method` 생략) |
+| `>0` | ✅ | ❌ | `beginWidgetCheckout` (위젯). **①구매약관 ②중개고지 푸터 필수** |
+| `>0` | ❌ | ✅ | `book(id, { …, payment_method: 'onsite' })` — 약관·푸터 불요(앱이 결제를 중개하지 않음) |
+| `>0` | ✅ | ✅ | **사용자에게 결제수단을 고르게 한다.** 고른 값이 `onsite` 면 `book(…, 'onsite')`, `online` 이면 위젯 |
+
+- ⚠️ **유료 + 복수 제공인데 `payment_method` 를 안 보내면 400** `"결제 방법을 선택해 주세요."` 다.
+  단일 제공일 때만 서버가 자동 선택한다 — 그래서 "지금 onsite 하나뿐"인 상태에서 만든 코드는
+  나중에 online 이 켜지는 순간 400 으로 죽는다.
+- ⚠️ **`book()` 에 `payment_method: 'online'` 을 보내면 400** `"카드 결제 예약은 결제 준비(prepare)를
+  거쳐 결제 완료 시 생성됩니다."` — 카드는 반드시 `beginWidgetCheckout` 경로다(결제 완료 시점에 예약 생성).
+- 제공되지 않는 수단을 보내도 400 `"선택한 결제 방법은 제공되지 않습니다."`
 
 **`fetchSlots()` 반환 shape — 배열이 아니라 봉투이고, 시각 필드명은 `slot` 이다**(`reserved_at` 아님):
 ```jsonc
