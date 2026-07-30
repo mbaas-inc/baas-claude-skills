@@ -102,10 +102,14 @@ export function useSurvey() {
   const { loading, error, run } = useAsync();
   const [surveys, setSurveys] = React.useState<core.Survey[] | null>(null);
   const [survey, setSurvey] = React.useState<core.Survey | null>(null);
-  // ⚠️ 비대칭 주의: state `surveys` 에는 **배열**, 반환값은 `{ items }` **봉투**(useStore.fetchProducts 와 동일).
-  //    앱은 state `surveys` 를 렌더에 쓴다.
+  // 반환값 === state (`surveys` 배열) — useStore.fetchProducts 와 동일 규약(v0.13.0).
   const fetchSurveys = React.useCallback(
-    (params: Record<string, string> = {}) => run(async () => { const d = await core.listSurveys(params); setSurveys((d as any).items ?? []); return d; }),
+    (params: Record<string, string> = {}) =>
+      run(async () => {
+        const items = (await core.listSurveys(params)).items ?? [];
+        setSurveys(items);
+        return items;
+      }),
     []
   );
   const fetchSurvey = React.useCallback(
@@ -155,10 +159,18 @@ export function useStore() {
   const [config, setConfig] = React.useState<core.StoreConfig | null>(null);
   const [products, setProducts] = React.useState<core.Product[] | null>(null);
   const fetchConfig = React.useCallback(() => run(async () => { const d = await core.getStoreConfig(); setConfig(d); return d; }), []);
-  // ⚠️ 비대칭 주의: state `products` 에는 **배열**을 넣고, 반환값은 `{ items }` **봉투**를 그대로 준다.
-  //    앱은 반환값이 아니라 state `products` 를 렌더에 써야 한다(반환값을 .map 하면 TypeError).
-  //    (스킬 reference/sdk-surface.md "훅 계약 ②" 표와 일치시킬 것.)
-  const fetchProducts = React.useCallback((p: Record<string, string> = {}) => run(async () => { const d = await core.listProducts(p); setProducts((d as any).items ?? []); return d; }), []);
+  // 반환값 === state (`products` 배열). 코어는 백엔드 버전차 흡수를 위해 `{items}` 로 정규화하지만,
+  // 훅 표면에서는 그 봉투를 벗겨 **state 와 같은 값**을 돌려준다(v0.13.0 — 이전엔 봉투를 반환해
+  // `(await fetchProducts()).map(...)` 이 TypeError 였다).
+  const fetchProducts = React.useCallback(
+    (p: Record<string, string> = {}) =>
+      run(async () => {
+        const items = (await core.listProducts(p)).items ?? [];
+        setProducts(items);
+        return items;
+      }),
+    []
+  );
   const fetchProduct = React.useCallback((id: string) => run(() => core.getProduct(id)), []);
   // 구매약관 조회는 결제 공통 훅으로 이동 → usePayment().fetchTerms
   const prepare = React.useCallback((productId: string, qty: number) => run(() => core.prepareOrder(productId, qty)), []);

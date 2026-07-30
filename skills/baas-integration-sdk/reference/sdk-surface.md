@@ -31,19 +31,31 @@ navigate("/board");
 `fetch*` 를 호출한 뒤 무엇을 렌더에 쓸지는 훅마다 다르다. **표에 없는 이름을 구조분해하면
 `undefined` 라서 화면이 영구히 빈 상태가 된다.**
 
+**불변식: 훅에 state 가 있으면 `fetch*` 반환값 === 그 state 값이다.** 둘 중 무엇을 써도 같다.
+state 가 **없는** 함수만 반환값을 로컬 state 로 받으면 된다.
+
 | 훅 | 훅이 노출하는 state | `fetch*` 반환값 | 렌더에 쓸 것 |
 |---|---|---|---|
-| `useBoard` | `posts` = `{items,total}` · `post` | 같은 값 | **state** |
-| `useNotice`/`useFaq` | `posts` = `{items,total}` · `post` | 같은 값 | **state** |
-| `useComments` | `comments` = `{items,total}` | 같은 값 | **state** |
-| `useCollection` | `records` = `{items,total_count,…}` · `record` | 같은 값 | **state** (`records.items` 를 map) |
-| `useStore` | `config` · `products` = **배열** | `fetchProducts` 는 `{items}` **봉투** ⚠️ | **state `products`** |
-| `useSurvey` | `surveys` = **배열** · `survey` | `fetchSurveys` 는 봉투 ⚠️ | **state `surveys`** |
-| `useReservation` | `targets` **만** | `fetchTarget`/`fetchSlots`/`myBookings` 는 **state 없음** | **반환값을 로컬 state 로** |
-| `useStore` (나머지) | — | `fetchProduct`/`myOrders` 는 **state 없음** | **반환값을 로컬 state 로** |
+| `useBoard` | `posts` = `{items,total}` · `post` | 같은 값 | state 또는 반환값 |
+| `useNotice`/`useFaq` | `posts` = `{items,total}` · `post` | 같은 값 | state 또는 반환값 |
+| `useComments` | `comments` = `{items,total}` | 같은 값 | state 또는 반환값 |
+| `useCollection` | `records` = `{items,total_count,…}` · `record` | 같은 값 | state 또는 반환값 (`.items` 를 map) |
+| `useStore` | `config` · `products` = **배열** | 같은 값(배열) | state 또는 반환값 |
+| `useSurvey` | `surveys` = **배열** · `survey` | 같은 값(배열) | state 또는 반환값 |
+| `useReservation` | `targets` = 배열 | `fetchTargets` 는 같은 값 | state 또는 반환값 |
+| — **state 없음** — | | | |
+| `useReservation` | — | `fetchTarget` · `fetchSlots` · `myBookings` | **반환값을 로컬 state 로** |
+| `useStore` | — | `fetchProduct` · `myOrders` | **반환값을 로컬 state 로** |
 
-⚠️ `useStore().fetchProducts` 와 `useSurvey().fetchSurveys` 는 **state 에는 배열을 넣고 반환은 봉투**를
-준다(비대칭). 반환값을 그대로 `.map` 하면 `TypeError: x.map is not a function` 이다 — **state 를 써라.**
+**목록 형태가 두 가지인 이유**: 페이지네이션이 있는 조회(게시판·공지·댓글·동적 컬렉션)는 총 개수가
+필요해 `{items, total}` 봉투를, 전량 조회(스토어 상품·설문·예약 대상)는 **배열**을 준다.
+
+**state 없는 함수는 백엔드 응답을 그대로 준다**(가공 없음) — 그래서 `fetchSlots` 는 `{target_id, date,
+slots}` 봉투이고 `fetchTarget` 은 `reservation_settings` 가 중첩된 객체다(각 절의 shape 참조).
+
+> v0.13.0 변경: 이전엔 `useStore().fetchProducts` / `useSurvey().fetchSurveys` 가 state 엔 배열을 넣고
+> **반환은 `{items}` 봉투**를 줘서 `(await fetchProducts()).map(...)` 이 `TypeError` 였다. 위 불변식으로
+> 통일했다 — 반환값을 쓰던 코드에서 `.items` 를 떼면 된다.
 
 ### ③ 훅 반환 컨테이너를 의존성 배열에 넣지 않는다
 `const c = useCollection()` 처럼 컨테이너를 통째로 들고 `[c]` 를 의존성에 넣으면 매 렌더 새 객체라
@@ -364,7 +376,7 @@ await r.cancel(reservationId);
 ```tsx
 const { config, products, fetchConfig, fetchProducts, fetchProduct, ... } = BaasSDK.useStore();
 await fetchConfig();                      // → 훅 state `config`. store_enabled 확인 후 진입(false면 "준비 중")
-await fetchProducts({ category_id });     // → 훅 state `products` (배열). ⚠️ 반환값은 { items } 봉투다
+await fetchProducts({ category_id });     // → state `products` = 배열. 반환값도 같은 배열(v0.13.0)
 await fetchProduct(productId);            // ⚠️ state 없음 — 반환값을 로컬 state 로 받는다
 
 // [필수] 구매약관은 결제 공통 훅으로 — const terms = await BaasSDK.usePayment().fetchTerms();
@@ -387,12 +399,11 @@ await s.myOrders();                        // 내 주문(로그인) — ⚠️ s
 await s.confirmPurchase(orderId);          // 구매확정(환불 불가 — 확인 다이얼로그 필수)
 await s.cancel(orderId, reason);           // 취소=전액 환불
 ```
-**목록 렌더는 훅 state `products` 를 쓴다** — `fetchProducts()` 의 반환값은 `{ items }` 봉투라 그대로
-`.map` 하면 `TypeError` 다:
+목록 렌더는 state `products` 를 쓰면 된다(반환값도 같은 배열이라 어느 쪽이든 동일):
 ```tsx
 const { products, fetchProducts } = BaasSDK.useStore();
-useEffect(() => { fetchProducts({}) }, [fetchProducts]);   // 호출만 — 반환값 사용 안 함
-return (products ?? []).map(p => …);                        // ✅ state 사용 (초기값 null 가드)
+useEffect(() => { fetchProducts({}) }, [fetchProducts]);
+return (products ?? []).map(p => …);                        // 초기값은 null 이므로 가드
 ```
 - 결제 방식(위젯 인라인)·복귀 경로·`USER_CANCEL` 처리, **[필수] ①구매약관 동의 ②통신판매중개 고지 푸터**는
   위 **"결제 (payment) — 공통 규약"** 을 따른다(구매약관은 `usePayment().fetchTerms()`).
