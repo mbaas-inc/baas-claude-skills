@@ -61,9 +61,25 @@ export default function App() {
 }
 ```
 
-## TypeScript 편의(선택)
-`window.BaasSDK` 타입은 배포된 `baas.d.ts` 를 참조하면 tsc 가 표면 오타(환각)를 빌드 시 잡는다.
-없어도 동작에는 문제없다.
+## TypeScript — `window.BaasSDK` 는 타입이 없다 (⚠️ tsc 가 아무것도 못 잡는다)
+
+`window.BaasSDK` 는 CDN 전역이라 **타입 선언이 없다**(배포물은 `baas-react.js` 뿐 — `.d.ts` 는
+발행하지 않는다). 앱은 보통 `(window as any).BaasSDK` 로 받는데, 그러면 훅 반환값의 **모든 필드
+접근이 `any`** 라서 다음이 전부 `tsc` 를 통과한다:
+
+```tsx
+const target = await fetchTarget(id);
+target.price.toLocaleString();     // ✅ tsc 통과 — 그러나 런타임 크래시(실제 필드는 중첩, 아래 참조)
+const products = await fetchProducts();
+products.map(...);                 // ✅ tsc 통과 — 그러나 런타임 크래시(반환값은 { items } 봉투)
+```
+
+**결론: 반환값 shape 은 타입이 지켜주지 않으므로 `reference/sdk-surface.md` 의 "훅 반환 계약" 표를
+읽고 맞춰야 한다.** 그리고 정적 검증(tsc·eslint·build)이 전부 통과해도 이 부류의 결함은
+**배포본에서만** 드러나므로, 배포 후 실제 화면·네트워크 응답으로 확인한다.
+
+앱에서 방어하려면 SDK 반환값을 받는 지점에 **직접 선언한 타입**을 붙이고(`as` 단언 말고 명시 타입),
+그 타입을 `sdk-surface.md` 의 표와 일치시킨다.
 
 ## 4. `baas-manifest.json` 자동 동기화 (stale 방지 — 고정 배선)
 마이그레이션 판정(업데이트 비교기)은 `baas-manifest.json` 의 `features_used`/`skill_version` 을 근거로 한다.

@@ -102,6 +102,8 @@ export function useSurvey() {
   const { loading, error, run } = useAsync();
   const [surveys, setSurveys] = React.useState<core.Survey[] | null>(null);
   const [survey, setSurvey] = React.useState<core.Survey | null>(null);
+  // ⚠️ 비대칭 주의: state `surveys` 에는 **배열**, 반환값은 `{ items }` **봉투**(useStore.fetchProducts 와 동일).
+  //    앱은 state `surveys` 를 렌더에 쓴다.
   const fetchSurveys = React.useCallback(
     (params: Record<string, string> = {}) => run(async () => { const d = await core.listSurveys(params); setSurveys((d as any).items ?? []); return d; }),
     []
@@ -153,6 +155,9 @@ export function useStore() {
   const [config, setConfig] = React.useState<core.StoreConfig | null>(null);
   const [products, setProducts] = React.useState<core.Product[] | null>(null);
   const fetchConfig = React.useCallback(() => run(async () => { const d = await core.getStoreConfig(); setConfig(d); return d; }), []);
+  // ⚠️ 비대칭 주의: state `products` 에는 **배열**을 넣고, 반환값은 `{ items }` **봉투**를 그대로 준다.
+  //    앱은 반환값이 아니라 state `products` 를 렌더에 써야 한다(반환값을 .map 하면 TypeError).
+  //    (스킬 reference/sdk-surface.md "훅 계약 ②" 표와 일치시킬 것.)
   const fetchProducts = React.useCallback((p: Record<string, string> = {}) => run(async () => { const d = await core.listProducts(p); setProducts((d as any).items ?? []); return d; }), []);
   const fetchProduct = React.useCallback((id: string) => run(() => core.getProduct(id)), []);
   // 구매약관 조회는 결제 공통 훅으로 이동 → usePayment().fetchTerms

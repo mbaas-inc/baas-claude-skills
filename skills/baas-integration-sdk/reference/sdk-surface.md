@@ -3,8 +3,54 @@
 모든 함수/훅은 CDN 로드된 `window.BaasSDK`에 있다. import 하지 말고 전역에서 쓴다.
 transport·envelope·project_id 주입은 SDK 내부가 처리한다 — 아래 시그니처만 호출하면 된다.
 
-성공/실패 규약: 함수는 성공 시 데이터를 resolve, 실패 시 `BaasError`(`.message` 한국어, `.errorCode`, `.status`)를 throw.
-훅은 `{ loading, error }` 상태를 노출한다.
+## ⚠️ 먼저 읽을 것 — 훅 계약 (여기서 틀리면 배포본에서만 드러난다)
+
+`window.BaasSDK` 는 **타입이 없다**(CDN 전역, `.d.ts` 미발행). 아래 계약을 어겨도 `tsc`·`eslint`·
+`build` 는 전부 통과하고 **실사용 화면에서만** 크래시하거나 조용히 빈 화면이 된다.
+
+### ① 실패 규약 — **훅 액션은 throw 하지 않는다**
+
+| 호출 형태 | 실패 시 |
+|---|---|
+| **훅의 액션 함수** (`useBoard().submitPost`, `useCollection().fetchRecords`, `useStore().confirm`, `useLogin().login`, `useFileUpload().upload` …) | **throw 하지 않는다.** `null`(또는 `login`/`logout` 은 `false`) 을 resolve 하고 실패는 훅의 `error` state 에 담긴다 |
+| **예외 — `beginWidgetCheckout`** (store·reservation) | 이것만 **throw 한다**(내부 래퍼를 거치지 않음) → `try/catch` 필요 |
+| **훅 없는 top-level 함수** (`BaasSDK.uploadFile`, `changePassword`, `getAccountInfo` …) | `BaasError`(`.message` 한국어, `.errorCode`, `.status`) **throw** |
+
+```tsx
+// ❌ 훅 액션에 try/catch — catch 가 실행되지 않아 실패가 성공처럼 보인다
+try { await submitPost(BOARD_ID, {title, content}); navigate("/board"); } catch { /* 절대 안 옴 */ }
+
+// ✅ 반환값을 확인한다
+const ok = await submitPost(BOARD_ID, { title, content });
+if (!ok) return;              // error state 를 화면에 노출
+navigate("/board");
+```
+
+### ② 반환값 vs 훅 state — **셋은 서로 다른 규약이다**
+
+`fetch*` 를 호출한 뒤 무엇을 렌더에 쓸지는 훅마다 다르다. **표에 없는 이름을 구조분해하면
+`undefined` 라서 화면이 영구히 빈 상태가 된다.**
+
+| 훅 | 훅이 노출하는 state | `fetch*` 반환값 | 렌더에 쓸 것 |
+|---|---|---|---|
+| `useBoard` | `posts` = `{items,total}` · `post` | 같은 값 | **state** |
+| `useNotice`/`useFaq` | `posts` = `{items,total}` · `post` | 같은 값 | **state** |
+| `useComments` | `comments` = `{items,total}` | 같은 값 | **state** |
+| `useCollection` | `records` = `{items,total_count,…}` · `record` | 같은 값 | **state** (`records.items` 를 map) |
+| `useStore` | `config` · `products` = **배열** | `fetchProducts` 는 `{items}` **봉투** ⚠️ | **state `products`** |
+| `useSurvey` | `surveys` = **배열** · `survey` | `fetchSurveys` 는 봉투 ⚠️ | **state `surveys`** |
+| `useReservation` | `targets` **만** | `fetchTarget`/`fetchSlots`/`myBookings` 는 **state 없음** | **반환값을 로컬 state 로** |
+| `useStore` (나머지) | — | `fetchProduct`/`myOrders` 는 **state 없음** | **반환값을 로컬 state 로** |
+
+⚠️ `useStore().fetchProducts` 와 `useSurvey().fetchSurveys` 는 **state 에는 배열을 넣고 반환은 봉투**를
+준다(비대칭). 반환값을 그대로 `.map` 하면 `TypeError: x.map is not a function` 이다 — **state 를 써라.**
+
+### ③ 훅 반환 컨테이너를 의존성 배열에 넣지 않는다
+`const c = useCollection()` 처럼 컨테이너를 통째로 들고 `[c]` 를 의존성에 넣으면 매 렌더 새 객체라
+**무한 재요청 + 영구 로딩**이 된다. 개별 함수만 구조분해한다(`const { fetchRecords } = useCollection()`).
+`useMemo` 로 우회되지 않는다(반환 객체에 매 호출 토글되는 `loading` 이 함께 담겨 있다).
+또한 **`useCollection()` 인스턴스는 컬렉션당 하나** — 한 인스턴스로 두 컬렉션을 조회하면
+`records` 슬롯이 하나뿐이라 먼저 도착한 결과가 조용히 사라진다.
 
 ---
 
@@ -124,6 +170,14 @@ await removePost(postId);                          // 로그인 필수
 ```
 - 목록/상세 읽기는 공개, 작성/수정/삭제는 로그인 필수 → 비로그인 시 로그인 유도.
 - `posts.items`가 비면 "아직 글이 없습니다" 빈 상태. 작성 성공 후 `fetchPosts` 재조회.
+- **작성자 식별 필드는 `author_id`(계정 UUID) 이며 `fetchPost`(상세)에만 있다. `fetchPosts`(목록)
+  응답에는 없다** — 목록에는 표시용 `author_name` 만 온다(동적 컬렉션 레코드의 `account_id` 와 이름이
+  다르니 혼동 주의).
+  - 상세에서 본인 글 판정: `post.author_id === user.id` (`useAuth()` 의 `user`).
+  - **"내가 쓴 글 목록" 화면은 식별자 기반 필터가 불가능**하다. 그 화면이 요구되면 게시글을
+    동적 컬렉션으로 설계하거나(레코드 봉투에 `account_id` 가 있다), 사람에게 제약을 보고한다 —
+    `author_name` 비교는 동명이인을 구분하지 못하므로 권장하지 않는다.
+  - 수정/삭제 버튼 노출은 위 판정으로 좁히되, **실제 권한 경계는 서버(403)** 다.
 
 ## 댓글 (comments)
 ```tsx
@@ -231,10 +285,54 @@ const terms = await pay.fetchTerms();   // { title, content, version }
 슬롯/캘린더 기반. 무료·현장 예약은 즉시 생성, 카드 예약은 `beginWidgetCheckout`(위젯 인라인 — 위 **결제 공통 규약** 참조).
 ```tsx
 const r = BaasSDK.useReservation();
-await r.fetchTargets();                          // 예약 대상 목록(공개)
-await r.fetchTarget(targetId);                   // 운영설정·폼·결제정책
-await r.fetchSlots(targetId, { date });          // 가용 슬롯(공개)
+await r.fetchTargets();                          // 예약 대상 목록(공개) → 훅 state `targets` 에 담김
+await r.fetchTarget(targetId);                   // 대상 상세 — ⚠️ state 없음, 반환값을 로컬 state 로
+await r.fetchSlots(targetId, { date });          // 가용 슬롯 — ⚠️ state 없음 + 봉투 반환(아래)
 await r.book(targetId, { reserved_at, form_data });  // 무료·현장 즉시 예약, 로그인 필수
+```
+
+**`fetchTarget()` 반환 shape — 가격·정원·소요시간은 평평하지 않고 `reservation_settings` 안에 중첩된다.**
+`target.price` / `target.capacity` 같은 평평한 필드는 **없다**(그렇게 쓰면 런타임 크래시):
+```jsonc
+{
+  "id": "...", "name": "도자기 기초 물레성형", "description": "...", "image_url": null,
+  "is_active": true, "display_order": 0,
+  "reservation_settings": {
+    "operating_hours": { "mon": [["10:00","18:00"]], /* … 요일별 */ },
+    "slot_policy":   { "slot_duration_min": 120, "slot_capacity": 4,
+                        "advance_booking_days": 30, "min_lead_time_min": 0 },
+    "payment_policy": { "amount": 45000, "online": true, "onsite": false },
+    "approval_policy": { "auto_confirm": true, "confirmation_message": "..." },
+    "user_policy":   { "cancel_deadline_min": 1440, "allow_self_modify": true, "max_active_per_user": 3 }
+  },
+  "reservation_form_schema": { "fields": [] }
+}
+```
+| 화면에 쓸 값 | 경로 |
+|---|---|
+| 참가비 | `target.reservation_settings.payment_policy.amount` |
+| 정원 | `target.reservation_settings.slot_policy.slot_capacity` |
+| 소요시간 | `target.reservation_settings.slot_policy.slot_duration_min` |
+
+**`fetchSlots()` 반환 shape — 배열이 아니라 봉투이고, 시각 필드명은 `slot` 이다**(`reserved_at` 아님):
+```jsonc
+{ "target_id": "...", "date": "2026-08-03",
+  "slots": [ { "slot": "2026-08-03T10:00:00", "remaining": 4 },
+             { "slot": "2026-08-03T12:00:00", "remaining": 4 } ] }
+```
+```tsx
+const res = await r.fetchSlots(targetId, { date });
+setSlots(res?.slots ?? []);          // ✅ 언랩 — res ?? [] 로 받으면 .map 이 TypeError
+// 렌더: slots.map(s => new Date(s.slot).toLocaleTimeString(...))   // ✅ s.slot (s.reserved_at 아님)
+```
+⚠️ **응답 필드명(`slot`)과 요청 파라미터명(`reserved_at`)이 다르다** — 값의 출처만 바꾸고 파라미터
+이름은 유지한다:
+```tsx
+await r.beginWidgetCheckout(targetId, { reserved_at: selected.slot, form_data: {} , … });
+```
+정원이 찬 슬롯은 서버가 이미 제외하고 준다(앱에서 다시 거를 필요 없음).
+
+```tsx
 
 // 카드예약(위젯 인라인 — store 와 동일 계약). 앱에 결제수단/약관 컨테이너 div 2개를 두고:
 const w = await r.beginWidgetCheckout(targetId, {
@@ -264,10 +362,10 @@ await r.cancel(reservationId);
 
 디지털 상품 판매. 결제 방식·**[필수] ①구매약관 동의 ②통신판매중개 고지 푸터**는 위 **"결제 (payment) — 공통 규약"** 참조.
 ```tsx
-const s = BaasSDK.useStore();
-await s.fetchConfig();                    // config.store_enabled 확인 후 진입(false면 "준비 중")
-await s.fetchProducts({ category_id });   // s.products = Product[] (SDK가 items/data/배열 정규화)
-await s.fetchProduct(productId);
+const { config, products, fetchConfig, fetchProducts, fetchProduct, ... } = BaasSDK.useStore();
+await fetchConfig();                      // → 훅 state `config`. store_enabled 확인 후 진입(false면 "준비 중")
+await fetchProducts({ category_id });     // → 훅 state `products` (배열). ⚠️ 반환값은 { items } 봉투다
+await fetchProduct(productId);            // ⚠️ state 없음 — 반환값을 로컬 state 로 받는다
 
 // [필수] 구매약관은 결제 공통 훅으로 — const terms = await BaasSDK.usePayment().fetchTerms();
 //   content 를 결제 영역 위에 표시 + 동의 체크(동의 전 결제 진입 금지). 위 "결제 공통 규약 ①" 참조.
@@ -285,9 +383,16 @@ const ctx = s.getCheckoutContext();  // { order_no, product_id, quantity }
 await s.confirm({ order_no: ctx.order_no, payment_key, amount, product_id: ctx.product_id, quantity: ctx.quantity });
 s.clearCheckoutContext();
 
-await s.myOrders();                        // 내 주문(로그인)
+await s.myOrders();                        // 내 주문(로그인) — ⚠️ state 없음, 반환값을 로컬 state 로
 await s.confirmPurchase(orderId);          // 구매확정(환불 불가 — 확인 다이얼로그 필수)
 await s.cancel(orderId, reason);           // 취소=전액 환불
+```
+**목록 렌더는 훅 state `products` 를 쓴다** — `fetchProducts()` 의 반환값은 `{ items }` 봉투라 그대로
+`.map` 하면 `TypeError` 다:
+```tsx
+const { products, fetchProducts } = BaasSDK.useStore();
+useEffect(() => { fetchProducts({}) }, [fetchProducts]);   // 호출만 — 반환값 사용 안 함
+return (products ?? []).map(p => …);                        // ✅ state 사용 (초기값 null 가드)
 ```
 - 결제 방식(위젯 인라인)·복귀 경로·`USER_CANCEL` 처리, **[필수] ①구매약관 동의 ②통신판매중개 고지 푸터**는
   위 **"결제 (payment) — 공통 규약"** 을 따른다(구매약관은 `usePayment().fetchTerms()`).

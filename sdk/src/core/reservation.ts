@@ -6,11 +6,58 @@ import { request, BaasError } from "./http";
 import { getProjectId } from "./config";
 import { renderPaymentWidget } from "./toss";
 
+/** 운영·슬롯·결제 정책. ⚠️ 가격/정원/소요시간은 target 최상위가 아니라 **여기 중첩**돼 있다. */
+export interface ReservationSettings {
+  /** 요일별 운영시간 구간: { mon: [["10:00","18:00"]], … } */
+  operating_hours?: Record<string, [string, string][]>;
+  slot_policy?: {
+    slot_duration_min?: number;
+    /** 슬롯당 정원 */
+    slot_capacity?: number;
+    advance_booking_days?: number;
+    min_lead_time_min?: number;
+  };
+  payment_policy?: {
+    /** 참가비(원). target.price 같은 평평한 필드는 존재하지 않는다. */
+    amount?: number;
+    online?: boolean;
+    onsite?: boolean;
+  };
+  approval_policy?: { auto_confirm?: boolean; confirmation_message?: string };
+  user_policy?: {
+    cancel_deadline_min?: number;
+    allow_self_modify?: boolean;
+    max_active_per_user?: number;
+  };
+  [key: string]: unknown;
+}
+
 export interface ReservationTarget {
   id: string;
   name: string;
+  description?: string;
+  image_url?: string | null;
   is_active?: boolean;
+  display_order?: number;
+  /** 가격·정원·소요시간은 전부 이 안에 있다(위 ReservationSettings 참조). */
+  reservation_settings?: ReservationSettings;
+  reservation_form_schema?: { fields?: unknown[] };
   [key: string]: unknown;
+}
+
+/** 가용 슬롯 1건. ⚠️ 시각 필드명은 `slot` 이다 — `reserved_at` 이 아니다(요청 파라미터명과 다름). */
+export interface ReservationSlot {
+  /** ISO 시각 문자열. 예약 요청 시엔 이 값을 `reserved_at` 파라미터로 넘긴다. */
+  slot: string;
+  /** 남은 자리 수 */
+  remaining?: number;
+}
+
+/** `getAvailableSlots` 응답 — 슬롯 배열이 아니라 봉투다. `res.slots` 로 언랩해서 쓴다. */
+export interface AvailableSlotsResult {
+  target_id: string;
+  date: string;
+  slots: ReservationSlot[];
 }
 
 // ── 공개 조회 ──
@@ -18,8 +65,9 @@ export const listTargets = () =>
   request<ReservationTarget[]>(`/public/reservation/${getProjectId()}/targets`);
 export const getTarget = (targetId: string) =>
   request<ReservationTarget>(`/public/reservation/${getProjectId()}/targets/${targetId}`);
+/** ⚠️ 반환은 `{ target_id, date, slots }` 봉투 — 앱은 `res.slots` 로 언랩해야 한다. */
 export const getAvailableSlots = (targetId: string, params: Record<string, string>) =>
-  request(`/public/reservation/${getProjectId()}/targets/${targetId}/available-slots?${new URLSearchParams(params)}`);
+  request<AvailableSlotsResult>(`/public/reservation/${getProjectId()}/targets/${targetId}/available-slots?${new URLSearchParams(params)}`);
 export const getSlotRange = (targetId: string, params: Record<string, string>) =>
   request(`/public/reservation/${getProjectId()}/targets/${targetId}/available-slots/range?${new URLSearchParams(params)}`);
 
