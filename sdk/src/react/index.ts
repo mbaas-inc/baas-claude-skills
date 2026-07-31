@@ -6,7 +6,10 @@ import * as core from "../core/index";
 import { AuthProvider, useAuth, RequireAuth } from "./AuthProvider";
 import { useLogin, useSignup, useLogout } from "./hooks";
 import { useBoard } from "./useBoard";
+import { useCollection } from "./useCollection";
+import { useFileUpload } from "./useFileUpload";
 import {
+  usePayment,
   useRecipient,
   useNotice,
   useFaq,
@@ -36,6 +39,16 @@ export const BaasSDK = {
   createPost: core.createPost,
   updatePost: core.updatePost,
   deletePost: core.deletePost,
+  // collection (동적 컬렉션 레코드)
+  listRecords: core.listRecords,
+  getRecord: core.getRecord,
+  createRecord: core.createRecord,
+  updateRecord: core.updateRecord,
+  deleteRecord: core.deleteRecord,
+  listPublicRecords: core.listPublicRecords,
+  getPublicRecord: core.getPublicRecord,
+  // storage (파일 업로드 — presign→S3 PUT, cdn_url 반환)
+  uploadFile: core.uploadFile,
   // notice/faq/comments
   listNoticePosts: core.listNoticePosts,
   getNoticePost: core.getNoticePost,
@@ -61,11 +74,12 @@ export const BaasSDK = {
   getBooking: core.getBooking,
   updateBooking: core.updateBooking,
   cancelBooking: core.cancelBooking,
+  // payment (결제 공통 — 약관 조회. 금액 실행은 store/reservation 소유)
+  getPurchaseTerms: core.getPurchaseTerms,
   getStoreConfig: core.getStoreConfig,
   listProducts: core.listProducts,
   listCategories: core.listCategories,
   getProduct: core.getProduct,
-  getStoreTerms: core.getStoreTerms,
   prepareOrder: core.prepareOrder,
   confirmOrder: core.confirmOrder,
   listMyOrders: core.listMyOrders,
@@ -80,6 +94,9 @@ export const BaasSDK = {
   useSignup,
   useLogout,
   useBoard,
+  useCollection,
+  useFileUpload,
+  usePayment,
   useRecipient,
   useNotice,
   useFaq,
@@ -90,7 +107,8 @@ export const BaasSDK = {
 };
 
 export {
-  AuthProvider, useAuth, RequireAuth, useLogin, useSignup, useLogout, useBoard,
-  useRecipient, useNotice, useFaq, useComments, useSurvey, useReservation, useStore,
+  AuthProvider, useAuth, RequireAuth, useLogin, useSignup, useLogout, useBoard, useCollection,
+  useFileUpload,
+  usePayment, useRecipient, useNotice, useFaq, useComments, useSurvey, useReservation, useStore,
 };
 export * from "../core/index";

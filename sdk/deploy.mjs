@@ -14,7 +14,8 @@
  * 전제: dist/ 가 이미 빌드됨(SDK_VERSION 과 동일 버전으로). aws CLI 설치·자격증명 필요.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 
 // mbaas 실제 CDN 기본값 — cdn.mbaas.kr 의 /public/* 동작이 mbaas-file-bucket 으로 라우팅.
 // URL: https://cdn.mbaas.kr/public/baas-integration-sdk/<version|v1>/baas-react.js
@@ -35,6 +36,27 @@ if (!existsSync("dist")) {
 
 const assets = readdirSync("dist").filter((f) => f.endsWith(".js") || f.endsWith(".js.map"));
 const sh = (args) => execFileSync("aws", args, { stdio: "inherit" });
+
+// 0) 불변 경로 보호 — 같은 버전이 이미 '다른 내용'으로 있으면 실패(버전 bump 누락 감지).
+//    동일 내용 재배포는 허용(멱등). ETag(단일파트 업로드 = MD5) 와 로컬 MD5 비교.
+//    이게 없으면 버전을 안 올린 채 소스가 바뀌어 재배포될 때 불변 스냅샷이 오염된다.
+const localMd5 = (p) => createHash("md5").update(readFileSync(p)).digest("hex");
+const remoteETag = (key) => {
+  try {
+    return execFileSync("aws", ["s3api", "head-object", "--bucket", bucket, "--key", key,
+      "--query", "ETag", "--output", "text"], { encoding: "utf8" }).trim().replace(/"/g, "");
+  } catch { return null; } // 없음(신규 버전)
+};
+for (const f of assets) {
+  const et = remoteETag(`${prefix}/${version}/${f}`);
+  if (et && et !== localMd5(`dist/${f}`)) {
+    console.error(
+      `❌ 불변 경로 충돌: s3://${bucket}/${prefix}/${version}/${f} 가 다른 내용으로 이미 존재합니다.\n` +
+      `   같은 버전에 다른 빌드를 올릴 수 없습니다 — SDK_VERSION(package.json version) 을 올리세요.`
+    );
+    process.exit(1);
+  }
+}
 
 // 1) 불변 경로 (장기 캐시)
 for (const f of assets) {

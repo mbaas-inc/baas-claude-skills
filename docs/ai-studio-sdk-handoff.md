@@ -32,16 +32,24 @@ SDK 배포는 **우리(baas-claude-skills repo) CI가 자동 수행**한다. AI 
 https://cdn.mbaas.kr/public/baas-integration-sdk/v1/baas-react.js   ← 앱은 이걸 참조(별칭, 자동 업데이트)
 https://cdn.mbaas.kr/public/baas-integration-sdk/<version>/baas-react.js  (불변 스냅샷 — 롤백·버전 고정용)
 ```
-- **두 경로 = 같은 산출물, 목적만 다름**: 별칭 `v1`은 최신 v1.x를 가리켜 CDN push로 전 앱 자동 반영(O(1)). 불변 `<version>`은 롤백 대상·버전 핀(별칭이 깨지면 `v1 ← 이전 version`으로 되돌림). 앱빌더는 **항상 `v1` 별칭만** 심는다.
+- **채널(가변 별칭) vs 불변 버전**: 채널(`v1`·`next`)은 최신을 가리키는 가변 별칭(CDN push로 전 앱 자동 반영, O(1)). 불변 `<version>`은 롤백·버전 핀용. 앱빌더는 **환경별 채널 URL을 주입**한다(§3.1: **dev=`next`, prod=`v1`**).
 - 대상 인프라(고정): S3 `mbaas-file-bucket/public/baas-integration-sdk/`, CloudFront `E3O4WUZ5YOS1S`(cdn.mbaas.kr `/public/*` 동작).
-- 트리거: `sdk-vX.Y.Z` 태그 push 또는 Actions 수동 실행 → 빌드·검증·업로드(불변+별칭 v1)·무효화. (`.github/workflows/sdk-release.yml`)
-- 마이너/패치는 v1 별칭 갱신으로 전 앱 자동 반영. 메이저(v2, 호환 깨짐)만 새 별칭.
+- 배포 방식: **정상 = 브랜치 CD**(`sdk-cd.yml`) — `stage` 머지 → `next` 채널 + 불변 `/<version>/` 배포(dev 검증), `main` 머지 → 검증된 불변 버전을 `v1`로 **승격**(재빌드 없이 복사). **예외(핫픽스·롤백·수동) = 태그**(`sdk-vX.Y.Z` push, `sdk-release.yml`).
+- 마이너/패치는 채널 갱신으로 자동 반영. 메이저(v2, 호환 깨짐)만 새 별칭.
 
 ## 3. 앱빌더 스캐폴드 배선 (AI Studio 소유 — 고정 인프라)
 생성 앱마다 동일하므로 스캐폴드 템플릿에 고정한다(스킬의 `scaffold/wiring.md` 원문). LLM이 창작하지 않게 한다.
-- `index.html`: `<script src="https://cdn.mbaas.kr/public/baas-integration-sdk/v1/baas-react.js">` + `<meta name="baas-project-id" content="<id>">`
+- `index.html`: `<script src="%VITE_BAAS_SDK_URL%">` + `<meta name="baas-project-id" content="<id>">`
 - 앱 진입점: render 이전 `window.__BAAS_HOST__ = { React, ReactDOM }` → `window.BaasSDK.init({ baseUrl: "/aiapp-baas" })`
 - SDK 미로드 시 폴백 에러 화면(빈 화면 방지 — PoC-C에서 식별).
+
+### 3.1 SDK URL은 환경별로 빌드 파이프라인이 주입 (concrete URL 하드코딩 금지)
+- **스킬·생성 소스·에이전트는 concrete SDK URL을 담지 않는다** — `%VITE_BAAS_SDK_URL%` 플레이스홀더만. 그래야 스킬·소스가 환경 무관하게 dev→운영으로 그대로 승격된다.
+- 실제 값은 **AI Studio 빌드 파이프라인(CodeBuild)이 환경별 환경변수로 주입** → `vite build` 가 치환:
+  - dev CodeBuild: `VITE_BAAS_SDK_URL = https://cdn.mbaas.kr/public/baas-integration-sdk/next/baas-react.js` (검증 채널/호스트)
+  - prod CodeBuild: `VITE_BAAS_SDK_URL = https://cdn.mbaas.kr/public/baas-integration-sdk/v1/baas-react.js`
+- 정의 위치는 AI Studio 인프라 소유(CodeBuild 프로젝트 환경변수 또는 Parameter Store). 비-Vite 템플릿이면 `__BAAS_SDK_URL__` + buildspec 치환도 가능.
+- 주입 시점 구분: `project_id`(프로젝트 고정) = **생성 시점** 주입 / SDK URL(환경별) = **빌드 시점** 주입.
 
 ## 4. 검증 계약 (SDK 표면)
 - 모든 백엔드 호출은 `window.BaasSDK` 경유(raw fetch 없음). 표면 목록: `skills/baas-integration-sdk/reference/sdk-surface.md`.

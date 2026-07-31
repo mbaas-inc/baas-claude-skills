@@ -27,6 +27,17 @@ export {
   updateComment,
   deleteComment,
 } from "./notice";
+export {
+  listRecords,
+  getRecord,
+  createRecord,
+  updateRecord,
+  deleteRecord,
+  listPublicRecords,
+  getPublicRecord,
+} from "./collection";
+export { uploadFile } from "./storage";
+export { getPurchaseTerms } from "./payment";
 export { registerRecipient } from "./recipient";
 export { listSurveys, getSurvey, submitSurveyResponse } from "./survey";
 export {
@@ -36,24 +47,31 @@ export {
   getSlotRange,
   createBooking,
   prepareBooking,
+  startBooking,
   confirmBooking,
   listMyBookings,
   getBooking,
   updateBooking,
   cancelBooking,
+  beginReservationWidgetCheckout,
+  getReservationCheckoutContext,
+  clearReservationCheckoutContext,
 } from "./reservation";
 export {
   getStoreConfig,
   listProducts,
   listCategories,
   getProduct,
-  getStoreTerms,
   prepareOrder,
+  startOrder,
   confirmOrder,
   listMyOrders,
   getOrder,
   confirmPurchase,
   cancelOrder,
+  beginStoreWidgetCheckout,
+  getStoreCheckoutContext,
+  clearStoreCheckoutContext,
 } from "./store";
 export { SDK_VERSION } from "../version";
 export type {
@@ -70,7 +88,31 @@ export type {
   PostCreateInput,
 } from "./board";
 export type { Comment } from "./notice";
+export type {
+  DynRecord,
+  RecordListResult,
+  RecordFilter,
+  RecordListOptions,
+} from "./collection";
+export type {
+  UploadTarget,
+  UploadCategory,
+  UploadOptions,
+  UploadResult,
+} from "./storage";
+export type { PurchaseTerms } from "./payment";
 export type { RecipientInput } from "./recipient";
 export type { Survey } from "./survey";
-export type { ReservationTarget } from "./reservation";
-export type { StoreConfig, Product } from "./store";
+export type {
+  ReservationTarget,
+  ReservationWidgetCheckoutParams,
+  ReservationWidgetHandle,
+  ReservationCheckoutContext,
+} from "./reservation";
+export type {
+  StoreConfig,
+  Product,
+  StoreWidgetCheckoutParams,
+  StoreWidgetHandle,
+  StoreCheckoutContext,
+} from "./store";

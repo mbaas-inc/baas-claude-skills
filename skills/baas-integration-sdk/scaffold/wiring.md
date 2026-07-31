@@ -13,8 +13,8 @@ SDK 로딩·host React 노출·init 은 모든 프로젝트가 동일하다. 아
   <!-- 프로젝트 컨텍스트 (앱빌더가 실제 project_id 주입) -->
   <meta name="baas-project-id" content="__PROJECT_ID__" />
   <title>__TITLE__</title>
-  <!-- 런타임 CDN SDK (별칭 v1 = 자동 업데이트 채널) -->
-  <script src="https://cdn.mbaas.kr/public/baas-integration-sdk/v1/baas-react.js"></script>
+  <!-- 런타임 CDN SDK. src 는 플레이스홀더 그대로 둔다 — concrete URL 하드코딩 금지. -->
+  <script src="%VITE_BAAS_SDK_URL%"></script>
 </head>
 <body>
   <div id="root"></div>
@@ -22,7 +22,7 @@ SDK 로딩·host React 노출·init 은 모든 프로젝트가 동일하다. 아
 </body>
 </html>
 ```
-- 로컬/dev 에선 `src` 를 환경에 맞는 SDK URL 로 둔다(앱빌더가 주입).
+- SDK `src` 는 `%VITE_BAAS_SDK_URL%` 플레이스홀더를 **그대로** 둔다(concrete URL 하드코딩 금지). 실제 값 주입은 인프라 몫이다.
 - Vite `base: '/'` 로 빌드한다(자산 경로 안정).
 
 ## 2. 앱 진입점 (`src/main.tsx`)
@@ -61,6 +61,42 @@ export default function App() {
 }
 ```
 
-## TypeScript 편의(선택)
-`window.BaasSDK` 타입은 배포된 `baas.d.ts` 를 참조하면 tsc 가 표면 오타(환각)를 빌드 시 잡는다.
-없어도 동작에는 문제없다.
+## TypeScript — `window.BaasSDK` 는 타입이 없다 (⚠️ tsc 가 아무것도 못 잡는다)
+
+`window.BaasSDK` 는 CDN 전역이라 **타입 선언이 없다**(배포물은 `baas-react.js` 뿐 — `.d.ts` 는
+발행하지 않는다). 앱은 보통 `(window as any).BaasSDK` 로 받는데, 그러면 훅 반환값의 **모든 필드
+접근이 `any`** 라서 다음이 전부 `tsc` 를 통과한다:
+
+```tsx
+const target = await fetchTarget(id);
+target.price.toLocaleString();     // ✅ tsc 통과 — 그러나 런타임 크래시(실제 필드는 중첩, 아래 참조)
+const products = await fetchProducts();
+products.map(...);                 // ✅ tsc 통과 — 그러나 런타임 크래시(반환값은 { items } 봉투)
+```
+
+**결론: 반환값 shape 은 타입이 지켜주지 않으므로 `reference/sdk-surface.md` 의 "훅 반환 계약" 표를
+읽고 맞춰야 한다.** 그리고 정적 검증(tsc·eslint·build)이 전부 통과해도 이 부류의 결함은
+**배포본에서만** 드러나므로, 배포 후 실제 화면·네트워크 응답으로 확인한다.
+
+앱에서 방어하려면 SDK 반환값을 받는 지점에 **직접 선언한 타입**을 붙이고(`as` 단언 말고 명시 타입),
+그 타입을 `sdk-surface.md` 의 표와 일치시킨다.
+
+## 4. `baas-manifest.json` 자동 동기화 (stale 방지 — 고정 배선)
+마이그레이션 판정(업데이트 비교기)은 `baas-manifest.json` 의 `features_used`/`skill_version` 을 근거로 한다.
+이를 **손으로 유지하면 stale 이 나서 업데이트가 조용히 누락**되므로(예: store 를 쓰는데 목록에서 빠짐),
+**코드에서 자동 도출**해 구조적으로 stale 을 막는다. hook→group 매핑의 SSOT 는 `features.json.hook_groups`.
+
+- `scripts/sync-manifest.mjs` — `src/` 의 `BaasSDK.<name>` 사용을 스캔 → `features.json.hook_groups` 매핑으로
+  `features_used` 도출, `skill_version` 을 `features.json.version` 으로 세팅해 `baas-manifest.json` 갱신.
+- **`package.json` 배선(고정)**: `prebuild` 에 물려 **`npm run build` 직전 자동 실행**(배포는 build 가
+  불가피하므로 건너뛸 수 없는 관문이 된다). `validate` 엔 `--check`(불일치 시 exit 1)로 건다.
+```jsonc
+"scripts": {
+  "prebuild": "node scripts/sync-manifest.mjs",
+  "build": "vite build",
+  "validate": "npm run typecheck && npm run lint && node scripts/sync-manifest.mjs --check"
+}
+```
+- 새 훅/기능을 붙이면 코드만 바꾸면 되고 manifest 는 다음 build 에서 자동 반영된다(에이전트가 manifest 를
+  손대야 한다는 규약 자체가 불필요해진다). 단 **신규 훅을 SDK 에 추가할 때는 `features.json.hook_groups` 에
+  그 훅→group 매핑을 넣어야** 한다(매핑 없으면 sync 가 경고).

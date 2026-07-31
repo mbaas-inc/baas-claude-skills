@@ -24,6 +24,14 @@ function useAsync() {
   return { loading, error, run };
 }
 
+/** 결제 공통 훅 — fetchTerms()로 표준 구매약관을 받아 결제 전 표시+동의. 결제 실행은 store/reservation 소유. */
+export function usePayment() {
+  const React = getReact();
+  const { loading, error, run } = useAsync();
+  const fetchTerms = React.useCallback(() => run(() => core.getPurchaseTerms()), []);
+  return { fetchTerms, loading, error };
+}
+
 export function useRecipient() {
   const React = getReact();
   const { loading, error, run } = useAsync();
@@ -94,8 +102,14 @@ export function useSurvey() {
   const { loading, error, run } = useAsync();
   const [surveys, setSurveys] = React.useState<core.Survey[] | null>(null);
   const [survey, setSurvey] = React.useState<core.Survey | null>(null);
+  // 반환값 === state (`surveys` 배열) — useStore.fetchProducts 와 동일 규약(v0.13.0).
   const fetchSurveys = React.useCallback(
-    (params: Record<string, string> = {}) => run(async () => { const d = await core.listSurveys(params); setSurveys((d as any).items ?? []); return d; }),
+    (params: Record<string, string> = {}) =>
+      run(async () => {
+        const items = (await core.listSurveys(params)).items ?? [];
+        setSurveys(items);
+        return items;
+      }),
     []
   );
   const fetchSurvey = React.useCallback(
@@ -125,7 +139,18 @@ export function useReservation() {
   const confirm = React.useCallback((id: string, payload: any) => run(() => core.confirmBooking(id, payload)), []);
   const myBookings = React.useCallback((p: Record<string, string> = {}) => run(() => core.listMyBookings(p)), []);
   const cancel = React.useCallback((rid: string) => run(() => core.cancelBooking(rid)), []);
-  return { targets, loading, error, fetchTargets, fetchTarget, fetchSlots, fetchSlotRange, book, prepare, confirm, myBookings, cancel };
+  // 예약 결제위젯(인라인). 앱이 셀렉터 제공 → handle.requestPayment 로 결제(앱 화면 유지).
+  const beginWidgetCheckout = React.useCallback(
+    (id: string, params: core.ReservationWidgetCheckoutParams) =>
+      core.beginReservationWidgetCheckout(id, params),
+    [],
+  );
+  return {
+    targets, loading, error, fetchTargets, fetchTarget, fetchSlots, fetchSlotRange,
+    book, prepare, confirm, beginWidgetCheckout, myBookings, cancel,
+    getCheckoutContext: core.getReservationCheckoutContext,
+    clearCheckoutContext: core.clearReservationCheckoutContext,
+  };
 }
 
 export function useStore() {
@@ -134,12 +159,34 @@ export function useStore() {
   const [config, setConfig] = React.useState<core.StoreConfig | null>(null);
   const [products, setProducts] = React.useState<core.Product[] | null>(null);
   const fetchConfig = React.useCallback(() => run(async () => { const d = await core.getStoreConfig(); setConfig(d); return d; }), []);
-  const fetchProducts = React.useCallback((p: Record<string, string> = {}) => run(async () => { const d = await core.listProducts(p); setProducts((d as any).items ?? []); return d; }), []);
+  // 반환값 === state (`products` 배열). 코어는 백엔드 버전차 흡수를 위해 `{items}` 로 정규화하지만,
+  // 훅 표면에서는 그 봉투를 벗겨 **state 와 같은 값**을 돌려준다(v0.13.0 — 이전엔 봉투를 반환해
+  // `(await fetchProducts()).map(...)` 이 TypeError 였다).
+  const fetchProducts = React.useCallback(
+    (p: Record<string, string> = {}) =>
+      run(async () => {
+        const items = (await core.listProducts(p)).items ?? [];
+        setProducts(items);
+        return items;
+      }),
+    []
+  );
   const fetchProduct = React.useCallback((id: string) => run(() => core.getProduct(id)), []);
+  // 구매약관 조회는 결제 공통 훅으로 이동 → usePayment().fetchTerms
   const prepare = React.useCallback((productId: string, qty: number) => run(() => core.prepareOrder(productId, qty)), []);
   const confirm = React.useCallback((data: any) => run(() => core.confirmOrder(data)), []);
   const myOrders = React.useCallback((p: Record<string, string> = {}) => run(() => core.listMyOrders(p)), []);
   const confirmPurchase = React.useCallback((orderId: string) => run(() => core.confirmPurchase(orderId)), []);
   const cancel = React.useCallback((orderId: string, reason: string) => run(() => core.cancelOrder(orderId, reason)), []);
-  return { config, products, loading, error, fetchConfig, fetchProducts, fetchProduct, prepare, confirm, myOrders, confirmPurchase, cancel };
+  // 결제위젯(인라인). 앱이 셀렉터 제공 → handle.requestPayment 로 결제(앱 화면 유지).
+  const beginWidgetCheckout = React.useCallback(
+    (params: core.StoreWidgetCheckoutParams) => core.beginStoreWidgetCheckout(params),
+    [],
+  );
+  return {
+    config, products, loading, error, fetchConfig, fetchProducts, fetchProduct,
+    prepare, confirm, beginWidgetCheckout, myOrders, confirmPurchase, cancel,
+    getCheckoutContext: core.getStoreCheckoutContext,
+    clearCheckoutContext: core.clearStoreCheckoutContext,
+  };
 }

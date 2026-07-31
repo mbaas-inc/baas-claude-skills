@@ -14,7 +14,7 @@ BaaS 프론트 SDK — 런타임 CDN에서 로드되는 **부패 방지 계층**
 npm install
 npm run typecheck        # tsc --noEmit
 npm test                 # core 계약 테스트 (node --test)
-SDK_VERSION=0.3.0 npm run build   # → dist/
+SDK_VERSION=0.4.0 npm run build   # → dist/
 ```
 
 ## 버전·전파 모델
@@ -22,8 +22,8 @@ SDK_VERSION=0.3.0 npm run build   # → dist/
 
 | 경로 | 성격 | 캐시 | 용도 |
 |---|---|---|---|
-| `/<prefix>/<version>/baas-react.js` (예: `/0.3.0/`) | **불변**(고정 버전) | 1년(immutable) | 롤백 대상·버전 고정 |
-| `/<prefix>/<channel>/baas-react.js` (예: `/v1/`) | **가변 별칭**(최신 v1.x) | 60s + 무효화 | **생성 앱이 참조** → CDN push로 자동 업데이트 |
+| `/<prefix>/<version>/baas-react.js` (예: `/1.0.0/`) | **불변**(고정 버전) | 1년(immutable) | 롤백 대상·버전 고정 |
+| `/<prefix>/<channel>/baas-react.js` (예: `/v1/`) | **가변 별칭**(v1 채널 = 1.x 최신 빌드) | 60s + 무효화 | **생성 앱이 참조** → CDN push로 자동 업데이트 |
 
 - **왜 둘 다**: 별칭(`v1`)만 있으면 O(1) 전파는 되지만 ① 깨졌을 때 되돌릴 대상이 없고 ② 특정 앱을 특정 버전에 묶을 수 없다. 불변 경로가 그 안전장치(롤백 소스·버전 핀).
 - 정상 운영에서 앱이 보는 건 `v1` 하나. `<version>`은 뒤의 스냅샷.
@@ -36,18 +36,23 @@ deploy.mjs 에 실제 대상이 기본값으로 박혀 있다(다른 대상은 e
 - cdn.mbaas.kr 의 `/public/*` 동작이 이 버킷으로 라우팅 → URL `https://cdn.mbaas.kr/public/baas-integration-sdk/<version|v1>/baas-react.js`
 
 ```bash
-SDK_VERSION=0.3.0 npm run build
-SDK_VERSION=0.3.0 npm run deploy        # 기본 대상으로 배포 + v1 무효화
+# 수동/로컬 (특정 채널·버전 지정 배포)
+SDK_VERSION=0.4.0 npm run build
+SDK_VERSION=0.4.0 SDK_CHANNEL=next npm run deploy   # 예: next 채널로 배포 + 무효화
 ```
 
-**자동화 (권장 — 수동 배포 불필요)**: `sdk-vX.Y.Z` 태그 push 또는 Actions 수동 실행 →
-`.github/workflows/sdk-release.yml` 가 빌드·검증·배포·무효화. 최초 1회 설정:
-- Secret `SDK_DEPLOY_ROLE_ARN`: S3 put(`public/baas-integration-sdk/*`) + CloudFront `CreateInvalidation` 권한 role(GitHub OIDC 신뢰)
+**자동화 (권장) — 브랜치 CD** (`.github/workflows/sdk-cd.yml`, 버전 = `package.json`):
+- `stage` 머지 → `next` 채널 + 불변 `/<version>/` 배포(dev 검증). `v1` 무영향.
+- `main` 머지 → 검증된 불변 `/<version>/` 를 `v1` 로 **승격**(재빌드 없이 복사, `npm run promote`).
+
+**예외 — 태그/수동** (`.github/workflows/sdk-release.yml`, `/sdk-release` 스킬): 핫픽스·특정 버전 수동 배포·새 메이저 채널·롤백. `sdk-vX.Y.Z` 태그 push 또는 Actions 수동 실행.
+
+최초 1회 설정:
+- Secret `SDK_DEPLOY_ROLE_ARN`: S3 put(`public/baas-integration-sdk/*`) + CloudFront `CreateInvalidation` 권한 role(GitHub OIDC 신뢰). mbaas 공통 롤 `GitHubAction-AssumeRoleWithAction` 재사용 가능.
 - (선택) Variables 로 배포 대상 override — 미설정 시 deploy.mjs 기본값 사용
 
 ## 롤백
-별칭을 이전 불변 버전으로 되돌린다(불변 경로는 그대로 있으므로 즉시 복구):
+`v1` 별칭을 이전 정상 불변 버전으로 되돌린다(불변 경로가 남아 있어 재빌드 없이 즉시 복구) — `promote.mjs`:
 ```bash
-aws s3 cp s3://<버킷>/sdk/<이전버전>/baas-react.js s3://<버킷>/sdk/v1/baas-react.js --cache-control public,max-age=60
-aws cloudfront create-invalidation --distribution-id <배포ID> --paths "/sdk/v1/*"
+SDK_VERSION=<이전정상버전> SDK_CHANNEL=v1 npm run promote
 ```

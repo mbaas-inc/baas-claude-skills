@@ -54,7 +54,7 @@
 | 경로 | 성격 | 캐시 | 용도 |
 |---|---|---|---|
 | `/public/baas-integration-sdk/<version>/baas-react.js` | 불변(고정) | 1년 immutable | 롤백 대상·버전 핀 |
-| `/public/baas-integration-sdk/v1/baas-react.js` | 가변 별칭(최신 v1.x) | 60s + 무효화 | **앱이 참조** → 자동 업데이트 |
+| `/public/baas-integration-sdk/v1/baas-react.js` | 가변 별칭(v1 채널 최신 빌드, 현재 0.x) | 60s + 무효화 | **앱이 참조** → 자동 업데이트 |
 
 **왜 둘 다**: 별칭만 있으면 O(1) 전파는 되지만 ① 깨졌을 때 되돌릴 대상이 없고 ② 특정 앱을 특정 버전에 못 묶는다. 불변 경로가 안전장치.
 
@@ -73,14 +73,18 @@
 
 ## 5. 배포 (자동화 — 우리 CI 소유)
 
-- **트리거**: `sdk-vX.Y.Z` 태그 push 또는 Actions 수동 실행 → 빌드·typecheck·test·업로드(불변+별칭)·무효화. (`.github/workflows/sdk-release.yml`)
-- **대상 인프라** (deploy.mjs 기본값): S3 `mbaas-file-bucket/public/baas-integration-sdk/`, CloudFront `E3O4WUZ5YOS1S`(cdn.mbaas.kr `/public/*` 동작), 별칭 `v1`.
-- **최초 1회 설정**: GitHub Secret `SDK_DEPLOY_ROLE_ARN`(S3 put + CloudFront 무효화 권한 OIDC role).
-- **롤백**: 별칭을 이전 불변 버전으로 되돌림 →
+**정상 = 브랜치 CD** (`.github/workflows/sdk-cd.yml`, 버전 소스 = `sdk/package.json`):
+- `stage` 머지 → `next` 채널 + 불변 `/<version>/` 배포(빌드·typecheck·test 후). **dev 환경 앱이 `next` 를 소비해 검증.** `v1` 무영향.
+- `main` 머지 → 검증된 불변 `/<version>/` 를 `v1` 로 **승격**(재빌드 없이 S3 복사 + 무효화, `promote.mjs`). prod 앱이 다음 로드부터 자동 반영(O(1)).
+- 흐름: `feature → stage(next·검증) → main(v1 승격)`.
+
+**예외 = 태그/수동** (`.github/workflows/sdk-release.yml`, `/sdk-release` 스킬): 핫픽스·특정 버전 수동 배포·새 메이저 채널·롤백. `sdk-vX.Y.Z` 태그 push 또는 workflow_dispatch.
+
+- **대상 인프라** (deploy.mjs 기본값): S3 `mbaas-file-bucket/public/baas-integration-sdk/`, CloudFront `E3O4WUZ5YOS1S`(cdn.mbaas.kr `/public/*` 동작), 채널 `v1`(prod)·`next`(dev).
+- **최초 1회 설정**: GitHub Secret `SDK_DEPLOY_ROLE_ARN`(S3 put + CloudFront 무효화 권한 OIDC role — 공통 롤 `GitHubAction-AssumeRoleWithAction` 재사용).
+- **롤백**: 별칭을 이전 정상 불변 버전으로 되돌림(재빌드 없음) — `promote.mjs`:
   ```
-  aws s3 cp s3://mbaas-file-bucket/public/baas-integration-sdk/<이전>/baas-react.js \
-            s3://mbaas-file-bucket/public/baas-integration-sdk/v1/baas-react.js --cache-control max-age=60
-  aws cloudfront create-invalidation --distribution-id E3O4WUZ5YOS1S --paths "/public/baas-integration-sdk/v1/*"
+  cd sdk && SDK_VERSION=<이전정상버전> SDK_CHANNEL=v1 npm run promote
   ```
 
 ---
@@ -139,7 +143,8 @@
 ## 10. 현재 상태 · 남은 것 · 범위
 
 - ✅ SDK 전 기능 이식(core+react, 18 테스트) · 스킬 작성 · CI 배포 자동화 · dev DB 티켓/CLI 검증 · PoC(A/B/C)·글루 E2E·A/B 벤치마크.
-- ⬜ 첫 CDN 시딩(v0.3.0) · GitHub `SDK_DEPLOY_ROLE_ARN` 설정 · AI Studio 앱빌더 배선/매니페스트 UI · 기존 템플릿 JSDoc 버그 수정(별도).
+- ✅ 첫 CDN 시딩(v0.3.0) · `SDK_DEPLOY_ROLE_ARN`(공통 OIDC 롤) 설정 · 브랜치 CD(sdk-cd) 가동 — SDK 0.4.0 `next` 채널 배포·검증.
+- ⬜ AI Studio 앱빌더 배선(SDK URL 환경 주입, §3.1 핸드오프)/매니페스트 비교 UI · (별도) 기존 `baas-integration` 스킬 JSDoc 템플릿 버그.
 - **범위 밖**: 기존 스킬·운영 프로젝트 무변경(서버 구경로 호환으로 레거시 보호), baas-cli/티켓 시스템은 형제 관계로 별도.
 
 ## 참고 파일
