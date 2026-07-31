@@ -106,7 +106,7 @@ SDK는 CDN에서 로드되고 앱의 React 인스턴스를 공유한다. 이 배
 
 프로젝트 루트에 `baas-manifest.json`을 만든다 — 이후 업데이트 판단의 근거(LLM 없이 diff):
 ```json
-{ "skill": "baas-integration-sdk", "skill_version": "0.4.0", "sdk_channel": "v1", "features_used": ["account", "notice", "recipient", "board"] }
+{ "skill": "baas-integration-sdk", "skill_version": "1.0.0", "sdk_channel": "v1", "features_used": ["account", "notice", "recipient", "board"] }
 ```
 - `features_used`(그룹 키: `account`, `notice`(공지+FAQ), `recipient`, `board`, `survey`, `reservation`, `store`, `payment`, `collection`, `storage`)와 `skill_version`(=`features.json`의 `version`)은 **손으로 유지하지 않는다.**
 - **자동 동기화(권장·고정 배선)**: `scripts/sync-manifest.mjs` 가 `src/` 의 `BaasSDK.<name>` 사용을 스캔해 `features.json.hook_groups` 매핑으로 `features_used` 를 도출하고 `skill_version` 을 맞춘다. `package.json` 의 `prebuild` 에 물려 **build 마다 자동 갱신**, `validate` 엔 `--check`(불일치 시 실패)로 건다(배선: `scaffold/wiring.md` §4).

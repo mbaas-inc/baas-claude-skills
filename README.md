@@ -19,7 +19,8 @@ SDK 방식은 생성 앱이 `<script>`로 SDK를 로드하고 `window.BaasSDK` �
 skills/        BaaS 통합 스킬 (Claude Code SKILL.md)
 sdk/           @mbaas/baas-web-sdk — 런타임 CDN 프론트 SDK 소스 + 빌드/배포 도구
 docs/          설계·운영·핸드오프 문서
-.github/workflows/sdk-release.yml   sdk-v* 태그 push 시 SDK 자동 빌드→배포 CI
+.github/workflows/sdk-cd.yml        브랜치 CD — stage→next 배포, main→v1 승격 (정상 경로)
+.github/workflows/sdk-release.yml   sdk-v* 태그 push 시 빌드→배포 (핫픽스·롤백 예외 경로)
 .claude-plugin/                     마켓플레이스/플러그인 매니페스트
 ```
 
@@ -37,11 +38,18 @@ docs/          설계·운영·핸드오프 문서
 
 ## SDK 배포
 
-`sdk/`의 `@mbaas/baas-web-sdk`는 **브랜치 머지와 분리된 태그 기반**으로 배포된다. `sdk-vX.Y.Z` 태그를 push하면 [`sdk-release.yml`](.github/workflows/sdk-release.yml)이 빌드→검증→S3(불변 경로 + `v1` 별칭)→CloudFront 무효화를 수행한다.
+`sdk/`의 `@mbaas/baas-web-sdk`는 **브랜치 CD**로 배포된다([`sdk-cd.yml`](.github/workflows/sdk-cd.yml), 버전 = `sdk/package.json`).
 
-- **`main` 머지 ≠ SDK 배포.** 실제 배포는 `sdk-v` 태그 push가 트리거한다.
-- 앱 참조 URL: `https://cdn.mbaas.kr/public/baas-integration-sdk/v1/baas-react.js`
-- 릴리스 절차는 `mbaas-team-skills`의 `/sdk-release` 스킬로 표준화되어 있다.
+| 트리거 | 동작 | 영향 |
+|---|---|---|
+| `stage` 머지 | 빌드·검증 → 불변 `/<version>/` + **`next` 채널** 배포 | dev 검증. `v1` 무영향 |
+| `main` 머지 | 검증된 불변 `/<version>/` 를 **`v1` 채널로 승격**(재빌드 없이 복사) | **프로덕션 반영** |
+
+- **`main` 머지 = 프로덕션 승격이다.** 별도 태그 push가 필요 없다.
+- 트리거 조건: 머지 diff에 `sdk/**`가 포함되어야 한다. 문서만 바꾸면 CD가 돌지 않아 채널이 갱신되지 않는다.
+- **예외(핫픽스·롤백·수동)**: `sdk-vX.Y.Z` 태그 push → [`sdk-release.yml`](.github/workflows/sdk-release.yml). 이 경로는 **빌드부터 새로 하며 기본 채널이 `v1`** 이라, 잘못 밀면 프로덕션이 즉시 덮인다.
+- 롤백: `SDK_VERSION=<이전버전> SDK_CHANNEL=v1 npm run promote` (불변 경로에서 복사, 수동)
+- 앱 참조 URL: `https://cdn.mbaas.kr/public/baas-integration-sdk/v1/baas-react.js` (환경별 주입 — dev=`next`, prod=`v1`)
 - 코드 레벨 빌드/배포 상세: [`sdk/README.md`](sdk/README.md)
 
 ## 문서
@@ -52,4 +60,4 @@ docs/          설계·운영·핸드오프 문서
 ## 브랜치 컨벤션
 
 - 작업 → `stage` → `main` (릴리스는 `stage` → `main` **Squash merge**)
-- SDK 릴리스는 위 흐름과 별개로 `sdk-v*` 태그로 트리거
+- **SDK 배포가 이 흐름에 실려 있다** — `stage` 머지 = `next` 배포, `main` 머지 = `v1` 승격(프로덕션)

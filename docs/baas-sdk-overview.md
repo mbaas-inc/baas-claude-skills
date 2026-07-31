@@ -54,7 +54,7 @@
 | 경로 | 성격 | 캐시 | 용도 |
 |---|---|---|---|
 | `/public/baas-integration-sdk/<version>/baas-react.js` | 불변(고정) | 1년 immutable | 롤백 대상·버전 핀 |
-| `/public/baas-integration-sdk/v1/baas-react.js` | 가변 별칭(v1 채널 최신 빌드, 현재 0.x) | 60s + 무효화 | **앱이 참조** → 자동 업데이트 |
+| `/public/baas-integration-sdk/v1/baas-react.js` | 가변 별칭(v1 채널 = 1.x 최신 빌드) | 60s + 무효화 | **앱이 참조** → 자동 업데이트 |
 
 **왜 둘 다**: 별칭만 있으면 O(1) 전파는 되지만 ① 깨졌을 때 되돌릴 대상이 없고 ② 특정 앱을 특정 버전에 못 묶는다. 불변 경로가 안전장치.
 
@@ -143,7 +143,8 @@
 ## 10. 현재 상태 · 남은 것 · 범위
 
 - ✅ SDK 전 기능 이식(core+react, 18 테스트) · 스킬 작성 · CI 배포 자동화 · dev DB 티켓/CLI 검증 · PoC(A/B/C)·글루 E2E·A/B 벤치마크.
-- ✅ 첫 CDN 시딩(v0.3.0) · `SDK_DEPLOY_ROLE_ARN`(공통 OIDC 롤) 설정 · 브랜치 CD(sdk-cd) 가동 — SDK 0.4.0 `next` 채널 배포·검증.
+- ✅ 첫 CDN 시딩(v0.3.0) · `SDK_DEPLOY_ROLE_ARN`(공통 OIDC 롤) 설정 · 브랜치 CD(sdk-cd) 가동.
+- ✅ **1.0.0 GA — `v1` 채널 프로덕션 첫 출시**(2026-07-31). 이전까지 `v1` 은 0.3.0 에 멈춰 있었고 운영에 SDK 가 제공된 적이 없다. 1.x 동안 표면 안정(깨는 변경은 2.0 + 새 채널 `v2`).
 - ⬜ AI Studio 앱빌더 배선(SDK URL 환경 주입, §3.1 핸드오프)/매니페스트 비교 UI · (별도) 기존 `baas-integration` 스킬 JSDoc 템플릿 버그.
 - **범위 밖**: 기존 스킬·운영 프로젝트 무변경(서버 구경로 호환으로 레거시 보호), baas-cli/티켓 시스템은 형제 관계로 별도.
 
