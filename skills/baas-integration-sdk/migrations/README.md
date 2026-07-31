@@ -29,6 +29,10 @@
 - Tier 1이면 codemod 스크립트(`*.codemod.js`, jscodeshift 형식) 동봉
 - Tier 2면 "무엇을·왜·어떻게" 마이그레이션 노트(LLM 컨텍스트로 주입)
 
+**Tier 1 ⟺ codemod 가 존재한다.** 둘은 같은 말이다 — codemod 를 못 쓰는 변경은 정의상 기계적 치환이
+아니므로 **Tier 2** 다. "대부분 무수정이지만 화면별 점검이 필요한" 변경도 판단이 들어가므로 Tier 2 로
+적는다(실측 사례: `v0.10-to-v0.11.md`). Tier 를 낮게 적으면 업데이트 비교기가 필요한 검토를 건너뛴다.
+
 ### 예: Tier 1 codemod (훅 이름 변경)
 ```js
 // v0.1-to-v0.2-rename.codemod.js  — useLogin() → useAuthActions()
