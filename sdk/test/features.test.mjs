@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  init, registerRecipient, listNoticePosts, listFaqPosts, listComments, createComment,
+  init, signup, registerRecipient, listNoticePosts, listFaqPosts, listComments, createComment,
   listSurveys, submitSurveyResponse, listTargets, createBooking, prepareOrder,
   listProducts, getStoreConfig, changePassword,
 } from "../dist/baas-core.esm.js";
@@ -11,11 +11,20 @@ const PROJECT = "b59f841d-bfa3-4d63-8969-70420a4298f6";
 let last;
 function mockFetch() { globalThis.fetch = async (url, opts) => { last = { url, method: opts.method || "GET", body: opts.body ? JSON.parse(opts.body) : null }; return { status: 200, json: async () => ({ result: "SUCCESS", data: { items: [] } }) }; }; }
 
+test("signup — POST /account/signup-project, phone 정규화", async () => {
+  init({ projectId: PROJECT }); mockFetch();
+  await signup("user@example.com", "password123", "홍길동", "01012345678");
+  assert.match(last.url, /\/account\/signup-project$/);
+  assert.equal(last.method, "POST");
+  assert.equal(last.body.phone, "010-1234-5678"); // SDK 가 전송 시 정규화
+});
+
 test("recipient — POST /recipient/{project}, metadata→data 직렬화", async () => {
   init({ projectId: PROJECT }); mockFetch();
   await registerRecipient({ name: "홍", phone: "01012345678", metadata: { a: 1 } });
   assert.match(last.url, new RegExp(`/recipient/${PROJECT}$`));
   assert.equal(last.method, "POST");
+  assert.equal(last.body.phone, "010-1234-5678"); // SDK 가 전송 시 정규화
   assert.equal(last.body.data, JSON.stringify({ a: 1 }));
 });
 

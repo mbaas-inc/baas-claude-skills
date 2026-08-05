@@ -14,7 +14,7 @@ BaaS 프론트 SDK — 런타임 CDN에서 로드되는 **부패 방지 계층**
 npm install
 npm run typecheck        # tsc --noEmit
 npm test                 # core 계약 테스트 (node --test)
-SDK_VERSION=0.4.0 npm run build   # → dist/
+SDK_VERSION=1.0.0 npm run build   # → dist/
 ```
 
 ## 버전·전파 모델
@@ -37,8 +37,8 @@ deploy.mjs 에 실제 대상이 기본값으로 박혀 있다(다른 대상은 e
 
 ```bash
 # 수동/로컬 (특정 채널·버전 지정 배포)
-SDK_VERSION=0.4.0 npm run build
-SDK_VERSION=0.4.0 SDK_CHANNEL=next npm run deploy   # 예: next 채널로 배포 + 무효화
+SDK_VERSION=1.0.0 npm run build
+SDK_VERSION=1.0.0 SDK_CHANNEL=next npm run deploy   # 예: next 채널로 배포 + 무효화
 ```
 
 **자동화 (권장) — 브랜치 CD** (`.github/workflows/sdk-cd.yml`, 버전 = `package.json`):

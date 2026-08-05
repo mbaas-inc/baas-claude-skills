@@ -99,6 +99,7 @@ SDK는 CDN에서 로드되고 앱의 React 인스턴스를 공유한다. 이 배
 
 - 로딩·에러·빈 상태를 항상 UI로 표현한다(훅의 `loading`/`error` 사용). 사용자가 멈춘 화면을 보지 않게 한다.
 - 폼 검증은 제출 전 클라이언트에서 1차, 서버 에러 메시지는 그대로 노출(서버가 한국어 메시지 제공).
+  - **전화번호(phone)는 하이픈 유무로 거절하지 말 것.** 입력 `onChange`에 `BaasSDK.formatPhone`로 **자동 하이픈**을 적용하고, 전송은 SDK가 `normalizePhone`으로 `010-1234-5678` 형식으로 자동 정규화한다(서버는 ≤64자면 수용). phone 정규식을 새로 만들지 말 것 — 서버보다 엄격한 검증이 도리어 정상 입력을 막는다.
 - 게시판 쓰기는 로그인 필수 — 비로그인 사용자에겐 로그인 유도 UI를 보여준다.
 - 반환된 에러의 `errorCode`로 분기한다(코드 목록은 `reference/sdk-surface.md`의 에러 표 참조).
 
@@ -106,7 +107,7 @@ SDK는 CDN에서 로드되고 앱의 React 인스턴스를 공유한다. 이 배
 
 프로젝트 루트에 `baas-manifest.json`을 만든다 — 이후 업데이트 판단의 근거(LLM 없이 diff):
 ```json
-{ "skill": "baas-integration-sdk", "skill_version": "0.4.0", "sdk_channel": "v1", "features_used": ["account", "notice", "recipient", "board"] }
+{ "skill": "baas-integration-sdk", "skill_version": "1.0.0", "sdk_channel": "v1", "features_used": ["account", "notice", "recipient", "board"] }
 ```
 - `features_used`(그룹 키: `account`, `notice`(공지+FAQ), `recipient`, `board`, `survey`, `reservation`, `store`, `payment`, `collection`, `storage`)와 `skill_version`(=`features.json`의 `version`)은 **손으로 유지하지 않는다.**
 - **자동 동기화(권장·고정 배선)**: `scripts/sync-manifest.mjs` 가 `src/` 의 `BaasSDK.<name>` 사용을 스캔해 `features.json.hook_groups` 매핑으로 `features_used` 를 도출하고 `skill_version` 을 맞춘다. `package.json` 의 `prebuild` 에 물려 **build 마다 자동 갱신**, `validate` 엔 `--check`(불일치 시 실패)로 건다(배선: `scaffold/wiring.md` §4).

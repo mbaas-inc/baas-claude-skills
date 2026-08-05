@@ -39,6 +39,7 @@ export {
 export { uploadFile } from "./storage";
 export { getPurchaseTerms } from "./payment";
 export { registerRecipient } from "./recipient";
+export { normalizePhone, formatPhone } from "./phone";
 export { listSurveys, getSurvey, submitSurveyResponse } from "./survey";
 export {
   listTargets,

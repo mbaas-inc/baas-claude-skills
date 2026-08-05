@@ -58,6 +58,9 @@ export const BaasSDK = {
   createComment: core.createComment,
   updateComment: core.updateComment,
   deleteComment: core.deleteComment,
+  // phone (형식 유틸 — formatPhone: 입력 자동 하이픈 / normalizePhone: 전송 정규화)
+  normalizePhone: core.normalizePhone,
+  formatPhone: core.formatPhone,
   // recipient / survey / reservation / store
   registerRecipient: core.registerRecipient,
   listSurveys: core.listSurveys,
