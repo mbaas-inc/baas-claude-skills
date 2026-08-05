@@ -4,6 +4,7 @@
  */
 import { request, BaasError } from "./http";
 import { getProjectId } from "./config";
+import { normalizePhone } from "./phone";
 import type { AccountInfo, AuthState, SignupOptions, TokenResponse } from "./types";
 
 export async function signup(
@@ -15,7 +16,7 @@ export async function signup(
 ): Promise<AccountInfo> {
   return request<AccountInfo>("/account/signup-project", {
     method: "POST",
-    body: { user_id: userId, user_pw: userPw, name, phone, project_id: getProjectId(), ...options },
+    body: { user_id: userId, user_pw: userPw, name, phone: normalizePhone(phone), project_id: getProjectId(), ...options },
   });
 }
 

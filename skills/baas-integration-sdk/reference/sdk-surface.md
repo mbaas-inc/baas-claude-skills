@@ -107,15 +107,23 @@ const { login, loading, error } = BaasSDK.useLogin();
 await login(userId, userPw);      // 성공 시 전역 인증 상태 자동 갱신(refetch). boolean 반환
 
 const { signup, loading, error } = BaasSDK.useSignup();
-await signup(userId, userPw, name, phone);   // AccountInfo | null 반환
+await signup(userId, userPw, name, phone);   // AccountInfo | null 반환. phone 은 SDK 가 010-1234-5678 로 자동 정규화(폼은 자유 입력)
 
 const { logout } = BaasSDK.useLogout();
 await logout();                   // 성공 시 전역 상태 자동 clear
 ```
 
+전화번호 유틸(폼에서 재사용 — 직접 정규식 만들지 말 것):
+```tsx
+BaasSDK.formatPhone(value)     // 입력 중 자동 하이픈: "01012345678" → "010-1234-5678" (부분 입력 대응)
+BaasSDK.normalizePhone(value)  // 전송 정규화(멱등). signup/registerRecipient 내부에서 자동 적용
+// 폼 입력: onChange={e => setPhone(BaasSDK.formatPhone(e.target.value))}
+```
+
 UX 규약:
 - 로그인/회원가입 폼은 제출 중 버튼 비활성화(`loading`), 실패 시 `error.message`를 폼 하단에 노출.
 - 로그인 성공 후 별도 refetch 불필요(훅이 처리). 화면 전환만 하면 `useAuth()`가 최신 상태.
+- **phone 은 거절 검증 대신 자동 포맷**: `formatPhone`로 입력 중 하이픈을 넣고, 하이픈 유무로 막지 않는다(최종 형식은 SDK가 보증).
 
 ---
 
