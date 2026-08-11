@@ -2,7 +2,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  init, signup, registerRecipient, listNoticePosts, listFaqPosts, listComments, createComment,
+  init, signup, registerRecipient, listNoticePosts, listFaqPosts, getNoticePost, getFaqPost,
+  listComments, createComment,
   listSurveys, submitSurveyResponse, listTargets, createBooking, prepareOrder,
   listProducts, getStoreConfig, changePassword,
 } from "../dist/baas-core.esm.js";
@@ -28,12 +29,31 @@ test("recipient — POST /recipient/{project}, metadata→data 직렬화", async
   assert.equal(last.body.data, JSON.stringify({ a: 1 }));
 });
 
-test("notice/faq — 공개 정적 게시판 경로", async () => {
+test("notice/faq — 통합 엔드포인트 경로", async () => {
   init({ projectId: PROJECT }); mockFetch();
   await listNoticePosts({ limit: 5 });
-  assert.match(last.url, new RegExp(`/public/boards/notice/${PROJECT}/posts\\?`));
+  assert.match(last.url, new RegExp(`/public/boards/${PROJECT}/NOTICE/posts\\?`));
   await listFaqPosts();
-  assert.match(last.url, new RegExp(`/public/boards/faq/${PROJECT}/posts$`));
+  assert.match(last.url, new RegExp(`/public/boards/${PROJECT}/FAQ/posts$`));
+});
+
+test("notice/faq — 카테고리 필터 전달", async () => {
+  // 레거시 /public/boards/faq/{pid}/posts 는 category 를 받지 않아 조용히 무시한다.
+  // 통합 경로를 쓰는지까지 함께 못박는다.
+  init({ projectId: PROJECT }); mockFetch();
+  await listFaqPosts({ category: "결제", category_group: "카테고리" });
+  assert.match(last.url, new RegExp(`/public/boards/${PROJECT}/FAQ/posts\\?`));
+  const q = new URL(`http://x${last.url.slice(last.url.indexOf("/public"))}`).searchParams;
+  assert.equal(q.get("category"), "결제");
+  assert.equal(q.get("category_group"), "카테고리");
+});
+
+test("notice/faq 상세 — board_type 무관 공용 경로", async () => {
+  init({ projectId: PROJECT }); mockFetch();
+  await getNoticePost("p1");
+  assert.match(last.url, /\/public\/boards\/posts\/p1$/);
+  await getFaqPost("p2");
+  assert.match(last.url, /\/public\/boards\/posts\/p2$/);
 });
 
 test("comments — 공개 읽기 / 회원 쓰기 경로", async () => {

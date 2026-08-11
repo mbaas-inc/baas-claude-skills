@@ -24,6 +24,26 @@ test("listPosts — 공개 읽기 경로 + 쿼리스트링", async () => {
   assert.equal(res.items[0].id, "p1");
 });
 
+test("listPosts — 카테고리 필터 + board_settings.categories 노출", async () => {
+  init({ projectId: PROJECT });
+  let seen;
+  mockFetch((url) => {
+    seen = url;
+    return ok({
+      items: [{ id: "p1", title: "t", categories: { 업종: ["공통"] } }],
+      total: 1,
+      board_settings: { categories: [{ name: "업종", values: ["공통", "조선"] }] },
+    });
+  });
+  const res = await listPosts(BOARD, { category: "공통", category_group: "업종" });
+  const q = new URL(`http://x${seen.slice(seen.indexOf("/public"))}`).searchParams;
+  assert.equal(q.get("category"), "공통");
+  assert.equal(q.get("category_group"), "업종");
+  // 필터 UI 렌더 판단 근거 — 그룹 정의가 응답으로 내려온다
+  assert.deepEqual(res.board_settings.categories, [{ name: "업종", values: ["공통", "조선"] }]);
+  assert.deepEqual(res.items[0].categories, { 업종: ["공통"] });
+});
+
 test("getPost — 공개 단건 경로(project_id 불필요)", async () => {
   init({ projectId: PROJECT });
   let seen;

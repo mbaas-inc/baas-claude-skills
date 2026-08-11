@@ -87,6 +87,9 @@ export type {
   PostListResult,
   PostListOptions,
   PostCreateInput,
+  BoardSettings,
+  CategoryGroup,
+  PostCategories,
 } from "./board";
 export type { Comment } from "./notice";
 export type {
