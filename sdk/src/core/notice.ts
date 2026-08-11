@@ -1,25 +1,25 @@
 /** 공지사항/FAQ (정적 게시판, 공개 읽기 전용) + 게시글 댓글. */
 import { request } from "./http";
 import { getProjectId } from "./config";
+import { buildPostListQuery } from "./board";
 import type { PostListResult, BoardPost, PostListOptions } from "./board";
 
-function listStatic(kind: "notice" | "faq", options: PostListOptions): Promise<PostListResult> {
-  const params = new URLSearchParams();
-  if (options.offset !== undefined) params.append("offset", String(options.offset));
-  if (options.limit !== undefined) params.append("limit", String(options.limit));
-  if (options.keyword) params.append("keyword", options.keyword);
-  const qs = params.toString();
+// 통합 엔드포인트 사용 — 레거시 /public/boards/{notice|faq}/{pid}/posts 는
+// category 파라미터를 받지 않아 필터가 조용히 무시된다.
+function listStatic(kind: "NOTICE" | "FAQ", options: PostListOptions): Promise<PostListResult> {
   return request<PostListResult>(
-    `/public/boards/${kind}/${getProjectId()}/posts${qs ? `?${qs}` : ""}`
+    `/public/boards/${getProjectId()}/${kind}/posts${buildPostListQuery(options)}`
   );
 }
 
-export const listNoticePosts = (o: PostListOptions = {}) => listStatic("notice", o);
+export const listNoticePosts = (o: PostListOptions = {}) => listStatic("NOTICE", o);
+export const listFaqPosts = (o: PostListOptions = {}) => listStatic("FAQ", o);
+
+// 상세는 board_type 무관 공용 엔드포인트 — 동적 게시판의 getPost 와 같은 경로다.
 export const getNoticePost = (postId: string) =>
-  request<BoardPost>(`/public/boards/notice/${getProjectId()}/posts/${postId}`);
-export const listFaqPosts = (o: PostListOptions = {}) => listStatic("faq", o);
+  request<BoardPost>(`/public/boards/posts/${postId}`);
 export const getFaqPost = (postId: string) =>
-  request<BoardPost>(`/public/boards/faq/${getProjectId()}/posts/${postId}`);
+  request<BoardPost>(`/public/boards/posts/${postId}`);
 
 // ── 댓글 (동적 게시판 게시글) ──
 export interface Comment {

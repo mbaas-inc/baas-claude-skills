@@ -171,9 +171,27 @@ UX: 제출 성공 시 "접수되었습니다" 안내, 폼 초기화. 인증 불�
 정적 게시판(공개 읽기 전용, board_id 불필요 — 프로젝트에 1개씩 고정).
 ```tsx
 const { posts, post, loading, error, fetchPosts, fetchPost } = BaasSDK.useNotice(); // FAQ는 useFaq()
-await fetchPosts({ limit: 20, offset: 0, keyword });   // posts = { items, total }
+await fetchPosts({ limit: 20, offset: 0, keyword, category, category_group });
+// posts = { items, total, board_settings }
 await fetchPost(postId);
 ```
+
+### 카테고리(분류 그룹) — 있을 때만 렌더
+
+분류는 2단계다. 게시판이 그룹을 정의하고(`posts.board_settings.categories`), 게시글이 그중에서
+선택한다(`item.categories`).
+
+```ts
+board_settings.categories  // [{ name: "카테고리", values: ["결제", "계정"] }] | null
+item.categories            // { "카테고리": ["결제"] } | null
+```
+
+- **필터 UI는 `posts.board_settings.categories`가 있을 때만 렌더한다.** 관리자가 분류를 등록하지
+  않은 프로젝트에서는 둘 다 `null` — 하드코딩 금지.
+- 그룹 이름이 `"카테고리"`(기본값)면 표시에서 접두사를 생략한다(`결제`). 축이 둘 이상일 때만
+  `유형: 결제`처럼 그룹명을 붙인다.
+- 글 수가 적으면 전체를 받아 클라이언트에서 걸러도 되고, 목록이 길면 `category`(+`category_group`)로
+  서버 필터를 쓴다. `category_group`을 주면 그 그룹 안에서만 매칭한다.
 
 ---
 
@@ -182,13 +200,17 @@ await fetchPost(postId);
 board_id 는 **프로비저닝 담당이 생성**한 값을 코드 상수로 주입(게시판 종류는 FREE|REVIEW 등 — 생성은 이 문서 범위 밖).
 ```tsx
 const { posts, post, loading, error, fetchPosts, fetchPost, submitPost, editPost, removePost } = BaasSDK.useBoard();
-await fetchPosts(BOARD_ID, { limit: 20, offset: 0, keyword });  // posts = { items, total }
+await fetchPosts(BOARD_ID, { limit: 20, offset: 0, keyword, category, category_group });
+// posts = { items, total, board_settings }
 await fetchPost(postId);
-await submitPost(BOARD_ID, { title, content });   // 로그인 필수
-await editPost(postId, { title, content });       // 로그인 필수
+await submitPost(BOARD_ID, { title, content, categories });   // 로그인 필수
+await editPost(postId, { title, content, categories });       // 로그인 필수
 await removePost(postId);                          // 로그인 필수
 ```
 - 목록/상세 읽기는 공개, 작성/수정/삭제는 로그인 필수 → 비로그인 시 로그인 유도.
+- 카테고리 구조·렌더 규칙은 공지/FAQ와 동일(위 "카테고리(분류 그룹)" 참조). 쓰기 시
+  `categories`는 `{ 그룹명: [값] }` 형태이며 **`board_settings.categories`의 부분집합**이어야 한다
+  — 벗어나면 서버가 400으로 거부한다.
 - `posts.items`가 비면 "아직 글이 없습니다" 빈 상태. 작성 성공 후 `fetchPosts` 재조회.
 - **작성자 식별 필드는 `author_id`(계정 UUID) 이며 `fetchPost`(상세)에만 있다. `fetchPosts`(목록)
   응답에는 없다** — 목록에는 표시용 `author_name` 만 온다(동적 컬렉션 레코드의 `account_id` 와 이름이

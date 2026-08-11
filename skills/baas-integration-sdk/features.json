@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.2.0",
   "sdk": "@mbaas/baas-web-sdk",
   "sdk_global": "window.BaasSDK",
   "surface_ref": "reference/sdk-surface.md",
@@ -21,8 +21,8 @@
   "data_flow": {
     "account": "앱 루트 AuthProvider가 인증 상태 1회 조회 → 회원가입 → 로그인(자동 refetch) → 화면은 useAuth()로 읽기만 → 로그아웃(자동 clear)",
     "recipient": "폼 입력(이름·전화) → useRecipient().register",
-    "notice": "useNotice().fetchPosts → post_id → fetchPost 상세 (공개)",
-    "faq": "useFaq().fetchPosts → fetchPost 상세 (공개)",
+    "notice": "useNotice().fetchPosts → post_id → fetchPost 상세 (공개) · 카테고리(분류 그룹)는 posts.board_settings.categories([{name,values}])가 있을 때만 필터 UI 렌더, 게시글 선택값은 item.categories({그룹:[값]}) — fetchPosts({category, category_group})로 서버 필터 또는 전체 받아 클라 필터",
+    "faq": "useFaq().fetchPosts → fetchPost 상세 (공개) · 카테고리 규칙은 notice 와 동일",
     "board": "프로비저닝 담당이 게시판 생성(board_id) → 코드 주입 → useBoard().fetchPosts(boardId) → post_id → fetchPost → (로그인) submitPost",
     "comments": "게시글 post_id → useComments().fetchComments → (로그인) addComment/editComment/removeComment",
     "survey": "useSurvey().fetchSurveys → survey_id → fetchSurvey → submitResponse(공개)",
@@ -60,7 +60,8 @@
       "surface_sections": ["공지사항·FAQ (notice/faq)"],
       "features": [
         { "id": "notice", "label": "공지사항", "auth": false, "keywords": ["공지사항", "공지", "notice"] },
-        { "id": "faq", "label": "FAQ", "auth": false, "keywords": ["FAQ", "자주 묻는 질문"] }
+        { "id": "faq", "label": "FAQ", "auth": false, "keywords": ["FAQ", "자주 묻는 질문"] },
+        { "id": "notice_category", "label": "공지/FAQ 카테고리(분류 그룹) 필터", "auth": false, "keywords": ["카테고리", "분류", "분류 그룹", "category", "카테고리 필터", "분류별 보기"] }
       ]
     },
     "board": {
@@ -69,6 +70,7 @@
         { "id": "board_list", "label": "게시글 목록", "auth": false, "keywords": ["게시판", "목록", "커뮤니티", "자유게시판", "리뷰"] },
         { "id": "board_detail", "label": "게시글 상세", "auth": false, "keywords": ["게시글", "상세", "글 보기"] },
         { "id": "board_write", "label": "게시글 작성/수정/삭제", "auth": "mixed", "keywords": ["글쓰기", "작성", "수정", "삭제", "post"] },
+        { "id": "board_category", "label": "게시판 카테고리(분류 그룹) 필터", "auth": false, "keywords": ["게시판 카테고리", "게시판 분류", "분류 그룹", "카테고리별 게시글"] },
         { "id": "comments", "label": "댓글", "auth": "mixed", "keywords": ["댓글", "comment", "답글"] }
       ]
     },
