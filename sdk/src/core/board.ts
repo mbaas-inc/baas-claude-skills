@@ -5,10 +5,7 @@
 import { request } from "./http";
 import { getProjectId } from "./config";
 
-/**
- * 게시판이 정의한 분류 그룹. 관리자가 게시판 설정에서 등록한다.
- * 축이 하나면 name 이 "카테고리"(기본값)라 UI 에서 라벨을 생략해도 된다.
- */
+/** 게시판이 정의한 분류 그룹 — 관리자가 게시판 설정에서 등록한다. */
 export interface CategoryGroup {
   name: string;
   values: string[];

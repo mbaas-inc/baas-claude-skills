@@ -4,13 +4,8 @@ import { getProjectId } from "./config";
 import { buildPostListQuery } from "./board";
 import type { PostListResult, BoardPost, PostListOptions } from "./board";
 
-/**
- * 공지/FAQ 목록.
- *
- * 통합 엔드포인트(`/public/boards/{pid}/{NOTICE|FAQ}/posts`)를 쓴다 — 레거시
- * `/public/boards/{notice|faq}/{pid}/posts` 는 category 파라미터를 받지 않아
- * 필터를 붙여도 서버가 조용히 무시한다.
- */
+// 통합 엔드포인트 사용 — 레거시 /public/boards/{notice|faq}/{pid}/posts 는
+// category 파라미터를 받지 않아 필터가 조용히 무시된다.
 function listStatic(kind: "NOTICE" | "FAQ", options: PostListOptions): Promise<PostListResult> {
   return request<PostListResult>(
     `/public/boards/${getProjectId()}/${kind}/posts${buildPostListQuery(options)}`
