@@ -106,8 +106,9 @@ const { isLoggedIn, user, loading, error, refetch, clear } = BaasSDK.useAuth();
 const { login, loading, error } = BaasSDK.useLogin();
 await login(userId, userPw);      // 성공 시 전역 인증 상태 자동 갱신(refetch). boolean 반환
 
-const { signup, loading, error } = BaasSDK.useSignup();
-await signup(userId, userPw, name, phone);   // AccountInfo | null 반환. phone 은 SDK 가 010-1234-5678 로 자동 정규화(폼은 자유 입력)
+const { signup, config, terms, verified, fetchConfig, fetchTerms, sendCode, verifyCode, loading, error } = BaasSDK.useSignup();
+await signup(userId, userPw, name, phone, { terms_agreed, privacy_agreed, terms_version });
+// AccountInfo | null 반환. phone 은 SDK 가 010-1234-5678 로 자동 정규화(폼은 자유 입력)
 
 const { logout } = BaasSDK.useLogout();
 await logout();                   // 성공 시 전역 상태 자동 clear
@@ -124,6 +125,64 @@ UX 규약:
 - 로그인/회원가입 폼은 제출 중 버튼 비활성화(`loading`), 실패 시 `error.message`를 폼 하단에 노출.
 - 로그인 성공 후 별도 refetch 불필요(훅이 처리). 화면 전환만 하면 `useAuth()`가 최신 상태.
 - **phone 은 거절 검증 대신 자동 포맷**: `formatPhone`로 입력 중 하이픈을 넣고, 하이픈 유무로 막지 않는다(최종 형식은 SDK가 보증).
+
+### 가입 절차는 프로젝트 설정으로 갈린다 (매번 읽어 분기)
+
+**`fetchConfig()` 를 가입 화면 진입 시 호출하고 그 결과로 분기한다. 생성 시점 값으로 화면을
+고정하지 말 것** — 운영자가 콘솔에서 언제든 토글하므로, 고정하면 화면은 멀쩡한데 가입만 실패한다.
+
+```tsx
+const { config, fetchConfig } = BaasSDK.useSignup();
+useEffect(() => { fetchConfig(); }, []);
+// config = { signup_verification: "NONE" | "EMAIL", require_signup_approval: boolean }
+```
+
+| `signup_verification` | 가입 화면이 할 일 |
+|---|---|
+| `"NONE"` | 코드 입력 UI 없음. 폼 작성 → 바로 `signup()` |
+| `"EMAIL"` | ① 이메일 입력 → `sendCode(email)` ② 코드 입력 → `verifyCode(email, code)` ③ `verified === true` 가 되어야 가입 버튼 활성화 ④ `signup(email, pw, name, phone, {...})` — **`userId` 는 인증한 이메일과 같아야 한다** |
+
+| `require_signup_approval` | 가입 성공 직후 |
+|---|---|
+| `false` | 바로 로그인 안내 |
+| `true` | "관리자 승인 후 이용 가능합니다" 안내 (계정은 PENDING 상태) |
+
+서버가 거부하는 경우(모두 `error.message` 그대로 노출):
+- `401 이메일 인증이 필요합니다. 먼저 인증을 완료해주세요.` — 인증 없이 `signup()` 호출
+- `400 이메일 인증을 사용하는 프로젝트는 아이디가 이메일 형식이어야 합니다.`
+- `429 인증코드는 60초에 한 번만 요청할 수 있습니다.` — `error` 노출 + 재발송 버튼을 60초간 비활성화
+
+### 약관 (가입 화면 안에서 동의를 받는다)
+
+프로젝트 회원도 플랫폼에 저장되는 회원이라 통합 약관 동의가 필요하다. 별도 약관 페이지로
+이동시키지 말고 **가입 화면 안에서 전문을 접었다 펴는 형태**로 노출한다.
+
+```tsx
+const { terms, fetchTerms } = BaasSDK.useSignup();
+useEffect(() => { fetchTerms(); }, []);
+// terms = { version, terms: {title, content}, privacy: {title, content} }
+
+await signup(email, pw, name, phone, {
+  terms_agreed: true, privacy_agreed: true,
+  terms_version: terms.version,   // 동의한 버전을 그대로 돌려보낸다
+});
+```
+
+- 두 항목 모두 **필수 체크**로 만들고, 체크 전에는 가입 버튼을 비활성화한다.
+- `content` 는 일반 텍스트(줄바꿈 포함)다 — `white-space: pre-wrap` 으로 렌더한다.
+- `terms_version` 은 서버가 회원 기록에 남긴다(약관 개정 시 재동의 대상 특정용). **하드코딩하지 말고 `terms.version` 을 그대로 넘긴다.**
+
+### SNS 가입 버튼
+
+```tsx
+const providers = await BaasSDK.getSnsProviders();
+// [{ name, display_name, logo_url, login_url }]
+```
+
+- **`login_url` 은 fetch 대상이 아니라 페이지 이동 경로다** — `window.location.href = provider.login_url` 로 이동시킨다. `fetch` 하면 동작하지 않는다.
+- 목록은 **전역**이다(프로젝트별 on/off 없음). 기획에서 특정 provider 만 쓰기로 했다면 **결과를 그 목록으로 필터해 렌더**한다 — 렌더 필터일 뿐 서버가 나머지를 막지는 않는다.
+- **SNS 가입은 이메일 인증 대상이 아니다**(provider 가 이미 이메일을 검증). `signup_verification === "EMAIL"` 이어도 SNS 버튼은 그대로 노출한다.
+- SNS 가입자는 이름/연락처가 없을 수 있다 — 복귀 후 `useAuth().user.is_profile_completed` 가 false 면 추가정보 입력 화면으로 유도한다.
 
 ---
 
