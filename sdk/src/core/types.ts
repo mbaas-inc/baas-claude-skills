@@ -23,6 +23,10 @@ export interface AccountInfo {
 }
 
 export interface SignupOptions {
+  terms_agreed?: boolean;
+  privacy_agreed?: boolean;
+  /** 동의한 약관 버전 — getSignupTerms().version 을 그대로 넘긴다 */
+  terms_version?: string;
   [key: string]: unknown;
 }
 

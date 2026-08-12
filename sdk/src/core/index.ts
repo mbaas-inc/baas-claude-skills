@@ -11,6 +11,13 @@ export {
   clearAuthCache,
 } from "./auth";
 export {
+  getAuthConfig,
+  getSignupTerms,
+  requestSignupEmailCode,
+  confirmSignupEmailCode,
+  getSnsProviders,
+} from "./signup";
+export {
   listPosts,
   getPost,
   createPost,
@@ -91,6 +98,13 @@ export type {
   CategoryGroup,
   PostCategories,
 } from "./board";
+export type {
+  AuthConfig,
+  SignupTerms,
+  TermsDocument,
+  SnsProvider,
+  VerifyCodeResult,
+} from "./signup";
 export type { Comment } from "./notice";
 export type {
   DynRecord,

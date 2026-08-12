@@ -1,5 +1,5 @@
 {
-  "version": "1.2.0",
+  "version": "1.3.0",
   "sdk": "@mbaas/baas-web-sdk",
   "sdk_global": "window.BaasSDK",
   "surface_ref": "reference/sdk-surface.md",
@@ -7,6 +7,7 @@
   "fallback": "표면에 없는 기능은 이 스킬 범위 밖입니다. 임의 fetch 코드를 만들지 말고 사용자에게 미지원임을 알리세요(raw API 이스케이프 해치 없음 — 모든 백엔드 호출은 SDK 경유).",
   "hook_groups": {
     "useAuth": "account", "useLogin": "account", "useSignup": "account", "useLogout": "account", "changePassword": "account", "AuthProvider": "account", "RequireAuth": "account",
+    "getAuthConfig": "account", "getSignupTerms": "account", "requestSignupEmailCode": "account", "confirmSignupEmailCode": "account", "getSnsProviders": "account",
     "useRecipient": "recipient", "registerRecipient": "recipient",
     "useCollection": "collection", "getPublicRecord": "collection",
     "useNotice": "notice", "useFaq": "notice",
@@ -19,7 +20,7 @@
   },
   "hook_groups_note": "baas-manifest.json 의 features_used 자동 도출용 — 코드의 BaasSDK.<name> 사용을 스캔해 이 매핑으로 그룹을 산출한다(scripts/sync-manifest.mjs). 새 훅/기능을 추가하면 이 맵도 갱신한다.",
   "data_flow": {
-    "account": "앱 루트 AuthProvider가 인증 상태 1회 조회 → 회원가입 → 로그인(자동 refetch) → 화면은 useAuth()로 읽기만 → 로그아웃(자동 clear)",
+    "account": "앱 루트 AuthProvider가 인증 상태 1회 조회 → 회원가입 → 로그인(자동 refetch) → 화면은 useAuth()로 읽기만 → 로그아웃(자동 clear) · 가입 화면은 진입 시 useSignup().fetchConfig()로 프로젝트 설정을 읽어 분기(생성 시점 값 고정 금지): signup_verification=EMAIL이면 sendCode→verifyCode(verified=true)를 거쳐야 signup 허용(서버가 401로 강제), NONE이면 바로 signup · 약관은 fetchTerms()로 전문을 받아 가입 화면 안에서 동의받고 terms_version을 signup에 전달 · SNS는 getSnsProviders()의 login_url로 페이지 이동(fetch 아님), 이메일 인증 면제",
     "recipient": "폼 입력(이름·전화) → useRecipient().register",
     "notice": "useNotice().fetchPosts → post_id → fetchPost 상세 (공개) · 카테고리(분류 그룹)는 posts.board_settings.categories([{name,values}])가 있을 때만 필터 UI 렌더, 게시글 선택값은 item.categories({그룹:[값]}) — fetchPosts({category, category_group})로 서버 필터 또는 전체 받아 클라 필터",
     "faq": "useFaq().fetchPosts → fetchPost 상세 (공개) · 카테고리 규칙은 notice 와 동일",
@@ -37,6 +38,9 @@
       "surface_sections": ["인증 (account)"],
       "features": [
         { "id": "signup", "label": "회원가입", "auth": false, "keywords": ["회원가입", "가입", "sign up", "register"] },
+        { "id": "signup_email_verification", "label": "가입 이메일 인증", "auth": false, "keywords": ["이메일 인증", "인증코드", "인증번호", "본인인증", "email verification", "가입 인증", "코드 확인"] },
+        { "id": "signup_terms", "label": "가입 약관 동의", "auth": false, "keywords": ["약관", "이용약관", "개인정보 처리방침", "동의", "terms", "privacy"] },
+        { "id": "sns_signup", "label": "SNS 로그인/가입", "auth": false, "keywords": ["소셜 로그인", "SNS 로그인", "네이버 로그인", "카카오 로그인", "구글 로그인", "애플 로그인", "간편 로그인", "social login"] },
         { "id": "login", "label": "로그인", "auth": false, "keywords": ["로그인", "sign in", "login"] },
         { "id": "logout", "label": "로그아웃", "auth": true, "keywords": ["로그아웃", "logout"] },
         { "id": "account_info", "label": "내 정보", "auth": true, "keywords": ["내 정보", "프로필", "계정 정보", "마이페이지"] },
