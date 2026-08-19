@@ -16,6 +16,7 @@ export {
   requestSignupEmailCode,
   confirmSignupEmailCode,
   getSnsProviders,
+  completeProfile,
 } from "./signup";
 export {
   listPosts,
@@ -104,6 +105,7 @@ export type {
   TermsDocument,
   SnsProvider,
   VerifyCodeResult,
+  CompleteProfileInput,
 } from "./signup";
 export type { Comment } from "./notice";
 export type {

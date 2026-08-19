@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   init, getAuthConfig, getSignupTerms, requestSignupEmailCode,
-  confirmSignupEmailCode, getSnsProviders, signup,
+  confirmSignupEmailCode, getSnsProviders, signup, completeProfile,
 } from "../dist/baas-core.esm.js";
 
 const PROJECT = "b59f841d-bfa3-4d63-8969-70420a4298f6";
@@ -86,4 +86,34 @@ test("getSnsProviders — providers 누락 시 빈 배열", async () => {
   init({ projectId: PROJECT });
   mockFetch({});
   assert.deepEqual(await getSnsProviders(), []);
+});
+
+test("getSnsProviders — project_login_url 을 그대로 통과시킨다", async () => {
+  init({ projectId: PROJECT });
+  const abs = "https://baas.aiapp.help/auth/google/login?subdomain=my-app";
+  mockFetch({ providers: [{ name: "google", display_name: "구글", login_url: "/auth/google/login", project_login_url: abs }] });
+  const providers = await getSnsProviders();
+  // 앱이 그대로 window.location.href 에 넣는 값 — SDK 가 가공하면 안 된다
+  assert.equal(providers[0].project_login_url, abs);
+});
+
+test("getSnsProviders — project_login_url 이 null 이면 그대로 null", async () => {
+  init({ projectId: PROJECT });
+  mockFetch({ providers: [{ name: "google", display_name: "구글", login_url: "/auth/google/login", project_login_url: null }] });
+  const providers = await getSnsProviders();
+  assert.equal(providers[0].project_login_url, null);
+});
+
+test("completeProfile — SNS 복귀 후 약관 동의 + 추가 정보", async () => {
+  init({ projectId: PROJECT });
+  mockFetch({});
+  await completeProfile({
+    name: "홍길동", phone: "010-1234-5678",
+    terms_agreed: true, privacy_agreed: true,
+  });
+  assert.match(last.url, /\/account\/complete-profile$/);
+  assert.equal(last.method, "POST");
+  assert.equal(last.body.terms_agreed, true);
+  assert.equal(last.body.privacy_agreed, true);
+  assert.equal(last.body.phone, "010-1234-5678");
 });
