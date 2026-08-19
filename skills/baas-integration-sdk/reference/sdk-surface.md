@@ -176,13 +176,51 @@ await signup(email, pw, name, phone, {
 
 ```tsx
 const providers = await BaasSDK.getSnsProviders();
-// [{ name, display_name, logo_url, login_url }]
+// [{ name, display_name, logo_url, login_url, project_login_url }]
 ```
 
-- **`login_url` 은 fetch 대상이 아니라 페이지 이동 경로다** — `window.location.href = provider.login_url` 로 이동시킨다. `fetch` 하면 동작하지 않는다.
+- **`project_login_url` 로 이동시킨다** — `window.location.href = provider.project_login_url`.
+  fetch 대상이 아니라 페이지 이동 경로이며, **문자열을 가공하지 않는다**(호스트를 앞에 붙이거나
+  상대 경로로 바꾸면 깨진다). `login_url` 은 구버전 소비자용 상대 경로이므로 생성 앱에서는 쓰지 않는다.
+- **`project_login_url` 이 `null` 이면 SNS 버튼을 렌더하지 않는다.** 프로젝트가 확정되지 않은
+  호스트에서 부른 경우이고, 그대로 로그인시키면 프로젝트 회원이 아니라 통합회원이 만들어진다.
 - 목록은 **전역**이다(프로젝트별 on/off 없음). 기획에서 특정 provider 만 쓰기로 했다면 **결과를 그 목록으로 필터해 렌더**한다 — 렌더 필터일 뿐 서버가 나머지를 막지는 않는다.
 - **SNS 가입은 이메일 인증 대상이 아니다**(provider 가 이미 이메일을 검증). `signup_verification === "EMAIL"` 이어도 SNS 버튼은 그대로 노출한다.
-- SNS 가입자는 이름/연락처가 없을 수 있다 — 복귀 후 `useAuth().user.is_profile_completed` 가 false 면 추가정보 입력 화면으로 유도한다.
+
+#### SNS 가입을 넣으면 복귀 화면도 **함께 만든다** (필수)
+
+SNS 는 provider 화면에서 계정이 만들어져 돌아오므로, 약관 동의와 이름·연락처를 받을 자리가
+가입 폼에 없다. 서버는 앱으로 돌려보내기만 하고 **그 화면은 앱이 자기 디자인으로 제공해야 한다**
+— 예전엔 mBaaS 콘솔 약관 페이지로 보냈으나, 고객 앱 한가운데 남의 브랜딩 화면이 끼어드는 데다
+프로젝트 회원 세션을 읽지 못해 에러가 났다.
+
+**SNS 버튼을 하나라도 렌더한다면 아래 화면을 같은 앱 디자인으로 반드시 함께 생성한다.**
+
+```tsx
+// 복귀 후 (앱 루트 또는 login 시작 시 넘긴 next 경로)
+const { user } = BaasSDK.useAuth();
+if (user && !user.is_profile_completed) {
+  // → 약관 동의 + 추가 정보 화면을 띄운다 (이메일 가입 폼과 같은 톤)
+}
+
+const terms = await BaasSDK.getSignupTerms();   // 이메일 가입과 같은 본문
+await BaasSDK.completeProfile({
+  name, phone,                 // phone 은 010-1234-5678 형식 (하이픈 필수, 서버 정규식 검증)
+  terms_agreed: true,
+  privacy_agreed: true,        // 둘 다 true 여야 통과 — 서버가 약관 동의를 여기서 강제한다
+});
+```
+
+지켜야 할 규칙:
+
+1. **약관 본문은 `getSignupTerms()` 로 받아 노출한다.** 이메일 가입 화면과 같은 문안·같은 필수
+   체크 UI를 쓴다. 체크 전에는 완료 버튼을 비활성화한다.
+2. **`is_profile_completed` 가 false 인 동안은 앱 본 기능으로 넘기지 않는다.** 이름·연락처가
+   비어 있어 게시글 작성자 표시 같은 곳이 빈칸으로 나온다.
+3. `phone` 은 **하이픈 포함 형식**이어야 한다(`010-1234-5678`). 숫자만 보내면 400 이다.
+4. 이미 완료된 회원이 다시 호출하면 400 `ALREADY_COMPLETED` 다 — 재진입 시 화면을 건너뛴다.
+5. 로그인 시작 시 `project_login_url` 에 `&next=/원래경로` 를 이어 붙이면 복귀 지점을 지정할 수
+   있다. 생략하면 앱 루트로 돌아온다.
 
 ---
 

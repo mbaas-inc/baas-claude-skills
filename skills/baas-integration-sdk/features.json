@@ -1,5 +1,5 @@
 {
-  "version": "1.3.0",
+  "version": "1.3.1",
   "sdk": "@mbaas/baas-web-sdk",
   "sdk_global": "window.BaasSDK",
   "surface_ref": "reference/sdk-surface.md",
@@ -8,6 +8,7 @@
   "hook_groups": {
     "useAuth": "account", "useLogin": "account", "useSignup": "account", "useLogout": "account", "changePassword": "account", "AuthProvider": "account", "RequireAuth": "account",
     "getAuthConfig": "account", "getSignupTerms": "account", "requestSignupEmailCode": "account", "confirmSignupEmailCode": "account", "getSnsProviders": "account",
+    "completeProfile": "account",
     "useRecipient": "recipient", "registerRecipient": "recipient",
     "useCollection": "collection", "getPublicRecord": "collection",
     "useNotice": "notice", "useFaq": "notice",

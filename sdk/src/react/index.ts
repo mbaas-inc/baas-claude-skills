@@ -39,6 +39,7 @@ export const BaasSDK = {
   requestSignupEmailCode: core.requestSignupEmailCode,
   confirmSignupEmailCode: core.confirmSignupEmailCode,
   getSnsProviders: core.getSnsProviders,
+  completeProfile: core.completeProfile,
   // board (dynamic)
   listPosts: core.listPosts,
   getPost: core.getPost,
