@@ -12,7 +12,7 @@ transport·envelope·project_id 주입은 SDK 내부가 처리한다 — 아래 
 
 | 호출 형태 | 실패 시 |
 |---|---|
-| **훅의 액션 함수** (`useBoard().submitPost`<!--collection:start-->, `useCollection().fetchRecords`<!--collection:end-->, `useStore().confirm`, `useLogin().login`, `useFileUpload().upload` …) | **throw 하지 않는다.** `null`(또는 `login`/`logout` 은 `false`) 을 resolve 하고 실패는 훅의 `error` state 에 담긴다 |
+| **훅의 액션 함수** (`useBoard().submitPost`, `useStore().confirm`, `useLogin().login`, `useFileUpload().upload` …) | **throw 하지 않는다.** `null`(또는 `login`/`logout` 은 `false`) 을 resolve 하고 실패는 훅의 `error` state 에 담긴다 |
 | **예외 — `beginWidgetCheckout`** (store·reservation) | 이것만 **throw 한다**(내부 래퍼를 거치지 않음) → `try/catch` 필요 |
 | **훅 없는 top-level 함수** (`BaasSDK.uploadFile`, `changePassword`, `getAccountInfo` …) | `BaasError`(`.message` 한국어, `.errorCode`, `.status`) **throw** |
 
@@ -39,9 +39,6 @@ state 가 **없는** 함수만 반환값을 로컬 state 로 받으면 된다.
 | `useBoard` | `posts` = `{items,total}` · `post` | 같은 값 | state 또는 반환값 |
 | `useNotice`/`useFaq` | `posts` = `{items,total}` · `post` | 같은 값 | state 또는 반환값 |
 | `useComments` | `comments` = `{items,total}` | 같은 값 | state 또는 반환값 |
-<!--collection:start-->
-| `useCollection` | `records` = `{items,total_count,…}` · `record` | 같은 값 | state 또는 반환값 (`.items` 를 map) |
-<!--collection:end-->
 | `useStore` | `config` · `products` = **배열** | 같은 값(배열) | state 또는 반환값 |
 | `useSurvey` | `surveys` = **배열** · `survey` | 같은 값(배열) | state 또는 반환값 |
 | `useReservation` | `targets` = 배열 | `fetchTargets` 는 같은 값 | state 또는 반환값 |
@@ -49,7 +46,7 @@ state 가 **없는** 함수만 반환값을 로컬 state 로 받으면 된다.
 | `useReservation` | — | `fetchTarget` · `fetchSlots` · `myBookings` | **반환값을 로컬 state 로** |
 | `useStore` | — | `fetchProduct` · `myOrders` | **반환값을 로컬 state 로** |
 
-**목록 형태가 두 가지인 이유**: 페이지네이션이 있는 조회(게시판·공지·댓글<!--collection:start-->·동적 컬렉션<!--collection:end-->)는 총 개수가
+**목록 형태가 두 가지인 이유**: 페이지네이션이 있는 조회(게시판·공지·댓글)는 총 개수가
 필요해 `{items, total}` 봉투를, 전량 조회(스토어 상품·설문·예약 대상)는 **배열**을 준다.
 
 **state 없는 함수는 백엔드 응답을 그대로 준다**(가공 없음) — 그래서 `fetchSlots` 는 `{target_id, date,
@@ -63,11 +60,6 @@ slots}` 봉투이고 `fetchTarget` 은 `reservation_settings` 가 중첩된 객�
 `const c = useBoard()` 처럼 컨테이너를 통째로 들고 `[c]` 를 의존성에 넣으면 매 렌더 새 객체라
 **무한 재요청 + 영구 로딩**이 된다. 개별 함수만 구조분해한다(`const { fetchPosts } = useBoard()`).
 `useMemo` 로 우회되지 않는다(반환 객체에 매 호출 토글되는 `loading` 이 함께 담겨 있다).
-<!--collection:start-->
-`useCollection` 도 같다 — `const c = useCollection()` 이 아니라 `const { fetchRecords } = useCollection()`.
-또한 **`useCollection()` 인스턴스는 컬렉션당 하나** — 한 인스턴스로 두 컬렉션을 조회하면
-`records` 슬롯이 하나뿐이라 먼저 도착한 결과가 조용히 사라진다.
-<!--collection:end-->
 
 ---
 
@@ -315,13 +307,10 @@ await removePost(postId);                          // 로그인 필수
   — 벗어나면 서버가 400으로 거부한다.
 - `posts.items`가 비면 "아직 글이 없습니다" 빈 상태. 작성 성공 후 `fetchPosts` 재조회.
 - **작성자 식별 필드는 `author_id`(계정 UUID) 이며 `fetchPost`(상세)에만 있다. `fetchPosts`(목록)
-  응답에는 없다** — 목록에는 표시용 `author_name` 만 온다<!--collection:start-->(동적 컬렉션 레코드의 `account_id` 와 이름이
-  다르니 혼동 주의)<!--collection:end-->.
+  응답에는 없다** — 목록에는 표시용 `author_name` 만 온다.
   - 상세에서 본인 글 판정: `post.author_id === user.id` (`useAuth()` 의 `user`).
   - **"내가 쓴 글 목록" 화면은 식별자 기반 필터가 불가능**하다. 그 화면이 요구되면 사람에게 제약을
-    보고한다 — `author_name` 비교는 동명이인을 구분하지 못하므로 권장하지 않는다.<!--collection:start-->
-    대안으로 게시글을 동적 컬렉션으로 설계하면 레코드 봉투에 `account_id` 가 있어 가능하다.<!--collection:end-->
-  - 수정/삭제 버튼 노출은 위 판정으로 좁히되, **실제 권한 경계는 서버(403)** 다.
+    보고한다 — `author_name` 비교는 동명이인을 구분하지 못하므로 권장하지 않는다.  - 수정/삭제 버튼 노출은 위 판정으로 좁히되, **실제 권한 경계는 서버(403)** 다.
 
 ## 댓글 (comments)
 ```tsx
@@ -419,11 +408,6 @@ const terms = await pay.fetchTerms();   // { title, content, version }
 ### 커스텀 화면에 결제를 붙일 때
 현재 SDK 는 결제 금액을 안전하게 다루는 prepare/confirm 을 **store·reservation 에만** 제공한다. 따라서
 "돈이 실제로 움직이는" 결제는 **store 또는 reservation 을 경유**한다. 결제 화면엔 위 ①②를 동일 적용.
-<!--collection:start-->
-커스텀 컬렉션은 그 결과(주문/예약 id 등)를 **reference 로 연결**해 도메인 데이터를 관리한다.
-**커스텀 컬렉션 필드에 금액·결제상태를 두고 클라이언트가 직접 쓰는 방식은 위·변조 가능하므로 금지**
-(결제 확정은 반드시 서버 소유).
-<!--collection:end-->
 
 ---
 
@@ -568,143 +552,6 @@ return (products ?? []).map(p => …);                        // 초기값은 nu
 
 ---
 
-<!--collection:start-->
-## 동적 컬렉션 (collection)
-
-**사용자 정의 커스텀 데이터**(고정 기능이 커버 못 하는 것). 데이터 프리미티브만 제공 — **범용 자동
-렌더 없음**. 앱은 요구에 맞춰 UI를 설계하고 이 훅으로 데이터만 연결한다.
-
-**전제**: `collection name`·필드(스키마)·접근 정책은 **프로비저닝 담당이 먼저 생성**한다 — 필드는
-`이름:타입:수식어`(예: `item_name:string` + required/indexed), 접근 정책은 기본값과 달라지는 연산만 명시
-(예: `read: public`). **생성 명령·플래그는 이 문서 범위 밖**이다(권위 = 설치된 CLI 의 `--help`).
-스키마·정책 변경은 프로비저닝 담당 소유(콘솔·앱에서 변경 아님).
-```tsx
-const { records, record, fields, loading, error,
-        fetchRecords, fetchPublicRecords, fetchRecord, submitRecord, editRecord, removeRecord,
-        restore, increment, aggregate, batch, transaction } = BaasSDK.useCollection();
-
-// 읽기 — 로그인 여부와 무관하게 같은 함수. 범위는 접근 정책(settings.access)이 서버에서 판정
-await fetchRecords("inventory", { limit: 20, offset: 0, sort: "-created_at",
-                                  filter: { quantity: { lt: 5 }, category: { eq: "전자" } } });
-// records = { items, total_count, offset, limit }; item = { id, collection, data:{...}, account_id, created_at }
-// ⚠️ 렌더는 records 가 아니라 records.items 를 map 한다 (records 는 배열이 아니라 봉투):
-//    (records?.items ?? []).map((r) => r.data.item_name)   // records.map(...) 는 TypeError
-await fetchRecord("inventory", recordId);   // 단건 — 비로그인이면 read:public 범위로 판정
-await submitRecord("inventory", { item_name: "노트북", quantity: 3, category: "전자" });  // create 정책 member/owner면 로그인 필수
-await editRecord("inventory", recordId, { quantity: 10 });                                 // update 정책 owner면 작성자만
-await removeRecord("inventory", recordId);                                                  // delete 정책 owner면 작성자만
-
-// fetchPublicRecords / BaasSDK.getPublicRecord 는 deprecated 별칭(동작 동일) — 신규 코드에서 쓰지 않는다
-
-// ── OR 검색 — filter(전부 AND)와 다시 AND 로 결합된다. 게시판 검색이 이 형태
-await fetchRecords("notice", { filter: { status: { eq: "게시" } },
-                               or: { title: { like: kw }, content: { like: kw } } });
-
-// ── 렌더 스키마 동봉 — 필드별 위젯을 서버에서 받아 화면을 그린다
-await fetchRecords("notice", { includeFields: true });   // fields 에 담긴다(목록은 봉투 레벨 1회)
-await fetchRecord("notice", recordId, { includeFields: true });
-// fields[i] = { name, label, type, ui, unique, required, options, widget }
-// ⚠️ 렌더러는 widget 하나만 본다 — type/ui 폴백 규칙을 앱에서 다시 구현하지 않는다
-
-// ── 멱등 생성 — 네트워크 재시도가 중복 접수를 만들지 않게. 키는 제출 1회당 하나를 만들어 유지
-await submitRecord("inquiry", form, { clientTxnId: submitId });
-
-// ── 집계 — count 외에는 field 필요(number 타입만). 인가는 목록과 동일
-const agg = await aggregate("order", "sum", { field: "amount", groupBy: "status" });
-// agg.buckets = [{ key, value, count }, ...]  (groupBy 없으면 1개, key=null)
-
-// ── 카운터 원자 증감 — 동시 요청이 서로를 덮지 않는다. 인가는 update 권한
-await increment("notice", recordId, "views");          // +1
-await increment("product", recordId, "stock", -1);     // 재고 차감
-
-await restore("notice", recordId);                     // 삭제 취소(soft delete 복구)
-
-// ── 배치 — 항목별 독립 성공/실패. 실패 사유를 행별 오류 표시에 그대로 쓴다
-const res = await batch("notice", { create: rows.map((data) => ({ data })) });
-// res = { results:[{index, op, id, success, error}], succeeded, failed }
-
-// ── 원자 트랜잭션 — 하나라도 실패하면 전부 롤백. 복수 컬렉션 가능
-await transaction([
-  { op: "create", collection: "posts",   id: newId, data: { title } },
-  { op: "create", collection: "history", data: { post_id: newId } },  // 부모 id 를 미리 정해 참조
-]);
-```
-- **접근 정책 (settings.access — CRUD 연산별 grants, 서버 강제)**: `{create, read, update, delete}`,
-  값 = **atom 또는 배열(OR 합집합)**. atom ∈ `public`(누구나) | `member`(로그인) | `owner`(레코드 작성자)
-  | `ref_owner:<field>`(그 레코드의 reference 필드가 가리키는 **부모 레코드의 작성자** — #626).
-  기본값 create:member/read:member/update:owner/delete:owner, create 는 public|member 만.
-  - **읽기 함수는 하나다** — 목록은 `fetchRecords`, 단건은 `fetchRecord`. 로그인 여부로 함수를 고르지
-    않는다. 비로그인이면 `read:public` 범위, 로그인이면 회원 범위로 **서버가 정책을 보고 판정**한다.
-
-    | | 목록(다건) | 단건 |
-    |---|---|---|
-    | 로그인 무관 | `fetchRecords(name, {filter,sort})` | `fetchRecord(name, id)` |
-
-    `fetchPublicRecords`·`BaasSDK.getPublicRecord` 는 **deprecated 별칭**이다(경로 통합으로 동작 동일).
-    기존 앱 호환용이라 신규 코드에서는 쓰지 않는다. 로그인 상태에서 별칭을 부르면 회원 범위로
-    판정되므로, `read: [public, owner]` 같은 혼합 정책에서 공개분만 보려면 `filter` 로 명시해야 한다.
-  - ⚠️ **정책이 거부하면(예: `read:member`/`owner` 인데 비로그인) `BaasError` throw가 아니라 `null` 을
-    resolve** 한다 → 반환값을 `res?.items ?? []`/null 로 가드. 쓰기·기타 작업은 실패 시
-    `BaasError`(.message) throw(상단 §성공/실패 규약) — 에러 **표시 방식**(토스트/모달/인라인)은 앱 UX 소관.
-  - `read:owner` → `fetchRecords`가 **본인 레코드만** 반환(개인 데이터).
-  - `read:["owner","ref_owner:post_id"]` → `fetchRecords`는 **내 레코드(owner)** ∪ **내가 주인인 부모
-    (post_id)에 달린 레코드(ref_owner)** 의 **합집합**을 반환한다. ⚠️ 응답은 **각 행이 어느 자격으로
-    매칭됐는지 표시하지 않는다** → 이 목록을 "받은 신청 관리 뷰"로 **그대로 렌더하면 안 된다**(내가 낸
-    신청까지 섞여 나옴). 관점으로 나눠 소비한다:
-    - `r.account_id === user.id` → **내가 낸** 레코드(내 신청 현황).
-    - `r.account_id !== user.id` → **내가 주인인 부모에 달린** 레코드(받은 신청) = 수락/거절 대상.
-    "받은 신청 관리"와 "내 신청 현황"은 **별도 화면·별도 부분집합**으로 분리하는 게 안전하다.
-  - `update/delete` 에 `owner`/`ref_owner:<f>` → 해당 주체가 아닌 회원의 `editRecord`/`removeRecord`는
-    서버가 403(클라 버튼 숨김은 보조). 예: 신청 수락(update)=`ref_owner`(부모 소유자)만, 신청 취소
-    (delete)=`owner`(작성자 본인). **ref_owner 전용 액션 버튼은 위 `account_id !== user.id` 부분집합에만
-    노출**한다 — 내가 낸 신청에 "수락" 버튼을 붙이면 누를 때 403(실제 발생 오류).
-  - UI는 이 정책을 **읽어서** 로그인 게이트·버튼 노출을 맞춘다(정책 자체는 서버가 강제).
-- **reference 무결성(서버 강제)**: `reference` 필드 값은 대상 컬렉션의 실존 레코드 id 여야 하며
-  아니면 `submitRecord`/`editRecord`가 400. self-reference(같은 컬렉션) 허용 — 트리는 root anchor
-  (`post_id`)+parent(`parent_id`) 이중 참조로 설계하고 anchor 평면 조회 후 클라에서 조립한다.
-- **필터 DSL**: `filter: { field: { op: value } }`, op ∈ `eq|ne|gt|gte|lt|lte|like|in|has`(array 요소 포함).
-  sort는 `field`/`-field`. `or: {...}` 는 서로 OR 이고 그 묶음이 `filter` 와 AND 로 결합된다(한 겹만 — 중첩 없음).
-  **성능**: 등호(`eq`)·`has` 만 인덱스를 탄다. `like`·범위 비교·커스텀 필드 정렬은 전체 스캔이므로
-  큰 컬렉션에서 목록 UX 를 설계할 때 감안한다. `limit` 상한은 100.
-- **필드 타입 7종**: string · number · boolean · date · enum · reference · **array**(태그·다중 선택,
-  `options.values` 가 있으면 그 목록에서만). **이미지/파일**은 아래
-  [파일 업로드(storage)](#파일-업로드-storage) 절의 `useFileUpload` 로 `cdn_url` 을 얻어 string(url) 필드에 저장한다.
-- **위젯은 서버가 확정한다 — `widget` 하나만 보면 된다**(`includeFields: true` 로 받는다).
-  `type`·`ui` 는 선언이고 `widget` 은 결론이다. 폴백 규칙(boolean→toggle, date→date,
-  array→tags, **enum→값 3개 이하 radio / 4개 이상 select**)을 앱에서 다시 구현하면 규칙이 갈라진다.
-
-  | widget | 그릴 것 |
-  |---|---|
-  | `text` · `textarea` · `richtext` | 한 줄 / 여러 줄 / 에디터 |
-  | `phone` · `email` | 형식 입력 |
-  | `number` · `money` | 숫자 / 금액(12,000원) |
-  | `toggle` · `date` | 스위치 / 날짜 선택 |
-  | `radio` · `select` | 선택지는 `options.values` |
-  | `reference` | 검색 후 선택(대상은 `options.collection`) |
-  | `tags` | 다중 값 입력 |
-
-- **값 형식**: `date` 는 `YYYY-MM-DD` 또는 `YYYY-MM-DDTHH:MM[:SS]` — **구분자는 `T` 만**(공백·자리수
-  미달은 400). 금액은 부동소수 오차를 피해 **원 단위 정수**로 저장한다. 레코드 전체 상한 64KB
-  (이미지는 base64 로 넣지 말고 URL 을 쓴다).
-- **유일성**: `unique` 필드에 중복 값을 쓰면 **409**. 해당 입력에 "이미 사용 중" 을 표시한다.
-- **삭제 정책**(reference 필드의 `on_delete`, 기본 `restrict`): 부모 레코드를 지울 때
-  `restrict`=참조가 있으면 409(오류에 막는 컬렉션·건수가 담긴다) · `cascade`=자식도 함께 삭제
-  (삭제 확인에 경고) · `set_null`=자식의 참조 키 제거 · `none`=방치. 정책은 프로비저닝 담당 소유.
-- `records.items`가 비면 빈 상태 UI. 작성/수정 성공 후 `fetchRecords`로 새로고침.
-- **부분 수정**: `editRecord` 는 보낸 키만 바꾼다(안 보낸 필드는 유지). 병합이 서버에서 일어나므로
-  두 사용자가 같은 행의 **다른 칸**을 동시에 고쳐도 서로의 변경이 사라지지 않는다.
-- **배치 vs 트랜잭션**: 배치 = 같은 컬렉션 대량 + **부분 성공**(엑셀 붙여넣기·일괄 정리),
-  트랜잭션 = 복수 컬렉션 소수 + **전부 아니면 전무**(따로 남으면 데이터가 거짓이 되는 쌍).
-  대량 작업에 트랜잭션을 쓰면 한 행 때문에 전부 되돌아간다.
-- ⚠️ **"누구나 조회수만 올리기" 는 아직 불가** — `increment` 는 `update` 권한을 쓰므로 비로그인
-  조회수 증가에는 `update: public` 이 필요하고 그건 본문 수정까지 열어 버린다. 필드 단위 권한이
-  없어서 생기는 제약이다(로그인 회원 기준 카운터·관리자 경로에서는 문제없다).
-- 표현 가능 범위(필드 타입·정책·제약)의 **권위 원본은 SDK 타입 + 런타임 컬렉션 스키마** — 이 문서는
-  프리미티브 사용법만. 스키마·정책은 런타임 컬렉션 상세 조회로 확인한다(fields + settings.access).
-
----
-
-<!--collection:end-->
 ## 파일 업로드 (storage)
 
 이미지·파일을 **presign 방식**으로 업로드한다 — 작은 JSON 으로 업로드 URL 을 발급받아 파일 본체는
@@ -718,12 +565,6 @@ const { upload, isUploading, error } = BaasSDK.useFileUpload();
 const res = await upload(file);                 // → { cdn_url, download_url, key, file_id? } | null
 if (res) setImageUrl(res.cdn_url);              // <img src={imageUrl}> 로 표시
 ```
-<!--collection:start-->
-얻은 `cdn_url` 은 **동적 컬렉션의 이미지 필드**(string)에 그대로 저장한다.
-```tsx
-await BaasSDK.useCollection().submitRecord("products", { name, image_url: res.cdn_url });
-```
-<!--collection:end-->
 - **category**(저장 분류, 기본 `images`): `images`(이미지 확장자 jpg/png/gif/webp·최대 10MB) |
   `store` | `reservation` | `board_import` | `board_attachment`. 일반 이미지는 `images` 로 충분.
 - **반환**: `cdn_url`(인라인 표시용 `<img src>`) · `download_url`(첨부 다운로드) · `key`(S3 경로) ·
@@ -746,7 +587,7 @@ await BaasSDK.useCollection().submitRecord("products", { name, image_url: res.cd
 | `INVALID_USER` | 400 | 로그인 자격증명 불일치 | 로그인 맥락 |
 | `UNAUTHORIZED` | 401 | 미인증(로그인 안 됨) | `useAuth`의 비로그인 401은 **정상**(에러 처리 금지) |
 | `TOKEN_EXPIRED`/`INVALID_TOKEN` | 401 | 세션 만료·무효 | 재로그인 유도 대상 |
-| `FORBIDDEN` | 403 | 인증됐으나 권한 없음 | **401과 달리 재로그인 대상 아님.**<!--collection:start--> 컬렉션 access(owner/ref_owner) 백스톱 —<!--collection:end--> 클라 버튼 숨김이 1차 |
+| `FORBIDDEN` | 403 | 인증됐으나 권한 없음 | **401과 달리 재로그인 대상 아님.**클라 버튼 숨김이 1차 |
 | `NOT_FOUND` | 404 | 대상 없음 | |
 | `ALREADY_EXISTS` | 409 | 중복·충돌 | 회원가입 아이디 중복 등 |
 | `INTERNAL_SERVER_ERROR` | 500 | 서버 오류 | 재시도 가능 |

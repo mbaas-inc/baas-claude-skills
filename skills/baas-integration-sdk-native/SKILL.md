@@ -1,6 +1,6 @@
 ---
-name: baas-integration-sdk
-description: "(BaaS SDK) 런타임 CDN SDK 위에서 BaaS UI/UX를 생성하는 가이드. 제공 기능: 회원 인증(회원가입/로그인/로그아웃/내정보/비밀번호변경 + AuthProvider 전역 상태), 발송대상(연락처) 등록, 공지사항/FAQ 조회, 동적 게시판(FREE/REVIEW 게시글 CRUD)·댓글, 설문조사, 예약(슬롯 캘린더/신청/내 예약/토스 결제), 스토어(디지털 상품/토스 결제/내 주문), 동적 컬렉션(사용자 정의 데이터 모델 — 스키마 정의 + 레코드 CRUD, 고정 기능에 없는 임의 도메인 데이터를 DB처럼 다룸). transport는 SDK(@mbaas/baas-web-sdk)가 CDN에서 담당하므로 fetch 코드를 직접 만들지 않는다. Use when: 로그인/회원가입, 인증 시스템, 연락처/문의/뉴스레터 폼, 공지사항/FAQ, 자유게시판/리뷰/커뮤니티, 댓글, 설문조사, 슬롯 기반 예약, 상품 판매/결제, 그리고 위 고정 기능(인증·발송대상·게시판·설문·예약·스토어)에 없는 어떤 도메인 데이터든 저장·조회·목록·CRUD가 필요할 때(동적 컬렉션 — 예: 메뉴·포트폴리오·재고·예약목록·고객·일정 등 무엇이든) — baas-cli로 백엔드 리소스를 만들고 SDK 훅으로 UI를 조립하는 신규 프로젝트 (transport를 vendored로 복사하지 않는 SDK 방식)"
+name: baas-integration-sdk-native
+description: "(BaaS SDK) 런타임 CDN SDK 위에서 BaaS UI/UX를 생성하는 가이드. 제공 기능: 회원 인증(회원가입/로그인/로그아웃/내정보/비밀번호변경 + AuthProvider 전역 상태), 발송대상(연락처) 등록, 공지사항/FAQ 조회, 동적 게시판(FREE/REVIEW 게시글 CRUD)·댓글, 설문조사, 예약(슬롯 캘린더/신청/내 예약/토스 결제), 스토어(디지털 상품/토스 결제/내 주문). transport는 SDK(@mbaas/baas-web-sdk)가 CDN에서 담당하므로 fetch 코드를 직접 만들지 않는다. Use when: 로그인/회원가입, 인증 시스템, 연락처/문의/뉴스레터 폼, 공지사항/FAQ, 자유게시판/리뷰/커뮤니티, 댓글, 설문조사, 슬롯 기반 예약, 상품 판매/결제 — baas-cli로 백엔드 리소스를 만들고 SDK 훅으로 UI를 조립하는 신규 프로젝트 (transport를 vendored로 복사하지 않는 SDK 방식)"
 ---
 
 # BaaS SDK 통합 스킬 (UI 생성 가이드)
@@ -30,7 +30,7 @@ BaaS 백엔드와 대화하는 transport·훅은 **런타임 CDN SDK**(`window.B
 
 ## 생성 흐름
 
-1. **`features.json`을 읽어** 요청에 맞는 기능 그룹을 파악한다(`account`·`recipient`·`notice`·`board`·`survey`·`reservation`·`store`<!--collection:start-->·`collection`<!--collection:end-->·`storage`).
+1. **`features.json`을 읽어** 요청에 맞는 기능 그룹을 파악한다(`account`·`recipient`·`notice`·`board`·`survey`·`reservation`·`store`·`storage`).
 2. 해당 기능의 **`reference/sdk-surface.md`** 섹션을 읽어 SDK 훅/함수 시그니처·반환 타입·에러→UI 규약을 확인한다.
 3. **백엔드 리소스가 필요하면 UI보다 먼저 프로비저닝한다** — 실행은 `baas` CLI를 쓰는 프로비저닝 담당(에이전트 환경의 backend_operator 역할) 소관이다. 이 스킬은 **무엇이 필요한지**(리소스 종류·스키마·접근 정책)를 정의하고, **CLI 문법은 정의하지 않는다**(권위 = 설치된 `baas <group> <action> --help`). 확정된 이름/id를 UI 코드에 주입한다 — 기억으로 다시 타이핑하지 말 것.
 4. **`scaffold/wiring.md`의 배선 보일러플레이트를 그대로** index.html·앱 진입점에 포함한다(창작 금지 — SDK 로딩·host React 노출·init).
@@ -63,40 +63,6 @@ SDK는 CDN에서 로드되고 앱의 React 인스턴스를 공유한다. 이 배
 - **비로그인 상태의 401은 에러가 아닌 정상 신호다.** 에러 UI·강제 리다이렉트 금지. `useAuth()`가 `{isLoggedIn:false}`로 알려준다.
 - 로그인 후 다른 API의 401은 세션 만료 → 재로그인 유도.
 
-<!--collection:start-->
-## 동적 컬렉션 (커스텀 데이터) — UI↔스키마 공동 설계
-
-컬렉션 프리미티브는 **고정 기능(회원·발송대상·게시판·설문·예약·스토어)에 스펙이 없는
-데이터 전용**이다. 어떤 데이터가 고정 기능으로 커버되는지의 판단(기술 선택)은 이 스킬이
-아니라 **에이전트(운영 지침) 소관** — 이 스킬은 선택된 기술의 스펙만 정의한다.
-
-- **공동 설계 흐름**: 요구 → (표현 범위·제약을 알고) **UI 설계 + 그에 맞는 스키마·접근 정책 구성** →
-  프로비저닝 담당이 컬렉션·필드를 생성 → `useCollection` 프리미티브로 UI 연결.
-  UI는 SDK 프리미티브·표현 범위(필드 타입·필터 DSL·정책) **안에서 구현 가능하게** 직접
-  설계한다(범용 자동 렌더 아님 — 그건 관리자 콘솔 몫).
-- **접근 정책 = CRUD 연산별 grants**: `settings.access = {create, read, update, delete}`, 값은
-  **atom 또는 배열(OR 합집합)**. atom ∈ `public|member|owner|ref_owner:<field>`(참조 부모 레코드의
-  소유자 — #626). 기본 create:member/read:member/update:owner/delete:owner, create 는 public|member 만.
-  에이전트가 설계한 각 화면 액션(목록·상세·작성·수정·삭제)의 대상에 맞춰 **기본값과 달라지는 연산만**
-  명시한다(예: 공개 목록 + 작성자만 수정 → `read: public` 만 덮어씀). 서버가 강제하므로
-  UI는 게이트/버튼 노출만 맞춘다.
-- **관계 설계 패턴** (관계 값은 `reference` 필드 — 서버가 대상 실존을 강제(dangling 400), 1-hop):
-  - **자식 컬렉션**(신청·참가·문의 등 "부모 글에 달리는 데이터"): `post_id:reference:<부모>` + access
-    `read: [owner, ref_owner:post_id]` · `update: [ref_owner:post_id]` · `delete: [owner, ref_owner:post_id]`
-    → 작성자는 자기 것 열람·취소, **부모 글 주인은 목록·수락/거절** — 서버가 강제.
-    (전제: 부모 컬렉션이 owner 를 스탬프해야 함 — 기본 update/delete:owner 면 충족.)
-  - **트리**(댓글→답글→∞): 노드마다 **root anchor**(`post_id`→루트 글) + **parent**(`parent_id`→자기
-    컬렉션 self-reference) 이중 참조. 조회는 anchor 평면 1회(`filter:{post_id:{eq}}`+`sort:created_at`)
-    후 클라에서 parent_id 로 조립 — 깊이 무한. 글주인 모더레이션은 `ref_owner:post_id`(깊이 무관).
-  - **N:M**(좋아요·참가자·태그): reference 2개짜리 **정션 컬렉션**으로 표현(서버 기계 불필요).
-- **스키마·정책 권한**: 컬렉션/필드/정책 생성·변경은 **프로비저닝 담당(`baas` CLI) 소유** — 이 스킬을 읽는
-  UI/연동 구현자는 스키마를 바꾸지 않는다. 요구가 바뀌면 UI와 스키마·정책을 함께 재설계한다.
-  신규 필드는 optional만 추가 가능.
-- **표현 범위의 원본**: 필드 타입·정책·필터 능력은 SDK 타입 + **런타임 스키마 조회 결과**(컬렉션 상세 —
-  필드 정의 + settings.access)가 권위 원본이다. 프리미티브 사용법은 `reference/sdk-surface.md`의
-  "동적 컬렉션" 참조.
-
-<!--collection:end-->
 ## UI/UX 생성 원칙
 
 - 로딩·에러·빈 상태를 항상 UI로 표현한다(훅의 `loading`/`error` 사용). 사용자가 멈춘 화면을 보지 않게 한다.
@@ -109,9 +75,9 @@ SDK는 CDN에서 로드되고 앱의 React 인스턴스를 공유한다. 이 배
 
 프로젝트 루트에 `baas-manifest.json`을 만든다 — 이후 업데이트 판단의 근거(LLM 없이 diff):
 ```json
-{ "skill": "baas-integration-sdk", "skill_version": "1.4.0", "sdk_channel": "v1", "features_used": ["account", "notice", "recipient", "board"] }
+{ "skill": "baas-integration-sdk-native", "skill_version": "1.4.0-native", "sdk_channel": "v1", "features_used": ["account", "notice", "recipient", "board"] }
 ```
-- `features_used`(그룹 키: `account`, `notice`(공지+FAQ), `recipient`, `board`, `survey`, `reservation`, `store`, `payment`<!--collection:start-->, `collection`<!--collection:end-->, `storage`)와 `skill_version`(=`features.json`의 `version`)은 **손으로 유지하지 않는다.**
+- `features_used`(그룹 키: `account`, `notice`(공지+FAQ), `recipient`, `board`, `survey`, `reservation`, `store`, `payment`, `storage`)와 `skill_version`(=`features.json`의 `version`)은 **손으로 유지하지 않는다.**
 - **자동 동기화(권장·고정 배선)**: `scripts/sync-manifest.mjs` 가 `src/` 의 `BaasSDK.<name>` 사용을 스캔해 `features.json.hook_groups` 매핑으로 `features_used` 를 도출하고 `skill_version` 을 맞춘다. `package.json` 의 `prebuild` 에 물려 **build 마다 자동 갱신**, `validate` 엔 `--check`(불일치 시 실패)로 건다(배선: `scaffold/wiring.md` §4).
 - **왜 자동인가**: `features_used` 를 손으로 유지하면 stale 이 나서(예: store 를 쓰는데 목록에서 빠짐) 업데이트 비교기의 교집합이 틀어져 **해당 기능의 업데이트가 조용히 누락된다.** 코드에서 도출하면 구조적으로 stale 이 불가능하다. (신규 훅을 SDK 에 추가할 때만 `features.json.hook_groups` 에 매핑을 추가하면 된다.)
 

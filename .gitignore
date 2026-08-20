@@ -47,3 +47,6 @@ temp/
 skills/*
 !skills/baas-integration/
 !skills/baas-integration-sdk/
+# 파생 생성물이지만 추적한다 — 마켓플레이스가 이 리포를 그대로 클론해 배포하므로
+# 커밋되지 않으면 배포 대상에 없다. 정본과의 일치는 skills-check 워크플로가 검증한다.
+!skills/baas-integration-sdk-native/
