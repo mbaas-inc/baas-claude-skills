@@ -10,13 +10,31 @@ import {
   createRecord,
   updateRecord,
   deleteRecord,
+  aggregateRecords,
+  incrementRecord,
+  restoreRecord,
+  batchRecords,
+  runTransaction,
 } from "../core/collection";
-import type { DynRecord, RecordListResult, RecordListOptions } from "../core/collection";
+import type {
+  AggregateOp,
+  AggregateResult,
+  BatchInput,
+  DynRecord,
+  DynRecordDetail,
+  FieldDefinition,
+  RecordFilter,
+  RecordListOptions,
+  RecordListResult,
+  TxnOperation,
+} from "../core/collection";
 
 export function useCollection() {
   const React = getReact();
   const [records, setRecords] = React.useState<RecordListResult | null>(null);
-  const [record, setRecord] = React.useState<DynRecord | null>(null);
+  const [record, setRecord] = React.useState<DynRecordDetail | null>(null);
+  // 렌더에 필요한 스키마 — includeFields 로 받은 값을 여기 모아 둔다(목록·단건 어느 쪽이든).
+  const [fields, setFields] = React.useState<FieldDefinition[] | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<Error | null>(null);
 
@@ -38,6 +56,7 @@ export function useCollection() {
       run(async () => {
         const data = await listRecords(name, options);
         setRecords(data);
+        if (data.fields) setFields(data.fields);
         return data;
       }),
     []
@@ -48,17 +67,19 @@ export function useCollection() {
 
   // isPublic 은 경로 통합으로 무의미해졌다. 인자를 남겨 호출부 호환만 유지한다.
   const fetchRecord = React.useCallback(
-    (name: string, recordId: string, _isPublic = false) =>
+    (name: string, recordId: string, options: { includeFields?: boolean } = {}) =>
       run(async () => {
-        const data = await getRecord(name, recordId);
+        const data = await getRecord(name, recordId, options);
         setRecord(data);
+        if (data.fields) setFields(data.fields);
         return data;
       }),
     []
   );
 
   const submitRecord = React.useCallback(
-    (name: string, data: Record<string, unknown>) => run(() => createRecord(name, data)),
+    (name: string, data: Record<string, unknown>, options: { clientTxnId?: string } = {}) =>
+      run(() => createRecord(name, data, options)),
     []
   );
 
@@ -73,9 +94,40 @@ export function useCollection() {
     []
   );
 
+  const restore = React.useCallback(
+    (name: string, recordId: string) => run(() => restoreRecord(name, recordId)),
+    []
+  );
+
+  const increment = React.useCallback(
+    (name: string, recordId: string, field: string, by = 1) =>
+      run(() => incrementRecord(name, recordId, field, by)),
+    []
+  );
+
+  const aggregate = React.useCallback(
+    (
+      name: string,
+      op: AggregateOp,
+      options: { field?: string; groupBy?: string; filter?: RecordFilter; or?: RecordFilter } = {}
+    ): Promise<AggregateResult | null> => run(() => aggregateRecords(name, op, options)),
+    []
+  );
+
+  const batch = React.useCallback(
+    (name: string, input: BatchInput) => run(() => batchRecords(name, input)),
+    []
+  );
+
+  const transaction = React.useCallback(
+    (operations: TxnOperation[]) => run(() => runTransaction(operations)),
+    []
+  );
+
   return {
     records,
     record,
+    fields,
     loading,
     error,
     fetchRecords,
@@ -84,5 +136,10 @@ export function useCollection() {
     submitRecord,
     editRecord,
     removeRecord,
+    restore,
+    increment,
+    aggregate,
+    batch,
+    transaction,
   };
 }

@@ -11,6 +11,14 @@ export {
   clearAuthCache,
 } from "./auth";
 export {
+  getAuthConfig,
+  getSignupTerms,
+  requestSignupEmailCode,
+  confirmSignupEmailCode,
+  getSnsProviders,
+  completeProfile,
+} from "./signup";
+export {
   listPosts,
   getPost,
   createPost,
@@ -33,6 +41,11 @@ export {
   createRecord,
   updateRecord,
   deleteRecord,
+  aggregateRecords,
+  incrementRecord,
+  restoreRecord,
+  batchRecords,
+  runTransaction,
   listPublicRecords,
   getPublicRecord,
 } from "./collection";
@@ -87,13 +100,34 @@ export type {
   PostListResult,
   PostListOptions,
   PostCreateInput,
+  BoardSettings,
+  CategoryGroup,
+  PostCategories,
 } from "./board";
+export type {
+  AuthConfig,
+  SignupTerms,
+  TermsDocument,
+  SnsProvider,
+  VerifyCodeResult,
+  CompleteProfileInput,
+} from "./signup";
 export type { Comment } from "./notice";
 export type {
   DynRecord,
+  DynRecordDetail,
+  FieldDefinition,
   RecordListResult,
   RecordFilter,
   RecordListOptions,
+  AggregateOp,
+  AggregateBucket,
+  AggregateResult,
+  BatchInput,
+  BatchItemResult,
+  BatchResult,
+  TxnOperation,
+  TxnResult,
 } from "./collection";
 export type {
   UploadTarget,

@@ -26,6 +26,15 @@
       "skills": [
         "./skills/baas-integration-sdk"
       ]
+    },
+    {
+      "name": "baas-integration-sdk-native-skills",
+      "description": "BaaS runtime CDN SDK 기반 UI 생성 가이드 — 네이티브 기능 전용(동적 컬렉션 미지원). 위 스킬에서 scripts/build-native-skill.mjs 로 파생 생성",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/baas-integration-sdk-native"
+      ]
     }
   ]
 }

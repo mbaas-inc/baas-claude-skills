@@ -33,6 +33,13 @@ export const BaasSDK = {
   checkAuth: core.checkAuth,
   clearAuthCache: core.clearAuthCache,
   changePassword: core.changePassword,
+  // signup (가입 절차 — 설정/약관/이메일 인증/SNS 제공자)
+  getAuthConfig: core.getAuthConfig,
+  getSignupTerms: core.getSignupTerms,
+  requestSignupEmailCode: core.requestSignupEmailCode,
+  confirmSignupEmailCode: core.confirmSignupEmailCode,
+  getSnsProviders: core.getSnsProviders,
+  completeProfile: core.completeProfile,
   // board (dynamic)
   listPosts: core.listPosts,
   getPost: core.getPost,
