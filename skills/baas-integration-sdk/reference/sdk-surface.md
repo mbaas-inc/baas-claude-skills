@@ -570,8 +570,9 @@ return (products ?? []).map(p => …);                        // 초기값은 nu
 (예: `read: public`). **생성 명령·플래그는 이 문서 범위 밖**이다(권위 = 설치된 CLI 의 `--help`).
 스키마·정책 변경은 프로비저닝 담당 소유(콘솔·앱에서 변경 아님).
 ```tsx
-const { records, record, loading, error,
-        fetchRecords, fetchPublicRecords, fetchRecord, submitRecord, editRecord, removeRecord } = BaasSDK.useCollection();
+const { records, record, fields, loading, error,
+        fetchRecords, fetchPublicRecords, fetchRecord, submitRecord, editRecord, removeRecord,
+        restore, increment, aggregate, batch, transaction } = BaasSDK.useCollection();
 
 // 읽기 — 로그인 여부와 무관하게 같은 함수. 범위는 접근 정책(settings.access)이 서버에서 판정
 await fetchRecords("inventory", { limit: 20, offset: 0, sort: "-created_at",
@@ -585,6 +586,39 @@ await editRecord("inventory", recordId, { quantity: 10 });                      
 await removeRecord("inventory", recordId);                                                  // delete 정책 owner면 작성자만
 
 // fetchPublicRecords / BaasSDK.getPublicRecord 는 deprecated 별칭(동작 동일) — 신규 코드에서 쓰지 않는다
+
+// ── OR 검색 — filter(전부 AND)와 다시 AND 로 결합된다. 게시판 검색이 이 형태
+await fetchRecords("notice", { filter: { status: { eq: "게시" } },
+                               or: { title: { like: kw }, content: { like: kw } } });
+
+// ── 렌더 스키마 동봉 — 필드별 위젯을 서버에서 받아 화면을 그린다
+await fetchRecords("notice", { includeFields: true });   // fields 에 담긴다(목록은 봉투 레벨 1회)
+await fetchRecord("notice", recordId, { includeFields: true });
+// fields[i] = { name, label, type, ui, unique, required, options, widget }
+// ⚠️ 렌더러는 widget 하나만 본다 — type/ui 폴백 규칙을 앱에서 다시 구현하지 않는다
+
+// ── 멱등 생성 — 네트워크 재시도가 중복 접수를 만들지 않게. 키는 제출 1회당 하나를 만들어 유지
+await submitRecord("inquiry", form, { clientTxnId: submitId });
+
+// ── 집계 — count 외에는 field 필요(number 타입만). 인가는 목록과 동일
+const agg = await aggregate("order", "sum", { field: "amount", groupBy: "status" });
+// agg.buckets = [{ key, value, count }, ...]  (groupBy 없으면 1개, key=null)
+
+// ── 카운터 원자 증감 — 동시 요청이 서로를 덮지 않는다. 인가는 update 권한
+await increment("notice", recordId, "views");          // +1
+await increment("product", recordId, "stock", -1);     // 재고 차감
+
+await restore("notice", recordId);                     // 삭제 취소(soft delete 복구)
+
+// ── 배치 — 항목별 독립 성공/실패. 실패 사유를 행별 오류 표시에 그대로 쓴다
+const res = await batch("notice", { create: rows.map((data) => ({ data })) });
+// res = { results:[{index, op, id, success, error}], succeeded, failed }
+
+// ── 원자 트랜잭션 — 하나라도 실패하면 전부 롤백. 복수 컬렉션 가능
+await transaction([
+  { op: "create", collection: "posts",   id: newId, data: { title } },
+  { op: "create", collection: "history", data: { post_id: newId } },  // 부모 id 를 미리 정해 참조
+]);
 ```
 - **접근 정책 (settings.access — CRUD 연산별 grants, 서버 강제)**: `{create, read, update, delete}`,
   값 = **atom 또는 배열(OR 합집합)**. atom ∈ `public`(누구나) | `member`(로그인) | `owner`(레코드 작성자)
@@ -619,11 +653,43 @@ await removeRecord("inventory", recordId);                                      
 - **reference 무결성(서버 강제)**: `reference` 필드 값은 대상 컬렉션의 실존 레코드 id 여야 하며
   아니면 `submitRecord`/`editRecord`가 400. self-reference(같은 컬렉션) 허용 — 트리는 root anchor
   (`post_id`)+parent(`parent_id`) 이중 참조로 설계하고 anchor 평면 조회 후 클라에서 조립한다.
-- **필터 DSL**: `filter: { field: { op: value } }`, op ∈ `eq|ne|gt|gte|lt|lte|like|in`. sort는 `field`/`-field`.
-- **필드 타입↔UI 관례**(에이전트 설계 시): string→텍스트, number→숫자입력/범위필터, boolean→토글,
-  date→날짜피커, enum→select(options.values), reference→검색선택. **이미지/파일**은 아래
+- **필터 DSL**: `filter: { field: { op: value } }`, op ∈ `eq|ne|gt|gte|lt|lte|like|in|has`(array 요소 포함).
+  sort는 `field`/`-field`. `or: {...}` 는 서로 OR 이고 그 묶음이 `filter` 와 AND 로 결합된다(한 겹만 — 중첩 없음).
+  **성능**: 등호(`eq`)·`has` 만 인덱스를 탄다. `like`·범위 비교·커스텀 필드 정렬은 전체 스캔이므로
+  큰 컬렉션에서 목록 UX 를 설계할 때 감안한다. `limit` 상한은 100.
+- **필드 타입 7종**: string · number · boolean · date · enum · reference · **array**(태그·다중 선택,
+  `options.values` 가 있으면 그 목록에서만). **이미지/파일**은 아래
   [파일 업로드(storage)](#파일-업로드-storage) 절의 `useFileUpload` 로 `cdn_url` 을 얻어 string(url) 필드에 저장한다.
+- **위젯은 서버가 확정한다 — `widget` 하나만 보면 된다**(`includeFields: true` 로 받는다).
+  `type`·`ui` 는 선언이고 `widget` 은 결론이다. 폴백 규칙(boolean→toggle, date→date,
+  array→tags, **enum→값 3개 이하 radio / 4개 이상 select**)을 앱에서 다시 구현하면 규칙이 갈라진다.
+
+  | widget | 그릴 것 |
+  |---|---|
+  | `text` · `textarea` · `richtext` | 한 줄 / 여러 줄 / 에디터 |
+  | `phone` · `email` | 형식 입력 |
+  | `number` · `money` | 숫자 / 금액(12,000원) |
+  | `toggle` · `date` | 스위치 / 날짜 선택 |
+  | `radio` · `select` | 선택지는 `options.values` |
+  | `reference` | 검색 후 선택(대상은 `options.collection`) |
+  | `tags` | 다중 값 입력 |
+
+- **값 형식**: `date` 는 `YYYY-MM-DD` 또는 `YYYY-MM-DDTHH:MM[:SS]` — **구분자는 `T` 만**(공백·자리수
+  미달은 400). 금액은 부동소수 오차를 피해 **원 단위 정수**로 저장한다. 레코드 전체 상한 64KB
+  (이미지는 base64 로 넣지 말고 URL 을 쓴다).
+- **유일성**: `unique` 필드에 중복 값을 쓰면 **409**. 해당 입력에 "이미 사용 중" 을 표시한다.
+- **삭제 정책**(reference 필드의 `on_delete`, 기본 `restrict`): 부모 레코드를 지울 때
+  `restrict`=참조가 있으면 409(오류에 막는 컬렉션·건수가 담긴다) · `cascade`=자식도 함께 삭제
+  (삭제 확인에 경고) · `set_null`=자식의 참조 키 제거 · `none`=방치. 정책은 프로비저닝 담당 소유.
 - `records.items`가 비면 빈 상태 UI. 작성/수정 성공 후 `fetchRecords`로 새로고침.
+- **부분 수정**: `editRecord` 는 보낸 키만 바꾼다(안 보낸 필드는 유지). 병합이 서버에서 일어나므로
+  두 사용자가 같은 행의 **다른 칸**을 동시에 고쳐도 서로의 변경이 사라지지 않는다.
+- **배치 vs 트랜잭션**: 배치 = 같은 컬렉션 대량 + **부분 성공**(엑셀 붙여넣기·일괄 정리),
+  트랜잭션 = 복수 컬렉션 소수 + **전부 아니면 전무**(따로 남으면 데이터가 거짓이 되는 쌍).
+  대량 작업에 트랜잭션을 쓰면 한 행 때문에 전부 되돌아간다.
+- ⚠️ **"누구나 조회수만 올리기" 는 아직 불가** — `increment` 는 `update` 권한을 쓰므로 비로그인
+  조회수 증가에는 `update: public` 이 필요하고 그건 본문 수정까지 열어 버린다. 필드 단위 권한이
+  없어서 생기는 제약이다(로그인 회원 기준 카운터·관리자 경로에서는 문제없다).
 - 표현 가능 범위(필드 타입·정책·제약)의 **권위 원본은 SDK 타입 + 런타임 컬렉션 스키마** — 이 문서는
   프리미티브 사용법만. 스키마·정책은 런타임 컬렉션 상세 조회로 확인한다(fields + settings.access).
 

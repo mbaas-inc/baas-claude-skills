@@ -41,6 +41,11 @@ export {
   createRecord,
   updateRecord,
   deleteRecord,
+  aggregateRecords,
+  incrementRecord,
+  restoreRecord,
+  batchRecords,
+  runTransaction,
   listPublicRecords,
   getPublicRecord,
 } from "./collection";
@@ -110,9 +115,19 @@ export type {
 export type { Comment } from "./notice";
 export type {
   DynRecord,
+  DynRecordDetail,
+  FieldDefinition,
   RecordListResult,
   RecordFilter,
   RecordListOptions,
+  AggregateOp,
+  AggregateBucket,
+  AggregateResult,
+  BatchInput,
+  BatchItemResult,
+  BatchResult,
+  TxnOperation,
+  TxnResult,
 } from "./collection";
 export type {
   UploadTarget,
