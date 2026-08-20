@@ -30,7 +30,7 @@ BaaS 백엔드와 대화하는 transport·훅은 **런타임 CDN SDK**(`window.B
 
 ## 생성 흐름
 
-1. **`features.json`을 읽어** 요청에 맞는 기능 그룹을 파악한다(`account`·`recipient`·`notice`·`board`·`survey`·`reservation`·`store`·`collection`·`storage`).
+1. **`features.json`을 읽어** 요청에 맞는 기능 그룹을 파악한다(`account`·`recipient`·`notice`·`board`·`survey`·`reservation`·`store`<!--collection:start-->·`collection`<!--collection:end-->·`storage`).
 2. 해당 기능의 **`reference/sdk-surface.md`** 섹션을 읽어 SDK 훅/함수 시그니처·반환 타입·에러→UI 규약을 확인한다.
 3. **백엔드 리소스가 필요하면 UI보다 먼저 프로비저닝한다** — 실행은 `baas` CLI를 쓰는 프로비저닝 담당(에이전트 환경의 backend_operator 역할) 소관이다. 이 스킬은 **무엇이 필요한지**(리소스 종류·스키마·접근 정책)를 정의하고, **CLI 문법은 정의하지 않는다**(권위 = 설치된 `baas <group> <action> --help`). 확정된 이름/id를 UI 코드에 주입한다 — 기억으로 다시 타이핑하지 말 것.
 4. **`scaffold/wiring.md`의 배선 보일러플레이트를 그대로** index.html·앱 진입점에 포함한다(창작 금지 — SDK 로딩·host React 노출·init).
@@ -63,6 +63,7 @@ SDK는 CDN에서 로드되고 앱의 React 인스턴스를 공유한다. 이 배
 - **비로그인 상태의 401은 에러가 아닌 정상 신호다.** 에러 UI·강제 리다이렉트 금지. `useAuth()`가 `{isLoggedIn:false}`로 알려준다.
 - 로그인 후 다른 API의 401은 세션 만료 → 재로그인 유도.
 
+<!--collection:start-->
 ## 동적 컬렉션 (커스텀 데이터) — UI↔스키마 공동 설계
 
 컬렉션 프리미티브는 **고정 기능(회원·발송대상·게시판·설문·예약·스토어)에 스펙이 없는
@@ -95,6 +96,7 @@ SDK는 CDN에서 로드되고 앱의 React 인스턴스를 공유한다. 이 배
   필드 정의 + settings.access)가 권위 원본이다. 프리미티브 사용법은 `reference/sdk-surface.md`의
   "동적 컬렉션" 참조.
 
+<!--collection:end-->
 ## UI/UX 생성 원칙
 
 - 로딩·에러·빈 상태를 항상 UI로 표현한다(훅의 `loading`/`error` 사용). 사용자가 멈춘 화면을 보지 않게 한다.
@@ -109,7 +111,7 @@ SDK는 CDN에서 로드되고 앱의 React 인스턴스를 공유한다. 이 배
 ```json
 { "skill": "baas-integration-sdk", "skill_version": "1.4.0", "sdk_channel": "v1", "features_used": ["account", "notice", "recipient", "board"] }
 ```
-- `features_used`(그룹 키: `account`, `notice`(공지+FAQ), `recipient`, `board`, `survey`, `reservation`, `store`, `payment`, `collection`, `storage`)와 `skill_version`(=`features.json`의 `version`)은 **손으로 유지하지 않는다.**
+- `features_used`(그룹 키: `account`, `notice`(공지+FAQ), `recipient`, `board`, `survey`, `reservation`, `store`, `payment`<!--collection:start-->, `collection`<!--collection:end-->, `storage`)와 `skill_version`(=`features.json`의 `version`)은 **손으로 유지하지 않는다.**
 - **자동 동기화(권장·고정 배선)**: `scripts/sync-manifest.mjs` 가 `src/` 의 `BaasSDK.<name>` 사용을 스캔해 `features.json.hook_groups` 매핑으로 `features_used` 를 도출하고 `skill_version` 을 맞춘다. `package.json` 의 `prebuild` 에 물려 **build 마다 자동 갱신**, `validate` 엔 `--check`(불일치 시 실패)로 건다(배선: `scaffold/wiring.md` §4).
 - **왜 자동인가**: `features_used` 를 손으로 유지하면 stale 이 나서(예: store 를 쓰는데 목록에서 빠짐) 업데이트 비교기의 교집합이 틀어져 **해당 기능의 업데이트가 조용히 누락된다.** 코드에서 도출하면 구조적으로 stale 이 불가능하다. (신규 훅을 SDK 에 추가할 때만 `features.json.hook_groups` 에 매핑을 추가하면 된다.)
 

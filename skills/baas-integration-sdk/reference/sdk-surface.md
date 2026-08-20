@@ -12,7 +12,7 @@ transport·envelope·project_id 주입은 SDK 내부가 처리한다 — 아래 
 
 | 호출 형태 | 실패 시 |
 |---|---|
-| **훅의 액션 함수** (`useBoard().submitPost`, `useCollection().fetchRecords`, `useStore().confirm`, `useLogin().login`, `useFileUpload().upload` …) | **throw 하지 않는다.** `null`(또는 `login`/`logout` 은 `false`) 을 resolve 하고 실패는 훅의 `error` state 에 담긴다 |
+| **훅의 액션 함수** (`useBoard().submitPost`<!--collection:start-->, `useCollection().fetchRecords`<!--collection:end-->, `useStore().confirm`, `useLogin().login`, `useFileUpload().upload` …) | **throw 하지 않는다.** `null`(또는 `login`/`logout` 은 `false`) 을 resolve 하고 실패는 훅의 `error` state 에 담긴다 |
 | **예외 — `beginWidgetCheckout`** (store·reservation) | 이것만 **throw 한다**(내부 래퍼를 거치지 않음) → `try/catch` 필요 |
 | **훅 없는 top-level 함수** (`BaasSDK.uploadFile`, `changePassword`, `getAccountInfo` …) | `BaasError`(`.message` 한국어, `.errorCode`, `.status`) **throw** |
 
@@ -39,7 +39,9 @@ state 가 **없는** 함수만 반환값을 로컬 state 로 받으면 된다.
 | `useBoard` | `posts` = `{items,total}` · `post` | 같은 값 | state 또는 반환값 |
 | `useNotice`/`useFaq` | `posts` = `{items,total}` · `post` | 같은 값 | state 또는 반환값 |
 | `useComments` | `comments` = `{items,total}` | 같은 값 | state 또는 반환값 |
+<!--collection:start-->
 | `useCollection` | `records` = `{items,total_count,…}` · `record` | 같은 값 | state 또는 반환값 (`.items` 를 map) |
+<!--collection:end-->
 | `useStore` | `config` · `products` = **배열** | 같은 값(배열) | state 또는 반환값 |
 | `useSurvey` | `surveys` = **배열** · `survey` | 같은 값(배열) | state 또는 반환값 |
 | `useReservation` | `targets` = 배열 | `fetchTargets` 는 같은 값 | state 또는 반환값 |
@@ -47,7 +49,7 @@ state 가 **없는** 함수만 반환값을 로컬 state 로 받으면 된다.
 | `useReservation` | — | `fetchTarget` · `fetchSlots` · `myBookings` | **반환값을 로컬 state 로** |
 | `useStore` | — | `fetchProduct` · `myOrders` | **반환값을 로컬 state 로** |
 
-**목록 형태가 두 가지인 이유**: 페이지네이션이 있는 조회(게시판·공지·댓글·동적 컬렉션)는 총 개수가
+**목록 형태가 두 가지인 이유**: 페이지네이션이 있는 조회(게시판·공지·댓글<!--collection:start-->·동적 컬렉션<!--collection:end-->)는 총 개수가
 필요해 `{items, total}` 봉투를, 전량 조회(스토어 상품·설문·예약 대상)는 **배열**을 준다.
 
 **state 없는 함수는 백엔드 응답을 그대로 준다**(가공 없음) — 그래서 `fetchSlots` 는 `{target_id, date,
@@ -58,11 +60,14 @@ slots}` 봉투이고 `fetchTarget` 은 `reservation_settings` 가 중첩된 객�
 > 통일했다 — 반환값을 쓰던 코드에서 `.items` 를 떼면 된다.
 
 ### ③ 훅 반환 컨테이너를 의존성 배열에 넣지 않는다
-`const c = useCollection()` 처럼 컨테이너를 통째로 들고 `[c]` 를 의존성에 넣으면 매 렌더 새 객체라
-**무한 재요청 + 영구 로딩**이 된다. 개별 함수만 구조분해한다(`const { fetchRecords } = useCollection()`).
+`const c = useBoard()` 처럼 컨테이너를 통째로 들고 `[c]` 를 의존성에 넣으면 매 렌더 새 객체라
+**무한 재요청 + 영구 로딩**이 된다. 개별 함수만 구조분해한다(`const { fetchPosts } = useBoard()`).
 `useMemo` 로 우회되지 않는다(반환 객체에 매 호출 토글되는 `loading` 이 함께 담겨 있다).
+<!--collection:start-->
+`useCollection` 도 같다 — `const c = useCollection()` 이 아니라 `const { fetchRecords } = useCollection()`.
 또한 **`useCollection()` 인스턴스는 컬렉션당 하나** — 한 인스턴스로 두 컬렉션을 조회하면
 `records` 슬롯이 하나뿐이라 먼저 도착한 결과가 조용히 사라진다.
+<!--collection:end-->
 
 ---
 
@@ -310,12 +315,12 @@ await removePost(postId);                          // 로그인 필수
   — 벗어나면 서버가 400으로 거부한다.
 - `posts.items`가 비면 "아직 글이 없습니다" 빈 상태. 작성 성공 후 `fetchPosts` 재조회.
 - **작성자 식별 필드는 `author_id`(계정 UUID) 이며 `fetchPost`(상세)에만 있다. `fetchPosts`(목록)
-  응답에는 없다** — 목록에는 표시용 `author_name` 만 온다(동적 컬렉션 레코드의 `account_id` 와 이름이
-  다르니 혼동 주의).
+  응답에는 없다** — 목록에는 표시용 `author_name` 만 온다<!--collection:start-->(동적 컬렉션 레코드의 `account_id` 와 이름이
+  다르니 혼동 주의)<!--collection:end-->.
   - 상세에서 본인 글 판정: `post.author_id === user.id` (`useAuth()` 의 `user`).
-  - **"내가 쓴 글 목록" 화면은 식별자 기반 필터가 불가능**하다. 그 화면이 요구되면 게시글을
-    동적 컬렉션으로 설계하거나(레코드 봉투에 `account_id` 가 있다), 사람에게 제약을 보고한다 —
-    `author_name` 비교는 동명이인을 구분하지 못하므로 권장하지 않는다.
+  - **"내가 쓴 글 목록" 화면은 식별자 기반 필터가 불가능**하다. 그 화면이 요구되면 사람에게 제약을
+    보고한다 — `author_name` 비교는 동명이인을 구분하지 못하므로 권장하지 않는다.<!--collection:start-->
+    대안으로 게시글을 동적 컬렉션으로 설계하면 레코드 봉투에 `account_id` 가 있어 가능하다.<!--collection:end-->
   - 수정/삭제 버튼 노출은 위 판정으로 좁히되, **실제 권한 경계는 서버(403)** 다.
 
 ## 댓글 (comments)
@@ -413,9 +418,12 @@ const terms = await pay.fetchTerms();   // { title, content, version }
 
 ### 커스텀 화면에 결제를 붙일 때
 현재 SDK 는 결제 금액을 안전하게 다루는 prepare/confirm 을 **store·reservation 에만** 제공한다. 따라서
-"돈이 실제로 움직이는" 결제는 **store 또는 reservation 을 경유**하고, 커스텀 컬렉션은 그 결과(주문/예약 id 등)를
-**reference 로 연결**해 도메인 데이터를 관리한다. **커스텀 컬렉션 필드에 금액·결제상태를 두고 클라이언트가 직접
-쓰는 방식은 위·변조 가능하므로 금지**(결제 확정은 반드시 서버 소유). 결제 화면엔 위 ①②를 동일 적용.
+"돈이 실제로 움직이는" 결제는 **store 또는 reservation 을 경유**한다. 결제 화면엔 위 ①②를 동일 적용.
+<!--collection:start-->
+커스텀 컬렉션은 그 결과(주문/예약 id 등)를 **reference 로 연결**해 도메인 데이터를 관리한다.
+**커스텀 컬렉션 필드에 금액·결제상태를 두고 클라이언트가 직접 쓰는 방식은 위·변조 가능하므로 금지**
+(결제 확정은 반드시 서버 소유).
+<!--collection:end-->
 
 ---
 
@@ -560,6 +568,7 @@ return (products ?? []).map(p => …);                        // 초기값은 nu
 
 ---
 
+<!--collection:start-->
 ## 동적 컬렉션 (collection)
 
 **사용자 정의 커스텀 데이터**(고정 기능이 커버 못 하는 것). 데이터 프리미티브만 제공 — **범용 자동
@@ -695,22 +704,26 @@ await transaction([
 
 ---
 
+<!--collection:end-->
 ## 파일 업로드 (storage)
 
 이미지·파일을 **presign 방식**으로 업로드한다 — 작은 JSON 으로 업로드 URL 을 발급받아 파일 본체는
 S3 로 직접 PUT 한다(큰 바이너리가 CloudFront/Lambda 우회, 413/403·지연 없음). 반환된 `cdn_url` 을
-콘텐츠에 저장해 영구 조회한다. **동적 컬렉션의 이미지 필드**에 넣을 URL을 이 훅으로 얻는다.
+콘텐츠에 저장해 영구 조회한다.
 
 ```tsx
 const { upload, isUploading, error } = BaasSDK.useFileUpload();
 
 // <input type="file"> 의 File 을 그대로 넘긴다. category 기본 "images".
 const res = await upload(file);                 // → { cdn_url, download_url, key, file_id? } | null
-if (res) {
-  // 컬렉션 레코드 이미지 필드에 cdn_url 저장 (동적 컬렉션 절 참고)
-  await BaasSDK.useCollection().submitRecord("products", { name, image_url: res.cdn_url });
-}
+if (res) setImageUrl(res.cdn_url);              // <img src={imageUrl}> 로 표시
 ```
+<!--collection:start-->
+얻은 `cdn_url` 은 **동적 컬렉션의 이미지 필드**(string)에 그대로 저장한다.
+```tsx
+await BaasSDK.useCollection().submitRecord("products", { name, image_url: res.cdn_url });
+```
+<!--collection:end-->
 - **category**(저장 분류, 기본 `images`): `images`(이미지 확장자 jpg/png/gif/webp·최대 10MB) |
   `store` | `reservation` | `board_import` | `board_attachment`. 일반 이미지는 `images` 로 충분.
 - **반환**: `cdn_url`(인라인 표시용 `<img src>`) · `download_url`(첨부 다운로드) · `key`(S3 경로) ·
@@ -733,7 +746,7 @@ if (res) {
 | `INVALID_USER` | 400 | 로그인 자격증명 불일치 | 로그인 맥락 |
 | `UNAUTHORIZED` | 401 | 미인증(로그인 안 됨) | `useAuth`의 비로그인 401은 **정상**(에러 처리 금지) |
 | `TOKEN_EXPIRED`/`INVALID_TOKEN` | 401 | 세션 만료·무효 | 재로그인 유도 대상 |
-| `FORBIDDEN` | 403 | 인증됐으나 권한 없음 | **401과 달리 재로그인 대상 아님.** 컬렉션 access(owner/ref_owner) 백스톱 — 클라 버튼 숨김이 1차 |
+| `FORBIDDEN` | 403 | 인증됐으나 권한 없음 | **401과 달리 재로그인 대상 아님.**<!--collection:start--> 컬렉션 access(owner/ref_owner) 백스톱 —<!--collection:end--> 클라 버튼 숨김이 1차 |
 | `NOT_FOUND` | 404 | 대상 없음 | |
 | `ALREADY_EXISTS` | 409 | 중복·충돌 | 회원가입 아이디 중복 등 |
 | `INTERNAL_SERVER_ERROR` | 500 | 서버 오류 | 재시도 가능 |
