@@ -1,0 +1,29 @@
+name: skills-check
+
+# native 스킬은 정본(`skills/baas-integration-sdk`)에서 파생 생성된다.
+# 정본만 고치고 재생성을 잊으면 두 라인이 조용히 어긋나 — 에이전트가 낡은 표면대로 앱을 만든다.
+# 그래서 정본·스크립트가 바뀐 PR 마다 파생물이 최신인지 검증한다.
+on:
+  pull_request:
+    paths:
+      - "skills/baas-integration-sdk/**"
+      - "skills/baas-integration-sdk-native/**"
+      - "scripts/build-native-skill.mjs"
+      - ".github/workflows/skills-check.yml"
+  push:
+    branches: [stage, main]
+    paths:
+      - "skills/baas-integration-sdk/**"
+      - "skills/baas-integration-sdk-native/**"
+      - "scripts/build-native-skill.mjs"
+
+jobs:
+  native-skill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: 파생 native 스킬이 정본과 일치하는지 검증
+        run: node scripts/build-native-skill.mjs --check
