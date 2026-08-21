@@ -20,6 +20,10 @@ on:
 jobs:
   native-skill:
     runs-on: ubuntu-latest
+    # 이 job 은 체크아웃과 node 실행만 한다 — 쓰기 권한이 필요 없다.
+    # 선언하지 않으면 리포 기본값(쓰기 포함일 수 있음)이 GITHUB_TOKEN 에 붙는다.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
