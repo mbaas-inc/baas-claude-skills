@@ -63,6 +63,21 @@ SDK는 CDN에서 로드되고 앱의 React 인스턴스를 공유한다. 이 배
 - **비로그인 상태의 401은 에러가 아닌 정상 신호다.** 에러 UI·강제 리다이렉트 금지. `useAuth()`가 `{isLoggedIn:false}`로 알려준다.
 - 로그인 후 다른 API의 401은 세션 만료 → 재로그인 유도.
 
+## 데이터 저장 — 고정 기능을 범용 저장소로 전용하지 않는다
+
+요구된 데이터가 고정 기능(회원·발송대상·게시판·공지/FAQ·설문·예약·스토어)의 스키마에 맞지 않으면
+**그 기능을 저장소로 돌려쓰지 않는다.** 구체적으로 금지한다:
+
+- 구조화 값(품종·생년월일·수량·상태 등)을 게시글 `content` 문자열에 인코딩하는 것
+- `categories`를 자유 입력 값 저장소로 쓰는 것 — 정의된 값의 **부분집합만** 허용되는 닫힌 enum이다
+
+**왜 금지인가**: 서버 검증·정렬·범위 질의가 전부 사라지고, 목록 응답에는 작성자 식별자가 없어
+(`author_id`는 상세에만 온다) **소유권 판정이 깨진다** — "내 것만 보기"도, 목록의 수정·삭제 버튼도
+만들 수 없다. 화면은 그려지는데 기능만 틀린 산출물이 나온다. 미지원으로 보고하는 것보다 나쁘다.
+
+→ 고정 기능으로 매핑되지 않는 데이터는 **그것을 담을 프리미티브가 표면에 있는지 확인하고, 없으면
+미지원으로 보고한다**(`features.json`의 `fallback`). 임의 저장소를 만들지 않는다.
+
 ## UI/UX 생성 원칙
 
 - 로딩·에러·빈 상태를 항상 UI로 표현한다(훅의 `loading`/`error` 사용). 사용자가 멈춘 화면을 보지 않게 한다.
@@ -75,7 +90,7 @@ SDK는 CDN에서 로드되고 앱의 React 인스턴스를 공유한다. 이 배
 
 프로젝트 루트에 `baas-manifest.json`을 만든다 — 이후 업데이트 판단의 근거(LLM 없이 diff):
 ```json
-{ "skill": "baas-integration-sdk-native", "skill_version": "1.4.0-native", "sdk_channel": "v1", "features_used": ["account", "notice", "recipient", "board"] }
+{ "skill": "baas-integration-sdk-native", "skill_version": "1.4.0", "sdk_channel": "v1", "features_used": ["account", "notice", "recipient", "board"] }
 ```
 - `features_used`(그룹 키: `account`, `notice`(공지+FAQ), `recipient`, `board`, `survey`, `reservation`, `store`, `payment`, `storage`)와 `skill_version`(=`features.json`의 `version`)은 **손으로 유지하지 않는다.**
 - **자동 동기화(권장·고정 배선)**: `scripts/sync-manifest.mjs` 가 `src/` 의 `BaasSDK.<name>` 사용을 스캔해 `features.json.hook_groups` 매핑으로 `features_used` 를 도출하고 `skill_version` 을 맞춘다. `package.json` 의 `prebuild` 에 물려 **build 마다 자동 갱신**, `validate` 엔 `--check`(불일치 시 실패)로 건다(배선: `scaffold/wiring.md` §4).
