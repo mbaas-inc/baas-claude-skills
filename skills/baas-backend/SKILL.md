@@ -5,6 +5,46 @@ description: "(BaaS 백엔드) 프로젝트 전용 Node 백엔드의 서비스 �
 
 # BaaS 백엔드 스킬 (서비스 로직 작성 가이드)
 
+## 0. 먼저 — 워크스페이스에 백엔드 골격을 놓는다
+
+`backend/` 가 없으면 이 스킬에 들어 있는 골격을 복사해서 만든다. **직접 손으로 만들지
+마라** — 봉투 파싱·주입 토큰 장착·에러 직렬화는 아래 §1 표대로 플랫폼 계약이고, 손으로
+다시 쓰면 그 계약이 어긋난다.
+
+```bash
+# 스킬 위치는 두 곳 중 하나다. 있는 쪽을 쓴다.
+SKILL_DIR=""
+for d in skills/baas-backend /app/plugins/baas-claude-skills/skills/baas-backend; do
+  [ -d "$d/boilerplate" ] && SKILL_DIR="$d" && break
+done
+[ -n "$SKILL_DIR" ] || { echo "boilerplate 를 찾지 못했다"; exit 1; }
+
+# 멱등: 이미 있으면 덮지 않는다 (이전 턴의 라우트를 지우면 안 된다)
+if [ ! -d backend ]; then
+  mkdir -p backend && cp -R "$SKILL_DIR/boilerplate/." backend/
+  echo "backend/ 골격 생성"
+else
+  echo "backend/ 이미 있음 — 유지"
+fi
+
+# 타입 검사에 필요하다. 런타임 의존은 hono 하나뿐이다.
+[ -d backend/node_modules ] || (cd backend && npm install --no-audit --no-fund)
+```
+
+`npm install` 이 실패하면 **거기서 멈추고 사용자에게 알린다.** 타입 검사 없이 작성한
+서버 코드를 내보내지 마라 — 이 층은 프론트와 달리 화면에서 오류가 드러나지 않는다.
+
+복사되는 것과 당신의 역할:
+
+| 경로 | 성질 |
+|---|---|
+| `backend/src/platform/` | **고정.** 수정하지 마라 — 플랫폼 계약이다 |
+| `backend/src/index.ts` | 라우트 등록만 추가한다 |
+| `backend/src/routes/example.ts` | 참고용. **도메인 로직을 여기 쓰지 말고** 새 파일을 만든다 |
+| `backend/package.json` · `tsconfig.json` · `build.mjs` | 고정 |
+
+이후 당신이 만드는 것은 `backend/src/routes/<도메인>.ts` 와 `index.ts` 의 등록 한 줄뿐이다.
+
 ## 당신이 쓰는 것 / 쓰지 않는 것
 
 `src/routes/*.ts` **하나만** 작성한다. 아래는 플랫폼이 이미 한다 — 만들지 마라.
