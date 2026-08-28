@@ -1,57 +1,96 @@
 ---
 name: baas-backend
-description: "(BaaS 백엔드) 프로젝트 전용 Node 백엔드의 서비스 로직을 작성하는 가이드. 프레임워크(봉투 파싱·주입 토큰·에러 직렬화·배포)는 플랫폼이 담당하고 `src/routes/*.ts` 슬롯만 작성한다. 제공: dyncol 데이터 접근(unique·원자 증감·조건부 갱신·트랜잭션·집계), 네이티브 기능 호출, 스케줄 핸들러. Use when: 구현 브리프의 '백엔드 연결 후보'가 채워졌을 때 — 여러 레코드의 합·개수로 판정되는 규칙(선착순·정원·재고), 상태 전이·승인 흐름, 아무도 접속하지 않아도 도는 처리(마감·정산·리마인더), 외부 자격이 필요한 연동. 프론트 코드·화면은 다루지 않는다."
+description: "(BaaS 백엔드) 프로젝트 전용 Node 백엔드의 서비스 로직을 작성하는 가이드. 프레임워크(봉투 파싱·주입 토큰·에러 직렬화·배포·라우트 생성)는 플랫폼이 담당하고, 서버 로직을 프론트와 같은 트리(`src/services/*.ts`)에 `serverFn` 으로 작성하면 빌드가 봉투 라우트와 타입 유도 fetch 스텁을 만든다. 제공: dyncol 데이터 접근(unique·원자 증감·조건부 갱신·트랜잭션·집계), 네이티브 기능 호출, 스케줄 핸들러. Use when: 구현 브리프의 '백엔드 연결 후보'가 채워졌을 때 — 여러 레코드의 합·개수로 판정되는 규칙(선착순·정원·재고), 상태 전이·승인 흐름, 아무도 접속하지 않아도 도는 처리(마감·정산·리마인더), 외부 자격이 필요한 연동. 프론트 코드·화면은 다루지 않는다."
 ---
 
 # BaaS 백엔드 스킬 (서비스 로직 작성 가이드)
 
-## 0. 먼저 — 워크스페이스에 백엔드 골격을 놓는다
+## 0. 먼저 — 골격을 놓는다
 
-`backend/` 가 없으면 이 스킬에 들어 있는 골격을 복사해서 만든다. **직접 손으로 만들지
-마라** — 봉투 파싱·주입 토큰 장착·에러 직렬화는 아래 §1 표대로 플랫폼 계약이고, 손으로
-다시 쓰면 그 계약이 어긋난다.
+`backend/` 가 없으면 이 스킬의 골격을 복사한다. **손으로 만들지 마라** — 봉투 파싱·주입
+토큰 장착·에러 직렬화는 §1 표대로 플랫폼 계약이고, 다시 쓰면 어긋난다.
 
 ```bash
-# 스킬 위치는 두 곳 중 하나다. 있는 쪽을 쓴다.
 SKILL_DIR=""
 for d in skills/baas-backend /app/plugins/baas-claude-skills/skills/baas-backend; do
   [ -d "$d/boilerplate" ] && SKILL_DIR="$d" && break
 done
 [ -n "$SKILL_DIR" ] || { echo "boilerplate 를 찾지 못했다"; exit 1; }
 
-# 멱등: 이미 있으면 덮지 않는다 (이전 턴의 라우트를 지우면 안 된다)
 if [ ! -d backend ]; then
   mkdir -p backend && cp -R "$SKILL_DIR/boilerplate/." backend/
+  cp backend/src/serverFn.ts src/services/serverFn.ts     # 프론트가 import 하는 마커
   echo "backend/ 골격 생성"
 else
   echo "backend/ 이미 있음 — 유지"
 fi
-
-# 타입 검사에 필요하다. 런타임 의존은 hono 하나뿐이다.
 [ -d backend/node_modules ] || (cd backend && npm install --no-audit --no-fund)
 ```
 
-`npm install` 이 실패하면 **거기서 멈추고 사용자에게 알린다.** 타입 검사 없이 작성한
-서버 코드를 내보내지 마라 — 이 층은 프론트와 달리 화면에서 오류가 드러나지 않는다.
+`npm install` 이 실패하면 **거기서 멈추고 사용자에게 알린다.** 타입 검사 없이 서버 코드를
+내보내지 마라 — 이 층은 프론트와 달리 화면에서 오류가 드러나지 않는다.
 
-복사되는 것과 당신의 역할:
+## 0-1. 어디에 쓰나 — `src/services/*.ts` 한 곳
 
-| 경로 | 성질 |
+**`backend/src/routes/` 를 직접 만들지 마라.** 서버 로직도 프론트와 같은 파일 트리에
+`serverFn` 으로 쓰고, 빌드가 봉투 라우트와 fetch 스텁을 만든다.
+
+```ts
+// src/services/coupons.ts  ← 사람이 쓰는 유일한 파일
+import { serverFn } from './serverFn'
+
+export type ClaimInput = { employeeId: string }
+export type ClaimResult = { status: 'issued' | 'already_claimed' | 'sold_out' }
+
+export const claim = serverFn<ClaimInput, ClaimResult>(async (input, ctx) => {
+  // ctx.sdk 로 dyncol·네이티브에 접근한다. fetch 직접 호출 금지.
+  ...
+})
+```
+
+작성 후 **반드시** 추출을 돌린다:
+
+```bash
+node backend/extract.mjs
+```
+
+생성물 둘 — 직접 고치지 마라(다음 추출에서 덮인다):
+
+| 생성물 | 쓰임 |
 |---|---|
-| `backend/src/platform/` | **고정.** 수정하지 마라 — 플랫폼 계약이다 |
-| `backend/src/index.ts` | 라우트 등록만 추가한다 |
-| `backend/src/routes/example.ts` | 참고용. **도메인 로직을 여기 쓰지 말고** 새 파일을 만든다 |
-| `backend/package.json` · `tsconfig.json` · `build.mjs` | 고정 |
+| `backend/src/routes/<모듈>.ts` | 봉투 라우트 |
+| `src/services/<모듈>.client.ts` | 프론트가 부르는 fetch 스텁 |
 
-이후 당신이 만드는 것은 `backend/src/routes/<도메인>.ts` 와 `index.ts` 의 등록 한 줄뿐이다.
+프론트는 **응답 모양을 다시 선언하지 않는다.** 스텁이 원본 시그니처에서 유도하므로,
+서버가 필드명을 바꾸면 프론트 타입 검사가 깨진다 — 런타임 타입가드를 쓰지 마라.
+
+```ts
+// src/components/CouponButton.tsx
+import { claim } from '../services/coupons.client'
+const result = await claim({ employeeId })
+if (result.status === 'issued') { ... }        // 가드 없이 바로 분기
+```
+
+## 0-2. 빌드가 막는 것 — 미리 알고 쓰라
+
+추출기는 아래를 **빌드 실패**로 떨어뜨린다. 우회하지 말고 설계를 바꿔라.
+
+| 위반 | 왜 막나 |
+|---|---|
+| serverFn 파일이 클라이언트 모듈 import (`.tsx`, `components/`, `react`) | 컴포넌트가 서버 번들로 끌려온다 |
+| 모듈 스코프 **가변** 상태(`let`)를 serverFn 안에서 사용 | 요청 간 상태가 샌다. `const` 리터럴은 허용 |
+| 시크릿으로 보이는 이름(`SECRET`·`API_KEY`·`TOKEN`) 또는 `process.env` 참조 | 클라이언트 번들로 새면 상시 노출된다 |
+
+serverFn 이 **하나도 없으면 `backend/` 를 만들지 않는다** — 서버가 필요 없는 앱은 정적
+배포로 남는다. 그것이 기본값이다.
 
 ## 당신이 쓰는 것 / 쓰지 않는 것
 
-`src/routes/*.ts` **하나만** 작성한다. 아래는 플랫폼이 이미 한다 — 만들지 마라.
+`src/services/*.ts` 의 `serverFn` **하나만** 작성한다. 아래는 플랫폼이 이미 한다 — 만들지 마라.
 
 | 플랫폼 담당 | 당신이 만들면 생기는 문제 |
 |---|---|
-| 봉투 파싱, 라우팅 | 중복 |
+| 봉투 파싱, 라우팅, **라우트 파일 생성** | 중복. 생성물은 다음 추출에서 덮인다 |
 | **주입 토큰 장착** | `fetch` 를 직접 쓰면 토큰이 로그·에러 응답으로 샌다 |
 | 에러 → HTTP 상태 직렬화 | `SdkError.status` 가 500 으로 뭉개진다 |
 | 번들·배포·환경변수 | — |
