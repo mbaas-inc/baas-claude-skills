@@ -7,11 +7,32 @@
 
 import { createServer } from 'node:http'
 import { handleInvoke, handleSchedule } from './app'
+import { ENVELOPE_CONTRACT_VERSION } from './envelope'
 import type { InvokeEnvelope, ScheduleEnvelope } from './envelope'
 
 type AnyEnvelope = (InvokeEnvelope | ScheduleEnvelope) & { scheduleName?: string }
 
+/**
+ * 봉투가 이 백엔드가 아는 계약인지 **런타임에** 확인한다.
+ *
+ * 타입 검사는 컴파일 시점 것이라 디스패처가 보내는 JSON 에는 닿지 않는다. 실제로
+ * `context.project_id`(snake) 와 `projectId`(camel) 가 갈렸을 때 아무 신호 없이
+ * `undefined` 로 흘렀다 — 실패가 요청 처리 한참 뒤 엉뚱한 곳에서 났다.
+ *
+ * 그래서 여기서 **가장 먼저** 막고, 양쪽 버전을 메시지에 담는다. 어느 쪽을 올려야
+ * 하는지 로그만 보고 알 수 있어야 한다.
+ */
+function assertContract(envelope: AnyEnvelope): void {
+  const got = (envelope as { contractVersion?: unknown })?.contractVersion
+  if (got === ENVELOPE_CONTRACT_VERSION) return
+  throw new Error(
+    `봉투 계약 불일치: 디스패처=${JSON.stringify(got)} 백엔드=${ENVELOPE_CONTRACT_VERSION}. ` +
+      '디스패처와 백엔드를 같은 계약 버전으로 배포해야 한다.'
+  )
+}
+
 async function dispatch(envelope: AnyEnvelope) {
+  assertContract(envelope)
   return 'scheduleName' in envelope && envelope.scheduleName
     ? handleSchedule(envelope as ScheduleEnvelope)
     : handleInvoke(envelope as InvokeEnvelope)

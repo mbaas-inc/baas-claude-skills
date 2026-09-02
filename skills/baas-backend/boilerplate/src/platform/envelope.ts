@@ -6,6 +6,22 @@
  * 운영에서는 Lambda 로 같은 핸들러가 돈다.
  */
 
+/**
+ * 봉투 계약 버전. 디스패처와 백엔드가 **같은 값**을 알아야 한다.
+ *
+ * 버전이 없던 동안 계약이 조용히 갈라졌다(2026-08-30 실측): PoC 디스패처는
+ * `context.project_id`(snake) 를 보냈는데 보일러플레이트는 `projectId`(camel) 를 읽어,
+ * 프로젝트 식별자가 `undefined` 인 채로 요청이 진행됐다. 타입은 컴파일 시점 것이라
+ * **런타임에 오는 JSON 은 아무도 검사하지 않았다.**
+ *
+ * 그래서 이 계약의 "아래를 자유롭게 교체한다"는 약속에는 **불일치를 즉시 드러내는
+ * 장치**가 함께 있어야 한다. 필드를 바꾸면 이 숫자를 올리고, 양쪽을 같이 배포한다.
+ *
+ * 아직 이 계약에 의존하는 사용자 프로젝트가 0개라 하드 실패로 둔다 — 출시 후에는
+ * 구버전 허용 창(예: n, n-1)이 필요해질 수 있다.
+ */
+export const ENVELOPE_CONTRACT_VERSION = 1
+
 export interface RequestContext {
   /** 이 요청이 속한 프로젝트. 토큰에 서명으로 박혀 있어 사용자 코드가 바꿀 수 없다. */
   projectId: string
@@ -25,6 +41,8 @@ export interface RequestContext {
 }
 
 export interface InvokeEnvelope {
+  /** 디스패처가 찍는 계약 버전. `ENVELOPE_CONTRACT_VERSION` 과 달라지면 거부한다. */
+  contractVersion: number
   /** `/api` 접두사가 제거된 경로. 예: `/reservations` */
   path: string
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
@@ -49,6 +67,8 @@ export interface InvokeResult {
  * 필요한 작업은 컬렉션 접근 정책을 그에 맞게 설계해야 한다.
  */
 export interface ScheduleEnvelope {
+  /** 디스패처가 찍는 계약 버전. `ENVELOPE_CONTRACT_VERSION` 과 달라지면 거부한다. */
+  contractVersion: number
   /** 등록 시 지정한 이름. 한 백엔드의 여러 스케줄을 구분한다. */
   scheduleName: string
   /** 스케줄러가 의도한 실행 시각(ISO). 지연 실행돼도 이 값은 계획 시각이다. */
