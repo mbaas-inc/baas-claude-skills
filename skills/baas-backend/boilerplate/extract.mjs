@@ -154,7 +154,9 @@ for (const { module, names } of extracted) {
     path.join(SERVICES, `${module}.client.ts`),
     `// 생성 파일 — src/services/${module}.ts 에서 추출됨. 직접 고치지 마라.\n` +
       `import type * as impl from './${module}'\n\n` +
-      `const API_BASE = '/api'\n\n` +
+      `// 3단 백엔드 채널. 서버 라우터 prefix 와 **같은 값**이어야 한다 —\n` +
+      `// CDN 이 이 prefix 를 떼지 않고 그대로 넘긴다(\`/aiapp-baas/*\` 와 다르다).\n` +
+      `const API_BASE = '/aiapp-custom'\n\n` +
       `async function call(path: string, input: unknown) {\n` +
       `  const res = await fetch(\`\${API_BASE}\${path}\`, {\n` +
       `    method: 'POST',\n` +
