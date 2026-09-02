@@ -27,7 +27,7 @@ interface Slot {
  * 권한 어휘는 컬렉션 단위라 "이 필드만"이 표현되지 않는다.
  *
  * **여기서의 해법 — 두 제약을 서로 다른 수단으로 막는다**:
- *   1) `slot_member_key` 를 unique 로 선언해 예약 레코드를 **먼저 만든다**
+ *   1) `slot_account_key` 를 unique 로 선언해 예약 레코드를 **먼저 만든다**
  *      → **1인 1회**를 막는다 (dyncol advisory lock, 중복은 409).
  *   2) 카운터를 **원자 증가시키고 돌아온 새 값을 자기 순번으로 읽는다**
  *      → **총량**을 막는다. 순번이 정원을 넘으면 자기가 초과분이다.
@@ -47,14 +47,14 @@ interface Slot {
 route.post('/reservations', async (c) => {
   const { slotId } = (await c.req.json()) as { slotId?: string }
   if (!slotId) return c.json({ error: 'slotId 가 필요합니다' }, 400)
-  if (!c.var.ctx.memberId) return c.json({ error: '로그인이 필요합니다' }, 401)
+  if (!c.var.ctx.accountId) return c.json({ error: '로그인이 필요합니다' }, 401)
 
   // 1) 1인 1회 — unique 제약이 경합을 원자적으로 정리한다
   let reservationId: string
   try {
     const created = await c.var.sdk.dyncol.create('reservations', {
       slot_id: slotId,
-      slot_member_key: `${slotId}:${c.var.ctx.memberId}`,
+      slot_account_key: `${slotId}:${c.var.ctx.accountId}`,
     })
     reservationId = created.id
   } catch (e) {
@@ -82,7 +82,7 @@ route.post('/reservations', async (c) => {
  * 예약 전날 알림 — 스케줄이 필요한 대표 이유.
  *
  * 브라우저에는 "아무도 접속하지 않았을 때 도는 코드"가 없다. 크론이 이 핸들러를 깨우고,
- * 컨텍스트에 회원이 없으므로(`memberId === null`) 전체 조회 권한이 필요하다.
+ * 컨텍스트에 회원이 없으므로(`accountId === null`) 전체 조회 권한이 필요하다.
  *
  * 발송은 크레딧을 쓰므로 한 번에 처리할 건수를 스스로 제한한다 — 스케줄은 실패해도
  * 아무도 즉시 알아채지 못하는 경로라 폭주가 특히 위험하다.

@@ -163,8 +163,8 @@ function buildSdk(ctx: RequestContext) {
 
   const baas = {
     /** 현재 요청의 회원 정보. 비로그인 요청이면 null. */
-    currentMember: () =>
-      ctx.memberId ? call<Record<string, unknown>>('GET', '/account/info') : Promise.resolve(null),
+    currentAccount: () =>
+      ctx.accountId ? call<Record<string, unknown>>('GET', '/account/info') : Promise.resolve(null),
 
     /** SMS 발송. 크레딧이 차감되므로 크론에서 대량 발송 시 건수를 스스로 제한할 것. */
     sendSms: (to: string, message: string) =>

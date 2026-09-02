@@ -30,7 +30,7 @@ const schedules = new Map<string, ScheduleHandler>()
 /**
  * 스케줄 핸들러 등록. 이름은 플랫폼에 크론을 등록할 때 지정한 값과 같아야 한다.
  *
- * 크론에는 요청 회원이 없으므로(`ctx.memberId === null`) 소유자 스코프 조회가 안 된다.
+ * 크론에는 요청 회원이 없으므로(`ctx.accountId === null`) 소유자 스코프 조회가 안 된다.
  * 전체 조회가 필요하면 컬렉션 접근 정책을 그에 맞게 설계해야 한다.
  */
 export function schedule(name: string, handler: ScheduleHandler): void {

@@ -11,7 +11,7 @@ import type { RequestContext } from './envelope'
 import type { Sdk } from './sdk'
 
 /** 저작 쪽 `serverFn` 이 넘겨받는 컨텍스트. 프론트에는 이 타입이 노출되지 않는다. */
-export type ServerCtx = { memberId: string | null; sdk: Sdk }
+export type ServerCtx = { accountId: string | null; sdk: Sdk }
 
 type Handler<I, O> = (input: I, ctx: ServerCtx) => Promise<O>
 
@@ -25,6 +25,6 @@ export async function runServerFn<I, O>(handler: Handler<I, O>, c: Context) {
   const raw = await c.req.text()
   const input = (raw ? JSON.parse(raw) : {}) as I
   const ctx = c.var.ctx as RequestContext
-  const result = await handler(input, { memberId: ctx.memberId, sdk: c.var.sdk as Sdk })
+  const result = await handler(input, { accountId: ctx.accountId, sdk: c.var.sdk as Sdk })
   return c.json(result as object, 200)
 }

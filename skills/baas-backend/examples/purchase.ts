@@ -44,7 +44,7 @@ interface Approval {
 }
 
 interface Member {
-  member_key: string
+  account_key: string
   account_id: string
   dept_id: string
   rank: 'staff' | 'team_lead' | 'manager' | 'exec'
@@ -96,7 +96,7 @@ async function audit(
 ): Promise<void> {
   try {
     await sdk.dyncol.create('po_audit', {
-      actor_id: sdk.ctx.memberId ?? 'system',
+      actor_id: sdk.ctx.accountId ?? 'system',
       action,
       target,
       at: now(),
@@ -113,17 +113,17 @@ async function audit(
 }
 
 /**
- * 알림. 현재 스키마에는 회원 연락처 필드가 없어(`po_member` 에 phone 없음, 크론은
- * `memberId === null` 이라 `baas.currentMember()` 도 못 쓴다) SMS 발송 대상을 만들 수
+ * 알림. 현재 스키마에는 회원 연락처 필드가 없어(`po_account` 에 phone 없음, 크론은
+ * `accountId === null` 이라 `baas.currentAccount()` 도 못 쓴다) SMS 발송 대상을 만들 수
  * 없다. 그래서 알림은 감사 컬렉션에 `notify:*` 액션으로 적립해 프론트·CMS 가 읽게 한다.
  * 연락처 필드가 생기면 이 함수 안에서 `sdk.baas.sendSms` 만 추가하면 된다.
  */
 const notify = (sdk: Sdk, kind: string, target: string, detail: Record<string, unknown>) =>
   audit(sdk, `notify:${kind}`, target, detail)
 
-/** 요청 회원의 조직 정보. `member_key` 가 unique 라 계정당 1건이다. */
+/** 요청 회원의 조직 정보. `account_key` 가 unique 라 계정당 1건이다. */
 async function loadMember(sdk: Sdk, accountId: string): Promise<Member | null> {
-  const res = await sdk.dyncol.list<Member>('po_member', {
+  const res = await sdk.dyncol.list<Member>('po_account', {
     filter: { account_id: accountId },
     limit: 1,
   })
@@ -222,7 +222,7 @@ async function releaseClaim(sdk: Sdk, claimId: string, why: string): Promise<voi
 
 route.post('/orders', async (c) => {
   const sdk = c.var.sdk
-  const actor = c.var.ctx.memberId
+  const actor = c.var.ctx.accountId
   if (!actor) return c.json({ error: '로그인이 필요합니다.' }, 401)
 
   const body = parseJson(await c.req.text())
@@ -269,7 +269,7 @@ route.post('/orders', async (c) => {
 
 route.post('/orders/:id/decide', async (c) => {
   const sdk = c.var.sdk
-  const actor = c.var.ctx.memberId
+  const actor = c.var.ctx.accountId
   if (!actor) return c.json({ error: '로그인이 필요합니다.' }, 401)
 
   const orderId = c.req.param('id')
@@ -404,7 +404,7 @@ route.post('/orders/:id/decide', async (c) => {
 
 route.post('/orders/:id/resubmit', async (c) => {
   const sdk = c.var.sdk
-  const actor = c.var.ctx.memberId
+  const actor = c.var.ctx.accountId
   if (!actor) return c.json({ error: '로그인이 필요합니다.' }, 401)
 
   const orderId = c.req.param('id')
@@ -477,7 +477,7 @@ function applyTransitionlessUpdate(
 
 route.get('/orders/pending', async (c) => {
   const sdk = c.var.sdk
-  const actor = c.var.ctx.memberId
+  const actor = c.var.ctx.accountId
   if (!actor) return c.json({ error: '로그인이 필요합니다.' }, 401)
 
   const member = await loadMember(sdk, actor)
@@ -512,7 +512,7 @@ route.get('/orders/pending', async (c) => {
 
 route.get('/orders/:id', async (c) => {
   const sdk = c.var.sdk
-  const actor = c.var.ctx.memberId
+  const actor = c.var.ctx.accountId
   if (!actor) return c.json({ error: '로그인이 필요합니다.' }, 401)
 
   const orderId = c.req.param('id')

@@ -27,10 +27,10 @@ interface Product {
 }
 
 interface Join {
-  /** `${product_id}:${member_key}` — unique. 상품당 1인 1회를 서버가 원자적으로 강제한다. */
-  product_member_key: string
+  /** `${product_id}:${account_key}` — unique. 상품당 1인 1회를 서버가 원자적으로 강제한다. */
+  product_account_key: string
   product_id: string
-  member_key: string
+  account_key: string
   phone: string
 }
 
@@ -86,8 +86,8 @@ async function findResult(sdk: Sdk, productId: string) {
 
 route.post('/join', async (c) => {
   const { ctx, sdk } = c.var
-  const memberId = ctx.memberId
-  if (!memberId) {
+  const accountId = ctx.accountId
+  if (!accountId) {
     return c.json({ error: '로그인이 필요합니다.' }, 401)
   }
 
@@ -123,15 +123,15 @@ route.post('/join', async (c) => {
   }
 
   // ── 2단계: 중복 차단 (원자적 관문) — 집계보다 **먼저**
-  // product_member_key 가 unique 라 동시에 들어온 같은 회원의 요청 중 하나만 통과한다.
+  // product_account_key 가 unique 라 동시에 들어온 같은 회원의 요청 중 하나만 통과한다.
   // 이 create 를 increment 뒤로 미루면, 중복 요청이 이미 카운터를 올린 뒤에 거절돼
   // 집계가 부풀어 버린다. "카운터를 올릴 자격"을 먼저 원자적으로 따내고 나서 올린다.
   let joinRecord
   try {
     joinRecord = await sdk.dyncol.create<Join>(JOIN, {
-      product_member_key: `${productId}:${memberId}`,
+      product_account_key: `${productId}:${accountId}`,
       product_id: productId,
-      member_key: memberId,
+      account_key: accountId,
       phone,
     })
   } catch (e) {
@@ -286,7 +286,7 @@ async function finalize(sdk: Sdk, productId: string): Promise<Result['state'] | 
 /**
  * 크론 확정 — "아무도 보고 있지 않아도" 도는 쪽.
  *
- * 크론에는 요청 회원이 없다(`ctx.memberId === null`). 따라서 gb_product 컬렉션은
+ * 크론에는 요청 회원이 없다(`ctx.accountId === null`). 따라서 gb_product 컬렉션은
  * 소유자 스코프가 아닌 접근 정책이어야 이 목록 조회가 성립한다.
  */
 schedule('groupbuy-finalize', async (sdk) => {

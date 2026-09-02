@@ -19,8 +19,12 @@
  *
  * 아직 이 계약에 의존하는 사용자 프로젝트가 0개라 하드 실패로 둔다 — 출시 후에는
  * 구버전 허용 창(예: n, n-1)이 필요해질 수 있다.
+ *
+ * v2 (2026-09-02): `memberId` → `accountId`. 서버 모델이 `Account`/`account_id` 인데
+ * 봉투만 `memberId` 라 같은 값이 경계마다 이름을 바꿨다 — 이름이 다르면 언젠가 매핑이
+ * 빠진다(v1 이 그렇게 갈렸다). dyncol 소유권 스탬프도 `account_id` 다.
  */
-export const ENVELOPE_CONTRACT_VERSION = 1
+export const ENVELOPE_CONTRACT_VERSION = 2
 
 export interface RequestContext {
   /** 이 요청이 속한 프로젝트. 토큰에 서명으로 박혀 있어 사용자 코드가 바꿀 수 없다. */
@@ -37,7 +41,7 @@ export interface RequestContext {
    * 원 요청의 로그인 회원. 비로그인이면 null.
    * 값이 있으면 SDK 호출이 그 회원 권한으로 나가고 dyncol 레코드 소유자도 이 회원이 된다.
    */
-  memberId: string | null
+  accountId: string | null
 }
 
 export interface InvokeEnvelope {
@@ -62,7 +66,7 @@ export interface InvokeResult {
 /**
  * 스케줄 실행 봉투. HTTP 요청이 아니라 크론이 깨운 경우다.
  *
- * `context.memberId` 가 **항상 null** 인 것이 요점 — 크론에는 "요청한 회원"이 없다.
+ * `context.accountId` 가 **항상 null** 인 것이 요점 — 크론에는 "요청한 회원"이 없다.
  * 그래서 크론 핸들러에서 소유자 스코프 조회를 기대하면 안 되고, 전체 조회 권한이
  * 필요한 작업은 컬렉션 접근 정책을 그에 맞게 설계해야 한다.
  */
