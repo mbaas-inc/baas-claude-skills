@@ -80,9 +80,33 @@ if (result.status === 'issued') { ... }        // 가드 없이 바로 분기
 | serverFn 파일이 클라이언트 모듈 import (`.tsx`, `components/`, `react`) | 컴포넌트가 서버 번들로 끌려온다 |
 | 모듈 스코프 **가변** 상태(`let`)를 serverFn 안에서 사용 | 요청 간 상태가 샌다. `const` 리터럴은 허용 |
 | 시크릿으로 보이는 이름(`SECRET`·`API_KEY`·`TOKEN`) 또는 `process.env` 참조 | 클라이언트 번들로 새면 상시 노출된다 |
+| `dyncol.<op>()` 의 컬렉션명을 정적으로 풀 수 없음 (템플릿·런타임 값) | 볼 수 없는 이름에는 최소권한을 줄 수 없다 — 아래 참조 |
 
 serverFn 이 **하나도 없으면 `backend/` 를 만들지 않는다** — 서버가 필요 없는 앱은 정적
 배포로 남는다. 그것이 기본값이다.
+
+### 컬렉션 접근 권한은 선언하지 않는다 — 빌드가 유도한다
+
+백엔드가 만지는 컬렉션은 그 연산에 `service` 권한이 있어야 서버가 통과시킨다. 그런데
+**그 선언을 당신이 하지 않는다.** 추출기가 `dyncol.<op>()` 호출부를 걸어 필요한 권한만
+`backend/service-grants.json` 으로 낸다.
+
+```
+dyncol.get/list/aggregate → read     dyncol.create        → create
+dyncol.update/increment   → update   dyncol.remove        → delete
+```
+
+그래서 컬렉션명을 **문자열 리터럴이나 모듈 스코프 `const`** 로 써야 한다. 이건 스타일
+규칙이 아니라 권한이 유도되는 조건이다.
+
+```ts
+const JOIN = 'gb_join'                       // ✅ 풀린다
+await ctx.sdk.dyncol.create(JOIN, {...})     //    → gb_join: create
+
+await ctx.sdk.dyncol.list(`items_${kind}`)   // ✗ 빌드 실패 — 이름을 알 수 없다
+```
+
+읽기만 하는 컬렉션에 쓰기 권한이 생기지 않는다 — **코드가 부르는 연산만** 열린다.
 
 ## 당신이 쓰는 것 / 쓰지 않는 것
 

@@ -25,9 +25,14 @@ import path from 'node:path'
 const ROOT = process.cwd()
 const SERVICES = path.join(ROOT, 'src', 'services')
 const ROUTES_OUT = path.join(ROOT, 'backend', 'src', 'routes')
+// 유도된 service grant 매니페스트. 프로비저닝이 이걸 읽어 컬렉션 정책에 반영한다.
+const GRANTS_OUT = path.join(ROOT, 'backend', 'service-grants.json')
 
 /** 서버로 넘어가면 안 되는 import. 확장자와 경로 관례 둘 다 본다. */
 const CLIENT_ONLY = [/\.(tsx|jsx|css)$/, /\/components\//, /^react$/, /^react-dom/]
+
+// 컬렉션명 -> 필요한 grant 연산 집합. 빌드가 유도해 매니페스트로 낸다(사람이 선언하지 않는다).
+const serviceGrants = new Map()
 /** 시크릿으로 볼 이름. 실제 도입 시에는 팀 규칙으로 확정해야 한다. */
 const SECRET_HINT = /SECRET|API_KEY|TOKEN|PASSWORD|CREDENTIAL/i
 
@@ -65,7 +70,7 @@ function checkImports(source, file) {
 
 /** 모듈 스코프에 선언된 이름들 — 이걸 serverFn 안에서 읽으면 클로저 캡처다. */
 function moduleScopeBindings(source) {
-  const names = new Map() // name -> { isSecret }
+  const names = new Map() // name -> { mutable, isSecret, literal }
   for (const stmt of source.statements) {
     if (!ts.isVariableStatement(stmt)) continue
     if (serverFnName(stmt)) continue // serverFn 자신은 제외
@@ -76,10 +81,68 @@ function moduleScopeBindings(source) {
       const isSecret = SECRET_HINT.test(name) || /process\.env/.test(text)
       // const 리터럴은 캡처가 아니라 상수 인라인이므로 허용한다. 다만 시크릿은 예외.
       const mutable = !isConstEnum
-      names.set(name, { mutable, isSecret })
+      // 문자열 리터럴 값을 보관한다 — grant 유도가 `const JOIN = 'gb_join'` 을 풀어야 한다.
+      const literal =
+        isConstEnum && decl.initializer && ts.isStringLiteral(decl.initializer)
+          ? decl.initializer.text
+          : undefined
+      names.set(name, { mutable, isSecret, literal })
     }
   }
   return names
+}
+
+/**
+ * dyncol 연산 → 컬렉션 정책의 grant 연산.
+ *
+ * 서버는 `service` 를 grants 의 한 원자로 평가하므로, 백엔드가 만지는 컬렉션은
+ * 그 연산에 `service` 를 선언해야 한다. **선언을 사람이 하면 빼먹는다** — 어느 컬렉션을
+ * 만지는지는 이 빌드가 알고 있으니 여기서 유도한다.
+ */
+const DYNCOL_OP_TO_GRANT = {
+  list: 'read', get: 'read', aggregate: 'read',
+  create: 'create',
+  update: 'update', increment: 'update',
+  remove: 'delete',
+}
+
+/**
+ * serverFn 본문의 `sdk.dyncol.<op>(<컬렉션>, …)` 호출부에서 필요한 grant 를 모은다.
+ *
+ * 컬렉션명이 문자열 리터럴이거나 모듈 스코프 const 리터럴이면 정적으로 풀린다.
+ * **풀 수 없으면 빌드를 세운다** — 볼 수 없는 이름에는 최소권한을 줄 수 없다.
+ * (client-import·closure-capture·secret-reference 와 같은 kill 게이트 계열이다.)
+ */
+function collectGrants(call, bindings, file, grants) {
+  const walk = (node) => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      ts.isPropertyAccessExpression(node.expression.expression) &&
+      node.expression.expression.name.text === 'dyncol'
+    ) {
+      const op = node.expression.name.text
+      const grant = DYNCOL_OP_TO_GRANT[op]
+      const arg = node.arguments[0]
+      if (grant && arg) {
+        let name
+        if (ts.isStringLiteral(arg)) name = arg.text
+        else if (ts.isIdentifier(arg)) name = bindings.get(arg.text)?.literal
+        if (name) {
+          if (!grants.has(name)) grants.set(name, new Set())
+          grants.get(name).add(grant)
+        } else {
+          report(
+            file,
+            'dynamic-collection',
+            `dyncol.${op}() 의 컬렉션명을 정적으로 풀 수 없다 — 문자열 리터럴이나 모듈 스코프 const 로 쓴다`,
+          )
+        }
+      }
+    }
+    ts.forEachChild(node, walk)
+  }
+  ts.forEachChild(call, walk)
 }
 
 function checkBody(call, bindings, file) {
@@ -105,7 +168,10 @@ for (const entry of fs.readdirSync(SERVICES)) {
 
   checkImports(source, file)
   const bindings = moduleScopeBindings(source)
-  for (const fn of fns) checkBody(fn.call, bindings, file)
+  for (const fn of fns) {
+    checkBody(fn.call, bindings, file)
+    collectGrants(fn.call, bindings, file, serviceGrants)
+  }
   extracted.push({ module: entry.replace(/\.ts$/, ''), names: fns.map((f) => f.name) })
 }
 
@@ -122,6 +188,24 @@ if (extracted.length === 0) {
 }
 
 fs.mkdirSync(ROUTES_OUT, { recursive: true })
+
+// ── service grant 매니페스트 ───────────────────────────────────────────────
+// 백엔드가 만지는 컬렉션과 연산을 코드에서 유도한다. 에이전트가 손으로 선언하면 빼먹고,
+// 그러면 서버가 403 을 낸다 — 잘 쓰인 403 도 실패다. 코드가 부르면 grant 가 존재한다.
+const grantsManifest = Object.fromEntries(
+  [...serviceGrants].sort(([a], [b]) => a.localeCompare(b)).map(([coll, ops]) => [
+    coll,
+    Object.fromEntries([...ops].sort().map((op) => [op, ['service']])),
+  ]),
+)
+fs.writeFileSync(GRANTS_OUT, `${JSON.stringify(grantsManifest, null, 2)}\n`)
+const grantCount = Object.keys(grantsManifest).length
+console.log(
+  grantCount === 0
+    ? 'service grant 없음 — 백엔드가 컬렉션을 만지지 않는다'
+    : `service grant 유도 ${grantCount}개 컬렉션 → backend/service-grants.json`,
+)
+
 for (const { module, names } of extracted) {
   const routes = names
     .map((n) => `route.post('/${module}/${n}', (c) => runServerFn(${n}, c))`)
