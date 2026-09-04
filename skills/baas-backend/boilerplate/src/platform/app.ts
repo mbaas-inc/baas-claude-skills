@@ -1,7 +1,7 @@
 /**
- * Hono 앱 팩토리 — 봉투를 Hono 요청으로 바꾸고 컨텍스트·SDK 를 주입한다.
+ * Hono 앱 팩토리 — envelope를 Hono 요청으로 바꾸고 컨텍스트·SDK 를 주입한다.
  *
- * 에이전트는 `route.get/post/...` 로 라우트만 등록한다. 봉투 파싱·SDK 생성·에러 직렬화는
+ * 에이전트는 `route.get/post/...` 로 라우트만 등록한다. envelope 파싱·SDK 생성·에러 직렬화는
  * 여기가 처리하므로 도메인 로직에 배관 코드가 섞이지 않는다.
  */
 
@@ -41,7 +41,7 @@ function toResult(status: number, body: unknown): InvokeResult {
   return { status, body, headers: { 'content-type': 'application/json' } }
 }
 
-/** 봉투를 받아 라우트를 실행한다. 어댑터(Lambda·로컬)가 공통으로 호출한다. */
+/** envelope를 받아 라우트를 실행한다. 어댑터(Lambda·로컬)가 공통으로 호출한다. */
 export async function handleInvoke(envelope: InvokeEnvelope): Promise<InvokeResult> {
   const { context } = envelope
   const sdk = buildSdk(context)
@@ -73,7 +73,7 @@ export async function handleInvoke(envelope: InvokeEnvelope): Promise<InvokeResu
   }
 }
 
-/** 스케줄 봉투 실행. 등록되지 않은 이름이면 404 로 알린다(조용히 넘기면 원인 추적이 안 된다). */
+/** 스케줄 envelope 실행. 등록되지 않은 이름이면 404 로 알린다(조용히 넘기면 원인 추적이 안 된다). */
 export async function handleSchedule(envelope: ScheduleEnvelope): Promise<InvokeResult> {
   const handler = schedules.get(envelope.scheduleName)
   if (!handler) {
