@@ -7,14 +7,21 @@
  */
 
 import { build } from 'esbuild'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+// 경로를 이 파일 위치로 고정한다. `npm run build`(backend/ 안)와 extract.mjs 의 자동
+// 호출(프로젝트 루트)이 같은 결과를 내야 하는데, 상대 경로로 두면 실행 위치에 따라
+// entry 를 못 찾는다.
+const HERE = path.dirname(fileURLToPath(import.meta.url))
 
 await build({
-  entryPoints: ['src/index.ts'],
+  entryPoints: [path.join(HERE, 'src/index.ts')],
   bundle: true,
   platform: 'node',
   target: 'node22',
   format: 'esm',
-  outfile: 'dist/index.js',
+  outfile: path.join(HERE, 'dist/index.js'),
   minify: true,
   sourcemap: 'linked',
   // aws-sdk 는 Lambda 런타임에 이미 있다 — 번들에 넣으면 크기만 커진다.

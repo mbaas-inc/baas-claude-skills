@@ -7,7 +7,7 @@
  */
 
 /**
- * 봉투 계약 버전. 디스패처와 백엔드가 **같은 값**을 알아야 한다.
+ * envelope 계약 버전. 디스패처와 백엔드가 **같은 값**을 알아야 한다.
  *
  * 버전이 없던 동안 계약이 조용히 갈라졌다(2026-08-30 실측): PoC 디스패처는
  * `context.project_id`(snake) 를 보냈는데 보일러플레이트는 `projectId`(camel) 를 읽어,
@@ -21,7 +21,7 @@
  * 구버전 허용 창(예: n, n-1)이 필요해질 수 있다.
  *
  * v2 (2026-09-02): `memberId` → `accountId`. 서버 모델이 `Account`/`account_id` 인데
- * 봉투만 `memberId` 라 같은 값이 경계마다 이름을 바꿨다 — 이름이 다르면 언젠가 매핑이
+ * envelope만 `memberId` 라 같은 값이 경계마다 이름을 바꿨다 — 이름이 다르면 언젠가 매핑이
  * 빠진다(v1 이 그렇게 갈렸다). dyncol 소유권 스탬프도 `account_id` 다.
  */
 export const ENVELOPE_CONTRACT_VERSION = 2
@@ -64,7 +64,7 @@ export interface InvokeResult {
 }
 
 /**
- * 스케줄 실행 봉투. HTTP 요청이 아니라 크론이 깨운 경우다.
+ * 스케줄 실행 envelope. HTTP 요청이 아니라 크론이 깨운 경우다.
  *
  * `context.accountId` 가 **항상 null** 인 것이 요점 — 크론에는 "요청한 회원"이 없다.
  * 그래서 크론 핸들러에서 소유자 스코프 조회를 기대하면 안 되고, 전체 조회 권한이

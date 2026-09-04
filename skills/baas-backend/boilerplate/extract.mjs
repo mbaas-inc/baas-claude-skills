@@ -1,8 +1,8 @@
 /**
- * serverFn 추출기 PoC — colocation 저작을 봉투 계약으로 컴파일한다.
+ * serverFn 추출기 PoC — colocation 저작을 envelope 계약으로 컴파일한다.
  *
  * `src/services/*.ts` 의 `export const x = serverFn(...)` 를 찾아
- *   ① `backend/src/routes/<module>.ts`  (봉투 라우트 — 기존 platform/ 재사용)
+ *   ① `backend/src/routes/<module>.ts`  (envelope 라우트 — 기존 platform/ 재사용)
  *   ② `src/services/<module>.client.ts` (fetch 스텁)
  * 를 만든다. serverFn 이 하나도 없으면 backend/ 를 만들지 않는다 —
  * 정적 배포 기본값을 지키는 것이 이 설계의 전제다.
@@ -254,8 +254,33 @@ for (const { module, names } of extracted) {
   )
 }
 
+// 진입점도 생성물이다. 라우트 파일 이름은 이 추출기가 정하므로, `index.ts` 를 손으로
+// 맞추게 두면 생성물과 수기 파일이 이름으로 결합돼 매번 어긋날 수 있다 — 실제로
+// 보일러플레이트가 없는 라우트를 import 한 채 배포돼 빌드가 깨져 있었다.
+fs.writeFileSync(
+  path.join(ROOT, 'backend', 'src', 'index.ts'),
+  `// 생성 파일 — backend/extract.mjs 가 만든다. 직접 고치지 마라(다음 추출에서 덮인다).\n` +
+    `//\n` +
+    `// 라우트는 import 부수효과로 \`route\` 에 붙으므로 여기서는 나열만 한다.\n` +
+    `// 어댑터 선택(Lambda vs 로컬)은 실행 방식이 정하지 이 파일이 정하지 않는다.\n\n` +
+    extracted.map((e) => `import './routes/${e.module}'`).join('\n') +
+    `\n\nexport { lambdaHandler } from './platform/adapters'\n\n` +
+    `// 로컬 실행(\`npm run dev\`)일 때만 HTTP 서버를 띄운다. Lambda 에서는 핸들러만 import 된다.\n` +
+    `if (process.env.LOCAL_SERVER === '1') {\n` +
+    `  const { startLocalServer } = await import('./platform/adapters')\n` +
+    `  startLocalServer()\n` +
+    `}\n`,
+)
+
 console.log(`추출 완료 — ${extracted.length}개 모듈 / ${extracted.reduce((a, e) => a + e.names.length, 0)}개 함수`)
 for (const e of extracted) {
   console.log(`  backend/src/routes/${e.module}.ts   ←  ${e.names.join(', ')}`)
   console.log(`  src/services/${e.module}.client.ts  ←  타입 유도 스텁`)
 }
+console.log(`  backend/src/index.ts                ←  라우트 ${extracted.length}개 등록`)
+
+// 번들까지 해야 산출물이 쓸모를 갖는다. 미리보기는 `backend/dist/index.js` 존재로 서버를
+// 띄울지 정하고, 출시는 `backend/dist` 를 zip 으로 묶는다 — 소스만 있으면 둘 다 조용히
+// 건너뛴다. 추출과 번들을 나눠 두면 그 사이가 빠지므로 한 명령이 한 결과를 내게 한다.
+console.log('번들 중 …')
+await import('./build.mjs')

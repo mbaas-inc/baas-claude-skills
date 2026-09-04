@@ -13,7 +13,7 @@ import type { InvokeEnvelope, ScheduleEnvelope } from './envelope'
 type AnyEnvelope = (InvokeEnvelope | ScheduleEnvelope) & { scheduleName?: string }
 
 /**
- * 봉투가 이 백엔드가 아는 계약인지 **런타임에** 확인한다.
+ * envelope가 이 백엔드가 아는 계약인지 **런타임에** 확인한다.
  *
  * 타입 검사는 컴파일 시점 것이라 디스패처가 보내는 JSON 에는 닿지 않는다. 실제로
  * `context.project_id`(snake) 와 `projectId`(camel) 가 갈렸을 때 아무 신호 없이
@@ -26,7 +26,7 @@ function assertContract(envelope: AnyEnvelope): void {
   const got = (envelope as { contractVersion?: unknown })?.contractVersion
   if (got === ENVELOPE_CONTRACT_VERSION) return
   throw new Error(
-    `봉투 계약 불일치: 디스패처=${JSON.stringify(got)} 백엔드=${ENVELOPE_CONTRACT_VERSION}. ` +
+    `envelope 계약 불일치: 디스패처=${JSON.stringify(got)} 백엔드=${ENVELOPE_CONTRACT_VERSION}. ` +
       '디스패처와 백엔드를 같은 계약 버전으로 배포해야 한다.'
   )
 }
@@ -44,9 +44,9 @@ export async function lambdaHandler(event: AnyEnvelope) {
 }
 
 /**
- * 로컬 HTTP 어댑터. `POST /invoke` 로 봉투를 그대로 받는다.
+ * 로컬 HTTP 어댑터. `POST /invoke` 로 envelope를 그대로 받는다.
  *
- * 봉투를 손으로 만들어야 하는 게 번거로워 보이지만 의도한 것이다 — 운영에서 디스패처가
+ * envelope를 손으로 만들어야 하는 게 번거로워 보이지만 의도한 것이다 — 운영에서 디스패처가
  * 보내는 것과 **정확히 같은 입력**으로 테스트해야 로컬에서만 통과하는 코드를 막는다.
  */
 export function startLocalServer(port = Number(process.env.PORT ?? 8788)) {
@@ -65,7 +65,7 @@ export function startLocalServer(port = Number(process.env.PORT ?? 8788)) {
         res.end(JSON.stringify(out))
       } catch (e) {
         res.writeHead(400, { 'content-type': 'application/json' })
-        res.end(JSON.stringify({ error: `봉투를 해석할 수 없습니다: ${String(e)}` }))
+        res.end(JSON.stringify({ error: `envelope를 해석할 수 없습니다: ${String(e)}` }))
       }
     })
   })
