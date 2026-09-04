@@ -239,11 +239,11 @@ for (const { module, names } of extracted) {
     `// 생성 파일 — src/services/${module}.ts 에서 추출됨. 직접 고치지 마라.\n` +
       `import type * as impl from './${module}'\n\n` +
       `// 3단 백엔드 채널. 디스패처 라우터 prefix 가 곧 URL 이라 CDN 이 이 prefix 를\n` +
-      `// 떼지 않는다(\`/aiapp-baas/*\` 와 다르다). 채널은 **앱이 마운트된 자리 바로 아래**에\n` +
-      `// 붙고, 그 자리는 플랫폼이 Vite base 로 이미 알려준다 — 미리보기는\n` +
-      `// \`/<env>/runtime/<project>/<route>/\`, 출시는 도메인 루트다. 그래서 주소를 따로\n` +
-      `// 받지 않고 base 에서 유도한다. 상수로 박으면 둘 중 한쪽에서 반드시 틀린다.\n` +
-      `const API_BASE = new URL('aiapp-custom', new URL(import.meta.env.BASE_URL, document.baseURI)).href\n\n` +
+      `// 떼지 않는다(\`/aiapp-baas/*\` 와 다르다). 채널은 앱이 마운트된 자리 바로 아래에\n` +
+      `// 붙으므로, 1단 SDK 가 \`/aiapp-baas\` 를 얻을 때 쓰는 것과 **같은 유도**를 쓴다\n` +
+      `// (\`main.tsx\` 의 runtimeBasename). 상수로 박으면 미리보기와 출시 중 한쪽이 틀린다.\n` +
+      `const runtimeBasename = import.meta.env.BASE_URL === './' ? '/' : import.meta.env.BASE_URL\n` +
+      `const API_BASE = \`\${runtimeBasename.replace(/\\/$/, '')}/aiapp-custom\`\n\n` +
       `async function call(path: string, input: unknown) {\n` +
       `  const res = await fetch(\`\${API_BASE}\${path}\`, {\n` +
       `    method: 'POST',\n` +
