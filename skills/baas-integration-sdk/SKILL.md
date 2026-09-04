@@ -91,6 +91,12 @@ SDK는 CDN에서 로드되고 앱의 React 인스턴스를 공유한다. 이 배
   프로비저닝 담당이 컬렉션·필드를 생성 → `useCollection` 프리미티브로 UI 연결.
   UI는 SDK 프리미티브·표현 범위(필드 타입·필터 DSL·정책) **안에서 구현 가능하게** 직접
   설계한다(범용 자동 렌더 아님 — 그건 관리자 콘솔 몫).
+- **규칙이 붙은 데이터는 이 스킬의 범위가 아니다.** 쓰기가 **다른 레코드의 내용**이나 **교체할
+  현재 값**에 의존하면(선착순·정원·재고·상태 전이·한도) 그 컬렉션은 서버(`serverFn`) 소유이고
+  `service` 만 선언한다. 브라우저는 그 데이터를 serverFn 을 통해 읽고 쓴다. 아래 접근 정책은
+  **규칙 없는 데이터**(조건 없는 조회·작성)에 적용한다.
+  제약(unique)·클레임 컬렉션·쓰기 직전 재조회로 규칙을 흉내내지 마라 — 원자성이 성립해도
+  같은 데이터를 브라우저가 직접 고칠 수 있으면 규칙이 무력화된다.
 - **접근 정책 = CRUD 연산별 grants**: `settings.access = {create, read, update, delete}`, 값은
   **atom 또는 배열(OR 합집합)**. atom ∈ `public|member|owner|ref_owner:<field>`(참조 부모 레코드의
   소유자 — #626). 기본 create:member/read:member/update:owner/delete:owner, create 는 public|member 만.
