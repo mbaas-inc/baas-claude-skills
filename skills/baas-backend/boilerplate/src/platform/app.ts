@@ -24,6 +24,29 @@ route.use('*', async (c, next) => {
   await next()
 })
 
+/**
+ * 라우트 예외의 유일한 수신처.
+ *
+ * Hono 는 라우트가 던진 예외를 **밖으로 내보내지 않는다** — 내부에서 잡아 plain-text
+ * "Internal Server Error" 500 응답으로 바꾼다. 그래서 `handleInvoke` 의 try/catch 는
+ * 라우트 예외에 대해 실행되지 않고, 거기 적힌 상태코드 보존 계약이 죽은 코드가 된다
+ * (실측: `throw new SdkError('중복입니다', 409)` → `{status:500, body:"Internal Server Error"}`).
+ * 예외를 여기서 받아야 dyncol 의 409(중복·정원)가 500 으로 뭉개지지 않는다.
+ */
+route.onError((err, c) => {
+  if (err instanceof SdkError) {
+    return new Response(JSON.stringify({ error: err.message, code: err.errorCode }), {
+      status: err.status,
+      headers: { 'content-type': 'application/json' },
+    })
+  }
+  console.error('[unhandled]', { requestId: c.var.ctx?.requestId, error: String(err) })
+  return new Response(JSON.stringify({ error: '서버 오류가 발생했습니다.' }), {
+    status: 500,
+    headers: { 'content-type': 'application/json' },
+  })
+})
+
 type ScheduleHandler = (sdk: Sdk, envelope: ScheduleEnvelope) => Promise<void>
 const schedules = new Map<string, ScheduleHandler>()
 
@@ -63,8 +86,8 @@ export async function handleInvoke(envelope: InvokeEnvelope): Promise<InvokeResu
     if (text) { try { body = JSON.parse(text) } catch { body = text } }
     return { status: res.status, body, headers: { 'content-type': 'application/json' } }
   } catch (e) {
-    // SDK 에러는 원래 상태코드를 보존한다 — dyncol 의 409(중복·정원)를 500 으로 뭉개면
-    // 프론트가 "이미 예약됨"과 "서버 장애"를 구분할 수 없다.
+    // 라우트 예외는 `route.onError` 가 이미 처리했다 — 여기 오는 것은 그 바깥의 실패
+    // (envelope 로 Request 를 만들지 못했거나 본문을 읽지 못한 경우)뿐이다.
     if (e instanceof SdkError) {
       return toResult(e.status, { error: e.message, code: e.errorCode })
     }
