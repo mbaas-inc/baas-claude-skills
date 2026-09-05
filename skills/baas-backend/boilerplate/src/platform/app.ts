@@ -7,7 +7,7 @@
 
 import { Hono } from 'hono'
 import type { InvokeEnvelope, InvokeResult, RequestContext, ScheduleEnvelope } from './envelope'
-import { buildSdk, SdkError, type Sdk } from './sdk'
+import { buildSdk, SdkError, type Sdk } from './sdk.ts'
 
 type Vars = { ctx: RequestContext; sdk: Sdk }
 type Bindings = { ctx: RequestContext; sdk: Sdk }

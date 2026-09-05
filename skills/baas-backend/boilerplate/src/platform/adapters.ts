@@ -6,8 +6,8 @@
  */
 
 import { createServer } from 'node:http'
-import { handleInvoke, handleSchedule } from './app'
-import { ENVELOPE_CONTRACT_VERSION } from './envelope'
+import { handleInvoke, handleSchedule } from './app.ts'
+import { ENVELOPE_CONTRACT_VERSION } from './envelope.ts'
 import type { InvokeEnvelope, ScheduleEnvelope } from './envelope'
 
 type AnyEnvelope = (InvokeEnvelope | ScheduleEnvelope) & { scheduleName?: string }

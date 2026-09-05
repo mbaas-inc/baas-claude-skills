@@ -213,9 +213,9 @@ for (const { module, names } of extracted) {
   fs.writeFileSync(
     path.join(ROUTES_OUT, `${module}.ts`),
     `// 생성 파일 — src/services/${module}.ts 에서 추출됨. 직접 고치지 마라.\n` +
-      `import { route } from '../platform/app'\n` +
-      `import { runServerFn } from '../platform/serverfn-adapter'\n` +
-      `import { ${names.join(', ')} } from '../../../src/services/${module}'\n\n` +
+      `import { route } from '../platform/app.ts'\n` +
+      `import { runServerFn } from '../platform/serverfn-adapter.ts'\n` +
+      `import { ${names.join(', ')} } from '../../../src/services/${module}.ts'\n\n` +
       `${routes}\n`,
   )
 }
@@ -266,11 +266,11 @@ fs.writeFileSync(
     `//\n` +
     `// 라우트는 import 부수효과로 \`route\` 에 붙으므로 여기서는 나열만 한다.\n` +
     `// 어댑터 선택(Lambda vs 로컬)은 실행 방식이 정하지 이 파일이 정하지 않는다.\n\n` +
-    extracted.map((e) => `import './routes/${e.module}'`).join('\n') +
-    `\n\nexport { lambdaHandler } from './platform/adapters'\n\n` +
+    extracted.map((e) => `import './routes/${e.module}.ts'`).join('\n') +
+    `\n\nexport { lambdaHandler } from './platform/adapters.ts'\n\n` +
     `// 로컬 실행(\`npm run dev\`)일 때만 HTTP 서버를 띄운다. Lambda 에서는 핸들러만 import 된다.\n` +
     `if (process.env.LOCAL_SERVER === '1') {\n` +
-    `  const { startLocalServer } = await import('./platform/adapters')\n` +
+    `  const { startLocalServer } = await import('./platform/adapters.ts')\n` +
     `  startLocalServer()\n` +
     `}\n`,
 )

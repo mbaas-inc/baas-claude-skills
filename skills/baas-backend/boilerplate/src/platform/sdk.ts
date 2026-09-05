@@ -12,13 +12,18 @@ import type { RequestContext } from './envelope'
 const BAAS_BASE_URL = process.env.BAAS_BASE_URL ?? 'http://127.0.0.1:8010'
 
 export class SdkError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly errorCode?: string,
-  ) {
+  // 파라미터 프로퍼티(`readonly status: number`)를 쓰지 않는다. `npm run dev` 가 쓰는
+  // `node --experimental-strip-types` 는 타입을 지우기만 할 뿐 코드를 변환하지 못해
+  // 파라미터 프로퍼티에서 죽는다(ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX). 번들은 통과하므로
+  // 이 형태를 되돌리면 배포는 멀쩡한데 로컬 기동만 조용히 깨진다.
+  readonly status: number
+  readonly errorCode?: string
+
+  constructor(message: string, status: number, errorCode?: string) {
     super(message)
     this.name = 'SdkError'
+    this.status = status
+    this.errorCode = errorCode
   }
 }
 
