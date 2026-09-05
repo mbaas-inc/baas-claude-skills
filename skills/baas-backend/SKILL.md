@@ -116,9 +116,14 @@ serverFn 이 **하나도 없으면 `backend/` 를 만들지 않는다** — 서�
 `backend/service-grants.json` 으로 낸다.
 
 ```
-dyncol.get/list/aggregate → read     dyncol.create        → create
-dyncol.update/increment   → update   dyncol.remove        → delete
+dyncol.get/list/aggregate → read     dyncol.create           → create
+dyncol.update/increment   → update   dyncol.remove/restore   → delete
+dyncol.batch  → 넘긴 키(create·update·delete)가 그대로 grant 가 된다
+dyncol.transaction → 항목마다 그 항목의 collection·op 로 유도된다
 ```
+
+`batch` 의 두 번째 인자와 `transaction` 의 배열은 **리터럴이어야 한다** — 항목을 볼 수
+없으면 어느 컬렉션에 무슨 권한이 필요한지 유도할 수 없어 빌드가 선다.
 
 그래서 컬렉션명을 **문자열 리터럴이나 모듈 스코프 `const`** 로 써야 한다. 이건 스타일
 규칙이 아니라 권한이 유도되는 조건이다.
@@ -173,13 +178,15 @@ await ctx.sdk.dyncol.list(`items_${kind}`)   // ✗ 빌드 실패 — 이름을 
 
 도메인 규칙은 브리프에서 온다. 아래는 **이 플랫폼의 사실**이다.
 
-### unique 제약 — advisory lock, 409 는 정상 분기
+### unique 제약 — 중복 차단, 409 는 정상 분기
 
 컬렉션에 `unique` 필드가 선언돼 있으면 서버가 **락을 먼저 잡고** 삽입한다(확인 후 삽입이
 아니다). 동시 요청 중 하나만 통과하고 나머지는 409.
 
 - **미리 조회해 검사하지 마라** — 경합에 뚫린다. 실측: 동시 12건 → 1건만 성공.
 - 409 를 `catch` 해서 **정상 분기로 다루는 것이 올바른 사용법**이다.
+- unique 는 *같은 값*의 중복만 막는다. **정원 같은 상한은 막지 못한다** — 서로 다른 값이면
+  전원 통과한다. 상한은 아래 `increment` 반환값으로 판정한다.
 
 ### 원자 증감 — 반환값이 내 순번
 
@@ -234,8 +241,27 @@ await sdk.dyncol.update('po', id, { status: 'approved' },
 
 ### 트랜잭션 — 복수 컬렉션 전부-아니면-전무
 
-`transaction` 은 여러 컬렉션의 create/update/delete 를 한 트랜잭션으로 묶는다. 하나라도
-실패하면 전부 되돌린다. "본문 + 이력", "주문 + 재고 차감" 처럼 따로 남으면 안 되는 쌍에 쓴다.
+`transaction` 은 여러 컬렉션의 create/update/delete 를 한 트랜잭션으로 묶는다(최대 25 작업).
+하나라도 실패하면 전부 되돌린다. "본문 + 이력", "주문 + 재고 차감" 처럼 따로 남으면 안 되는
+쌍에 쓴다.
+
+```ts
+await sdk.dyncol.transaction([
+  { op: 'create', collection: 'orders', id: orderId, data: {...} },
+  { op: 'update', collection: 'stock',  id: itemId,  data: { qty: next } },
+])
+```
+
+`create` 는 id 를 미리 정할 수 있다 — 같은 요청에서 자식의 `reference` 값으로 쓰려면 필요하다.
+
+**잠금 전용 컬럼이나 보상 삭제를 손으로 짜지 마라.** 그건 이 연산이 없던 시절의 우회이고,
+보상을 빠뜨리면 그 레코드가 영구히 막힌다(서버 주석에 그 사고가 기록돼 있다).
+
+같은 컬렉션 대량 처리는 `batch` 다 — **항목별 부분 성공**이고 각 목록 100건까지. 500행 중
+3행이 중복이라고 497행을 되돌리면 사용자가 무엇이 문제인지 알 수 없다. 전부-아니면-전무가
+필요하면 `transaction` 을 쓴다.
+
+soft-delete 된 레코드는 `restore` 로 되살린다(인가는 `delete` 권한이다).
 
 ### 집계 — 읽기는 되고, 쓰기의 전제로 쓰지는 마라
 
@@ -246,7 +272,7 @@ await sdk.dyncol.update('po', id, { status: 'approved' },
 
 | 항목 | 값 | 대응 |
 |---|---|---|
-| 목록 1회 | **100건** | 커서로 페이지 넘김. 페이지 수 상한을 두고 남은 건은 다음 실행에 넘긴다 |
+| 목록 1회 | **100건** | 세거나 합치려면 `aggregate`(서버가 센다). 좁히려면 `filter`. 그래도 전량이 필요하면 `offset` + `sort`(커서는 없다) |
 | 응답 | **6MB** | 초과분은 presigned URL |
 | 기본 타임아웃 | **10초** | 대량 순회는 스케줄 핸들러로 |
 | 인덱스 | containment(=) 만 GIN | 범위·부분일치·임의 정렬은 순차 스캔 — 대량 컬렉션에서 피한다 |

@@ -36,7 +36,14 @@ export interface DyncolRecord<T = Record<string, unknown>> {
 export type FilterOp = 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'like' | 'in' | 'has'
 
 /**
- * dyncol 목록 조회 옵션. 서버 상한은 100건이라 그 이상은 커서로 나눠 받는다.
+ * dyncol 목록 조회 옵션.
+ *
+ * **커서는 없다.** 서버는 `offset` 기반이고 응답에 `total_count` 를 함께 준다(실측:
+ * `cursor` 를 보내면 무시되고 항상 첫 페이지가 온다). 다만 대부분은 페이지를 넘길 일이
+ * 없다 — 개수·합계는 `aggregate` 가, 좁히기는 `filter` 가 처리한다.
+ *
+ * `offset` 페이징은 `sort` 를 함께 주지 않으면 순서가 흔들려 같은 행을 두 번 받거나
+ * 빠뜨린다(서버 기본 정렬은 `-created_at`).
  *
  * `filter` 는 `{ 필드: { 연산자: 값 } }` 형태다 — 값만 주면 `eq` 로 본다.
  *   `{ status: 'open' }`              → status = 'open'
@@ -44,8 +51,36 @@ export type FilterOp = 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'like' | 'in'
  */
 export interface ListOptions {
   filter?: Record<string, unknown | Partial<Record<FilterOp, unknown>>>
+  /** 서버 기본 20, 상한 100. */
   limit?: number
-  cursor?: string
+  offset?: number
+  /** `'field'` 오름차순, `'-field'` 내림차순. 기본 `-created_at`. */
+  sort?: string
+}
+
+/** 목록 응답. 봉투 레벨에 전체 건수가 온다 — 세려고 전 페이지를 받을 필요가 없다. */
+export interface ListResult<T = Record<string, unknown>> {
+  items: DyncolRecord<T>[]
+  total_count: number
+  offset: number
+  limit: number
+}
+
+/** 집계 한 칸. `group_by` 가 없으면 버킷 1개이고 `key` 는 null. */
+export interface AggregateBucket {
+  key: string | null
+  /** `count` 연산에서는 null — 건수는 `count` 에 있다. */
+  value: number | null
+  count: number
+}
+
+/** 트랜잭션 한 단계. `collection` 이 항목마다 있어 복수 컬렉션에 걸칠 수 있다. */
+export interface TxnOperation {
+  op: 'create' | 'update' | 'delete'
+  collection: string
+  /** `create` 에서 id 를 미리 정할 수 있다 — 같은 요청에서 자식의 reference 값으로 쓰려면 필요하다. */
+  id?: string
+  data?: Record<string, unknown>
 }
 
 function buildSdk(ctx: RequestContext) {
@@ -79,7 +114,8 @@ function buildSdk(ctx: RequestContext) {
     list: <T>(collection: string, opts: ListOptions = {}) => {
       const q = new URLSearchParams()
       if (opts.limit) q.set('limit', String(opts.limit))
-      if (opts.cursor) q.set('cursor', opts.cursor)
+      if (opts.offset) q.set('offset', String(opts.offset))
+      if (opts.sort) q.set('sort', opts.sort)
       // dyncol 필터 DSL 은 `filter[<필드>][<연산자>]=<값>` 이다. JSON 을 통째로 보내면
       // 서버가 malformed_filter 로 거절한다.
       for (const [field, cond] of Object.entries(opts.filter ?? {})) {
@@ -92,7 +128,7 @@ function buildSdk(ctx: RequestContext) {
         }
       }
       const qs = q.toString()
-      return call<{ items: DyncolRecord<T>[]; next_cursor?: string }>(
+      return call<ListResult<T>>(
         'GET', `/collections/${collection}/records${qs ? `?${qs}` : ''}`,
       )
     },
@@ -164,6 +200,93 @@ function buildSdk(ctx: RequestContext) {
     ) =>
       call<DyncolRecord<T>>('POST', `/collections/${collection}/records/${recordId}/increment`,
         { field, by }),
+
+    /**
+     * 집계 — `count`·`sum`·`avg`·`min`·`max` + 단일 필드 `group_by`. 인가는 목록과 같다.
+     *
+     * **세려고 목록을 받지 마라.** 서버가 세어 준다 — `limit` 상한이 100 이라 1만 건이면
+     * 100 요청이 되고, 그렇게 받은 합계는 어차피 읽는 도중 바뀐다.
+     *
+     * ```ts
+     * const [b] = await sdk.dyncol.aggregate('applications', 'count',
+     *                                        { filter: { meeting_id: id } })
+     * b.count   // 이 모임의 신청 건수
+     * ```
+     *
+     * `count` 이외에는 `field` 가 필요하고 **number 타입만** 된다.
+     *
+     * ⚠️ **집계를 읽어 쓰기를 판정하지 마라.** 읽는 순간과 쓰는 순간 사이에 다른 요청이
+     * 끼어든다. 상한 강제는 `increment` 의 반환값이나 `transaction` 으로 한다.
+     */
+    aggregate: (
+      collection: string,
+      op: 'count' | 'sum' | 'avg' | 'min' | 'max' = 'count',
+      opts: ListOptions & { field?: string; groupBy?: string } = {},
+    ) => {
+      const q = new URLSearchParams()
+      q.set('op', op)
+      if (opts.field) q.set('field', opts.field)
+      if (opts.groupBy) q.set('group_by', opts.groupBy)
+      if (opts.limit) q.set('limit', String(opts.limit))
+      for (const [field, cond] of Object.entries(opts.filter ?? {})) {
+        if (cond !== null && typeof cond === 'object' && !Array.isArray(cond)) {
+          for (const [fop, v] of Object.entries(cond as Record<string, unknown>)) {
+            q.set(`filter[${field}][${fop}]`, String(v))
+          }
+        } else {
+          q.set(`filter[${field}][eq]`, String(cond))
+        }
+      }
+      return call<{ buckets: AggregateBucket[] }>(
+        'GET', `/collections/${collection}/aggregate?${q.toString()}`,
+      ).then((r) => r.buckets)
+    },
+
+    /**
+     * **복수 컬렉션 한 트랜잭션** — 하나라도 실패하면 전부 되돌린다. 최대 25 작업.
+     *
+     * "따로 남으면 안 되는 쌍"이 이걸 쓴다 — 주문+재고, 본문+이력, 신청+집계.
+     * 이게 있으면 잠금 전용 unique 컬럼이나 보상 삭제를 손으로 짜지 않아도 된다.
+     *
+     * ```ts
+     * await sdk.dyncol.transaction([
+     *   { op: 'create', collection: 'orders', id: orderId, data: {...} },
+     *   { op: 'update', collection: 'stock',  id: itemId,  data: { qty: next } },
+     * ])
+     * ```
+     *
+     * 상한 강제에는 이것만으로 부족하다 — 트랜잭션은 원자성을 주지만 "지금 몇 개인지"를
+     * 안전하게 읽어주지는 않는다. 카운터가 있는 상한은 `increment` 반환값으로 판정한다.
+     */
+    transaction: (operations: TxnOperation[]) =>
+      call<{ results: { index: number; op: string; collection: string; id?: string }[]; count: number }>(
+        'POST', '/collections/transaction', { operations },
+      ),
+
+    /**
+     * 같은 컬렉션 대량 처리. **항목별로 독립 성공/실패**한다 — 500행 중 3행이 중복이어도
+     * 497행은 들어간다. 각 목록 최대 100.
+     *
+     * 전부 아니면 전무가 필요하면 `transaction` 을 쓴다.
+     */
+    batch: (
+      collection: string,
+      ops: {
+        create?: { data: Record<string, unknown>; client_txn_id?: string }[]
+        update?: { id: string; data: Record<string, unknown> }[]
+        delete?: string[]
+      },
+    ) =>
+      call<{
+        collection: string
+        results: { index: number; op: string; id?: string; success: boolean; error?: string }[]
+        succeeded: number
+        failed: number
+      }>('POST', `/collections/${collection}/records/batch`, ops),
+
+    /** soft-delete 된 레코드 복구. */
+    restore: <T = Record<string, unknown>>(collection: string, recordId: string) =>
+      call<DyncolRecord<T>>('POST', `/collections/${collection}/records/${recordId}/restore`),
   }
 
   const baas = {
