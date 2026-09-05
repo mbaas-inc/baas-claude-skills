@@ -103,8 +103,12 @@ const DYNCOL_OP_TO_GRANT = {
   list: 'read', get: 'read', aggregate: 'read',
   create: 'create',
   update: 'update', increment: 'update',
-  remove: 'delete',
+  // restore 는 서버가 `delete` 로 인가한다(soft-delete 를 되돌리는 것이므로).
+  remove: 'delete', restore: 'delete',
 }
+
+/** `batch` 의 목록 키와 `transaction` 의 `op` 값이 요구하는 grant. */
+const ITEM_OP_TO_GRANT = { create: 'create', update: 'update', delete: 'delete' }
 
 /**
  * serverFn 본문의 `sdk.dyncol.<op>(<컬렉션>, …)` 호출부에서 필요한 grant 를 모은다.
@@ -122,6 +126,69 @@ function collectGrants(call, bindings, file, grants) {
       node.expression.expression.name.text === 'dyncol'
     ) {
       const op = node.expression.name.text
+      const resolveName = (arg) => {
+        if (!arg) return undefined
+        if (ts.isStringLiteral(arg)) return arg.text
+        if (ts.isIdentifier(arg)) return bindings.get(arg.text)?.literal
+        return undefined
+      }
+      const addGrant = (name, grant) => {
+        if (!grants.has(name)) grants.set(name, new Set())
+        grants.get(name).add(grant)
+      }
+
+      // `transaction([{op, collection, …}, …])` — 컬렉션이 항목마다 있어 첫 인자로 풀 수 없다.
+      // 항목이 정적으로 안 보이면 어느 컬렉션에 무슨 권한이 필요한지 알 수 없으므로 세운다.
+      if (op === 'transaction') {
+        const arr = node.arguments[0]
+        if (!arr || !ts.isArrayLiteralExpression(arr)) {
+          report(file, 'dynamic-transaction',
+            'dyncol.transaction() 의 operations 를 배열 리터럴로 쓴다 — 항목을 볼 수 없으면 권한을 유도할 수 없다')
+        } else {
+          for (const el of arr.elements) {
+            if (!ts.isObjectLiteralExpression(el)) {
+              report(file, 'dynamic-transaction', 'transaction 항목을 객체 리터럴로 쓴다')
+              continue
+            }
+            let itemOp, itemColl
+            for (const prop of el.properties) {
+              if (!ts.isPropertyAssignment(prop) || !prop.name || !('text' in prop.name)) continue
+              if (prop.name.text === 'op') itemOp = ts.isStringLiteral(prop.initializer) ? prop.initializer.text : undefined
+              if (prop.name.text === 'collection') itemColl = resolveName(prop.initializer)
+            }
+            const g = itemOp ? ITEM_OP_TO_GRANT[itemOp] : undefined
+            if (g && itemColl) addGrant(itemColl, g)
+            else {
+              report(file, 'dynamic-transaction',
+                'transaction 항목의 op·collection 을 문자열 리터럴(또는 모듈 스코프 const)로 쓴다')
+            }
+          }
+        }
+        ts.forEachChild(node, walk)
+        return
+      }
+
+      // `batch(collection, { create?, update?, delete? })` — 두 번째 인자의 키가 권한을 정한다.
+      if (op === 'batch') {
+        const name = resolveName(node.arguments[0])
+        const ops = node.arguments[1]
+        if (!name) {
+          report(file, 'dynamic-collection',
+            'dyncol.batch() 의 컬렉션명을 정적으로 풀 수 없다 — 문자열 리터럴이나 모듈 스코프 const 로 쓴다')
+        } else if (!ops || !ts.isObjectLiteralExpression(ops)) {
+          report(file, 'dynamic-batch',
+            'dyncol.batch() 의 두 번째 인자를 객체 리터럴로 쓴다 — 어느 연산인지 볼 수 없으면 권한을 유도할 수 없다')
+        } else {
+          for (const prop of ops.properties) {
+            if (!ts.isPropertyAssignment(prop) || !prop.name || !('text' in prop.name)) continue
+            const g = ITEM_OP_TO_GRANT[prop.name.text]
+            if (g) addGrant(name, g)
+          }
+        }
+        ts.forEachChild(node, walk)
+        return
+      }
+
       const grant = DYNCOL_OP_TO_GRANT[op]
       const arg = node.arguments[0]
       if (grant && arg) {
