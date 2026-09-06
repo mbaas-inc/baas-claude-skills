@@ -22,17 +22,30 @@ type AnyEnvelope = (InvokeEnvelope | ScheduleEnvelope) & { scheduleName?: string
  * 그래서 여기서 **가장 먼저** 막고, 양쪽 버전을 메시지에 담는다. 어느 쪽을 올려야
  * 하는지 로그만 보고 알 수 있어야 한다.
  */
-function assertContract(envelope: AnyEnvelope): void {
+function contractMismatch(envelope: AnyEnvelope) {
   const got = (envelope as { contractVersion?: unknown })?.contractVersion
-  if (got === ENVELOPE_CONTRACT_VERSION) return
-  throw new Error(
+  if (got === ENVELOPE_CONTRACT_VERSION) return null
+  const message =
     `envelope 계약 불일치: 디스패처=${JSON.stringify(got)} 백엔드=${ENVELOPE_CONTRACT_VERSION}. ` +
-      '디스패처와 백엔드를 같은 계약 버전으로 배포해야 한다.'
-  )
+    '디스패처와 백엔드를 같은 계약 버전으로 배포해야 한다.'
+  console.error('[contract]', message)
+  // **던지지 않는다.** 던지면 Lambda 밖으로 새어 `FunctionError=Unhandled` 가 되고,
+  // 부른 쪽은 "사용자 코드가 죽었다"와 구분할 수 없다 — 릴리스 점검이 정확히 그렇게
+  // 오판해 정상 백엔드의 출시를 막았다(#507). 이 상황은 죽음이 아니라 **대답할 수 있는
+  // 거절**이다. 양쪽 버전을 응답에 실어 어느 쪽을 올려야 하는지 부른 쪽이 알게 한다.
+  return {
+    status: 400,
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ error: message, contractVersion: ENVELOPE_CONTRACT_VERSION, got: got ?? null }),
+    // 봉투 결과를 펴는 쪽(브로커·디스패처)은 `status`/`body`/`headers` 만 읽으므로 이
+    // 여분 필드는 무시된다. 릴리스 점검은 이것만 보고도 백엔드 버전을 안다.
+    contractVersion: ENVELOPE_CONTRACT_VERSION,
+  }
 }
 
 async function dispatch(envelope: AnyEnvelope) {
-  assertContract(envelope)
+  const mismatch = contractMismatch(envelope)
+  if (mismatch) return mismatch
   return 'scheduleName' in envelope && envelope.scheduleName
     ? handleSchedule(envelope as ScheduleEnvelope)
     : handleInvoke(envelope as InvokeEnvelope)
