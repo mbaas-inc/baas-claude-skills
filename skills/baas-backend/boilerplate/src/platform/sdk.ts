@@ -8,8 +8,28 @@
 
 import type { RequestContext } from './envelope'
 
-/** 플랫폼이 주입한다. 로컬에서는 .env 로 로컬 aiapp-service 를 가리킨다. */
-const BAAS_BASE_URL = process.env.BAAS_BASE_URL ?? 'http://127.0.0.1:8010'
+/**
+ * 플랫폼이 주입한다. **기본값을 두지 않는다.**
+ *
+ * 올바른 값은 환경마다 다르므로(stage 와 dev 가 서로 다른 BaaS origin 을 쓴다) 어떤
+ * 하드코딩도 한쪽에서는 틀린다. 그런데 틀린 기본값은 틀렸다고 말하지 않는다 — 프로세스는
+ * 정상 기동하고 기동 로그도 깨끗한데 데이터 접근만 전부 실패해, 원인이 호출 시점의 여러 겹
+ * 아래에서 나타난다(실측: 미리보기가 뜨는데 목록만 비어 원인 규명에 오래 걸렸다).
+ *
+ * 그래서 없으면 **기동 시점에 죽는다.** 로컬도 예외로 두지 않는다 — 로컬만 다른 값을
+ * 보게 한 예전 기본값(`http://127.0.0.1:8010`)이 이 문제를 만들었다. 로컬에서도 실제
+ * 개발 환경의 BaaS origin 을 가리키면 된다.
+ */
+const BAAS_BASE_URL = (() => {
+  const value = process.env.BAAS_BASE_URL?.trim()
+  if (!value) {
+    throw new Error(
+      'BAAS_BASE_URL 이 설정되지 않았다. 플랫폼이 주입하는 값이며, 로컬에서는 개발 환경의 ' +
+        'BaaS origin 을 지정해야 한다.',
+    )
+  }
+  return value.replace(/\/+$/, '')
+})()
 
 export class SdkError extends Error {
   // 파라미터 프로퍼티(`readonly status: number`)를 쓰지 않는다. `npm run dev` 가 쓰는
