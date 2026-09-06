@@ -277,6 +277,27 @@ soft-delete 된 레코드는 `restore` 로 되살린다(인가는 `delete` 권�
 | 기본 타임아웃 | **10초** | 대량 순회는 스케줄 핸들러로 |
 | 인덱스 | containment(=) 만 GIN | 범위·부분일치·임의 정렬은 순차 스캔 — 대량 컬렉션에서 피한다 |
 
+### 회원 정보 — 서버는 회원 표를 못 본다
+
+`ctx.accountId` 로 **누가 요청했는지는 안다.** 그러나 그 회원의 이름·연락처를 조회할 방법은
+없다. 주입 토큰은 `scope=service` 로 `sub` 가 없고, 회원 API(`/account/info`)와 백오피스
+API(`/back/...`)는 `sub` 를 요구해 401 `토큰 정보가 잘못되었습니다` 를 돌려준다(실측).
+
+그래서 **서버에서 필요한 회원 값은 가입 시점에 프로젝트 자기 컬렉션에 적어 둔다.**
+
+```ts
+// 가입 직후 클라이언트가 한 번 만든다 — 등급·이름처럼 서버 규칙이 읽어야 하는 값
+await submitRecord('member_profiles', { account_id: accountId, name, tier: '일반' })
+
+// 서버는 accountId 로 걸러 읽는다
+const rows = await sdk.dyncol.list<{ account_id: string; name: string; tier: string }>(
+  'member_profiles', { filter: { account_id: ctx.accountId }, limit: 1 },
+)
+```
+
+레코드에 남길 값(예약자 이름 등)은 **만들 때 함께 적는다.** 나중에 다른 계정의 이름을
+거슬러 조회할 방법이 없으므로, 그 시점에 적지 않으면 영구히 얻을 수 없다.
+
 ## 스케줄 핸들러 — 아무도 접속하지 않아도 도는 쪽
 
 ```ts

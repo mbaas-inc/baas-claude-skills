@@ -309,17 +309,15 @@ function buildSdk(ctx: RequestContext) {
       call<DyncolRecord<T>>('POST', `/collections/${collection}/records/${recordId}/restore`),
   }
 
-  const baas = {
-    /** 현재 요청의 회원 정보. 비로그인 요청이면 null. */
-    currentAccount: () =>
-      ctx.accountId ? call<Record<string, unknown>>('GET', '/account/info') : Promise.resolve(null),
+  // `baas` 네임스페이스는 두지 않는다. 주입 토큰은 `scope=service` 로 **`sub` 가 없고**,
+  // 회원 API(`/account/info`)와 백오피스 API(`/back/...`)는 `get_current_account` 로
+  // `sub` 를 요구한다 — 부르면 401 `토큰 정보가 잘못되었습니다` 가 돌아온다(실측).
+  //
+  // 회원의 이름·연락처처럼 네이티브가 들고 있는 값을 서버에서 써야 하면, **가입 시점에
+  // 프로젝트 자기 컬렉션에 적어 두고** `ctx.accountId` 로 걸러 읽는다. 등급 같은 확장 값을
+  // 담는 방식과 같다. 서버가 회원 표를 직접 들여다보는 경로는 없다.
 
-    /** SMS 발송. 크레딧이 차감되므로 크론에서 대량 발송 시 건수를 스스로 제한할 것. */
-    sendSms: (to: string, message: string) =>
-      call<{ id: string }>('POST', '/back/member/message/sms', { to, message }),
-  }
-
-  return { dyncol, baas, ctx }
+  return { dyncol, ctx }
 }
 
 export type Sdk = ReturnType<typeof buildSdk>
