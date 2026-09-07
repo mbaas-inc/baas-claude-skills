@@ -103,6 +103,37 @@ export interface TxnOperation {
   data?: Record<string, unknown>
 }
 
+/** 회원 1명. 플랫폼이 노출 범위를 정한다 — `data`(자유형 JSON)·과금·운영 메모는 오지 않는다. */
+export interface ServiceAccount {
+  /** `ctx.accountId` 와 같은 값. */
+  id: string
+  /** 로그인 ID (이메일 또는 아이디). */
+  user_id: string
+  /** 소셜 로그인은 추가정보 입력 전까지 `null`. */
+  name: string | null
+  phone: string | null
+  status: string
+  is_profile_completed: boolean
+  /** 가입 시각 (KST). */
+  created_at: string
+}
+
+export interface ServiceAccountPage {
+  items: ServiceAccount[]
+  /** 조건에 맞는 전체 수(페이지 아님). */
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface AccountListOptions {
+  /** 1~100. 기본 20. */
+  limit?: number
+  offset?: number
+  /** `user_id`·`name`·`phone` 부분 검색. */
+  keyword?: string
+}
+
 function buildSdk(ctx: RequestContext) {
   async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
     const res = await fetch(`${BAAS_BASE_URL}${path}`, {
@@ -309,15 +340,33 @@ function buildSdk(ctx: RequestContext) {
       call<DyncolRecord<T>>('POST', `/collections/${collection}/records/${recordId}/restore`),
   }
 
+  // 네이티브 회원 조회 — 이 프로젝트 소속 회원만, 읽기 전용.
+  //
   // `baas` 네임스페이스는 두지 않는다. 주입 토큰은 `scope=service` 로 **`sub` 가 없고**,
   // 회원 API(`/account/info`)와 백오피스 API(`/back/...`)는 `get_current_account` 로
   // `sub` 를 요구한다 — 부르면 401 `토큰 정보가 잘못되었습니다` 가 돌아온다(실측).
+  // 대신 `scope=service` 로 열린 전용 경로가 있고, 그게 아래 `account` 다.
   //
-  // 회원의 이름·연락처처럼 네이티브가 들고 있는 값을 서버에서 써야 하면, **가입 시점에
-  // 프로젝트 자기 컬렉션에 적어 두고** `ctx.accountId` 로 걸러 읽는다. 등급 같은 확장 값을
-  // 담는 방식과 같다. 서버가 회원 표를 직접 들여다보는 경로는 없다.
+  // **인가는 여기서 하지 않는다.** 플랫폼은 "같은 프로젝트 회원인가" 만 판정한다.
+  // "이 요청자가 관리자인가" 는 프로젝트마다 정의가 달라 플랫폼이 알 수 없으므로,
+  // **serverFn 이 먼저 판정한 뒤** 이 표면을 부른다.
+  const account = {
+    /** 회원 1명. 없거나 다른 프로젝트 소속이면 **둘 다 404** — 구분하면 그 UUID 가
+     *  이 플랫폼에 있는지 확인하는 도구가 된다. */
+    get: (accountId: string) => call<ServiceAccount>('GET', `/service/accounts/${accountId}`),
 
-  return { dyncol, ctx }
+    /** 이 프로젝트 회원 한 페이지. 탈퇴 회원은 제외되고 가입 최신순이다. */
+    list: (opts: AccountListOptions = {}) => {
+      const q = new URLSearchParams()
+      if (opts.limit !== undefined) q.set('limit', String(opts.limit))
+      if (opts.offset !== undefined) q.set('offset', String(opts.offset))
+      if (opts.keyword) q.set('keyword', opts.keyword)
+      const qs = q.toString()
+      return call<ServiceAccountPage>('GET', `/service/accounts${qs ? `?${qs}` : ''}`)
+    },
+  }
+
+  return { dyncol, account, ctx }
 }
 
 export type Sdk = ReturnType<typeof buildSdk>
