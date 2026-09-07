@@ -149,7 +149,7 @@ await ctx.sdk.dyncol.list(`items_${kind}`)   // ✗ 빌드 실패 — 이름을 
 | 에러 → HTTP 상태 직렬화 | `SdkError.status` 가 500 으로 뭉개진다 |
 | 번들·배포·환경변수 | — |
 | **결제**(`usePayment`·`getPurchaseTerms`, 결제위젯·정산·웹훅 검증) | PG 계약 주체가 플랫폼이라 이 서버엔 PG 자격도 정산 경로도 **없다**. 만들어도 동작하지 않는다 |
-| **회원 신원**(가입·로그인·프로필) | 로그인한 회원은 주입 토큰으로 이미 도착한다. `ctx.accountId` 를 **받아 쓰고**, 인증을 다시 만들지 마라 |
+| **회원 인증**(가입·로그인·프로필) | 로그인한 회원은 주입 토큰으로 이미 도착한다. `ctx.accountId` 를 **받아 쓰고**, 인증을 다시 만들지 마라. **인가(「본인만」·「관리자만」)는 반대로 네 일이다** — 「회원 정보」 절 참조 |
 
 ### serverFn 이 throw 하면 — 프레임워크가 이렇게 응답한다
 
@@ -277,26 +277,47 @@ soft-delete 된 레코드는 `restore` 로 되살린다(인가는 `delete` 권�
 | 기본 타임아웃 | **10초** | 대량 순회는 스케줄 핸들러로 |
 | 인덱스 | containment(=) 만 GIN | 범위·부분일치·임의 정렬은 순차 스캔 — 대량 컬렉션에서 피한다 |
 
-### 회원 정보 — 서버는 회원 표를 못 본다
+### 회원 정보 — 인증은 받아 쓰고, 인가는 네 일이다
 
-`ctx.accountId` 로 **누가 요청했는지는 안다.** 그러나 그 회원의 이름·연락처를 조회할 방법은
-없다. 주입 토큰은 `scope=service` 로 `sub` 가 없고, 회원 API(`/account/info`)와 백오피스
-API(`/back/...`)는 `sub` 를 요구해 401 `토큰 정보가 잘못되었습니다` 를 돌려준다(실측).
+`ctx.accountId` 는 디스패처가 **쿠키 서명을 검증해** 넣은 값이다. 그 사람이 누구인지 다시
+확인하지 마라 — 자체 로그인을 만들면 신원 출처가 둘이 되고 **약한 쪽이 통로가 된다.**
 
-그래서 **서버에서 필요한 회원 값은 가입 시점에 프로젝트 자기 컬렉션에 적어 둔다.**
+반면 **"그 사람이 무엇을 할 수 있는가" 는 네 일이다.** 「본인만 조회」·「관리자만 수정」 같은
+규칙은 프로젝트마다 정의가 달라 플랫폼이 판정할 수 없다. 이게 이 서버가 존재하는 이유다.
 
 ```ts
-// 가입 직후 클라이언트가 한 번 만든다 — 등급·이름처럼 서버 규칙이 읽어야 하는 값
-await submitRecord('member_profiles', { account_id: accountId, name, tier: '일반' })
+const accountId = requireAccountId(ctx.accountId)   // 인증 결과를 받아 쓴다
 
-// 서버는 accountId 로 걸러 읽는다
-const rows = await sdk.dyncol.list<{ account_id: string; name: string; tier: string }>(
-  'member_profiles', { filter: { account_id: ctx.accountId }, limit: 1 },
-)
+// 인가 — 관리자 정의는 이 프로젝트가 정한다(별도 컬렉션, service 전용 접근)
+const admin = await sdk.dyncol.list('admins', { filter: { account_id: accountId }, limit: 1 })
+if (!admin.items.length) throw new SdkError('관리자만 접근할 수 있습니다.', 403)
 ```
 
-레코드에 남길 값(예약자 이름 등)은 **만들 때 함께 적는다.** 나중에 다른 계정의 이름을
-거슬러 조회할 방법이 없으므로, 그 시점에 적지 않으면 영구히 얻을 수 없다.
+#### 이름·연락처는 `sdk.account` 로 조회한다
+
+```ts
+const buyer = await sdk.account.get(order.data.account_id)   // 없거나 타 프로젝트면 404
+const page = await sdk.account.list({ limit: 50, keyword: '구매' })
+```
+
+- 이 프로젝트 소속 회원만 보인다. 스코프는 주입 토큰이 강제하므로 네가 걸지 않아도 된다
+- **인가는 이 표면이 하지 않는다.** 관리자 전용 화면에 쓰려면 위 `admins` 체크를 **먼저**
+  통과시킨 뒤 불러라. 플랫폼은 "같은 프로젝트 회원인가" 만 판정한다
+- 노출 범위는 플랫폼이 정한다 — `id`·`user_id`·`name`·`phone`·`status`·
+  `is_profile_completed`·`created_at`. 자유형 `data`·과금·운영 메모는 오지 않는다
+
+#### 회원 값을 프로젝트 컬렉션에 **복제하지 마라**
+
+가입 시점에 이름을 `member_profiles` 같은 컬렉션에 적어 두는 방식은 **철회됐다.** 조회
+표면이 없던 동안의 우회였고 두 가지가 나쁘다.
+
+1. **클라이언트가 쓰는 값이라 검증할 원본이 없다.** 회원이 자기 이름을 임의 문자열로 넣을
+   수 있고, 관리자 화면이 그 값을 믿는다
+2. 같은 개인정보가 네이티브 회원 표와 프로젝트 컬렉션 **두 곳에 사본으로** 남고, 회원이
+   네이티브에서 이름을 바꾸면 사본이 낡는다
+
+**프로젝트가 정의하는 값(등급·포인트처럼 네이티브에 없는 것)은 여전히 자기 컬렉션에 둔다.**
+복제하지 말라는 것은 **네이티브가 이미 들고 있는 신원·연락처**에 한한다.
 
 ## 스케줄 핸들러 — 아무도 접속하지 않아도 도는 쪽
 
