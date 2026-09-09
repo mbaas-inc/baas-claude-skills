@@ -1,5 +1,5 @@
 /**
- * 나머지 기능 훅 — recipient/notice/faq/comments/survey/reservation/store.
+ * 나머지 기능 훅 — recipient/inquiry/notice/faq/comments/survey/reservation/store.
  * 모두 host React 사용. 공통 { loading, error } + 데이터 상태 패턴.
  */
 import { getReact } from "./host";
@@ -40,6 +40,22 @@ export function useRecipient() {
     []
   );
   return { register, loading, error };
+}
+
+/** 문의하기 — fetchConfig 로 접수 여부·동의 문구를 읽고(config state === 반환값), submit 은 state 없이 결과를 반환(useRecipient 와 동일). */
+export function useInquiry() {
+  const React = getReact();
+  const { loading, error, run } = useAsync();
+  const [config, setConfig] = React.useState<core.InquiryConfig | null>(null);
+  const fetchConfig = React.useCallback(
+    () => run(async () => { const d = await core.getInquiryConfig(); setConfig(d); return d; }),
+    []
+  );
+  const submit = React.useCallback(
+    (input: core.InquiryInput) => run(() => core.submitInquiry(input)),
+    []
+  );
+  return { config, fetchConfig, submit, loading, error };
 }
 
 export function useNotice() {

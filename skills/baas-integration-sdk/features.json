@@ -1,5 +1,5 @@
 {
-  "version": "1.5.0",
+  "version": "1.5.1",
   "sdk": "@mbaas/baas-web-sdk",
   "sdk_global": "window.BaasSDK",
   "surface_ref": "reference/sdk-surface.md",
@@ -21,6 +21,9 @@
     "completeProfile": "account",
     "useRecipient": "recipient",
     "registerRecipient": "recipient",
+    "useInquiry": "inquiry",
+    "getInquiryConfig": "inquiry",
+    "submitInquiry": "inquiry",
     "useCollection": "collection",
     "getPublicRecord": "collection",
     "listRecords": "collection",
@@ -49,6 +52,7 @@
   "data_flow": {
     "account": "앱 루트 AuthProvider가 인증 상태 1회 조회 → 회원가입 → 로그인(자동 refetch) → 화면은 useAuth()로 읽기만 → 로그아웃(자동 clear) · 가입 화면은 진입 시 useSignup().fetchConfig()로 프로젝트 설정을 읽어 분기(생성 시점 값 고정 금지): signup_verification=EMAIL이면 sendCode→verifyCode(verified=true)를 거쳐야 signup 허용(서버가 401로 강제), NONE이면 바로 signup · 약관은 fetchTerms()로 전문을 받아 가입 화면 안에서 동의받고 terms_version을 signup에 전달 · SNS는 getSnsProviders()의 login_url로 페이지 이동(fetch 아님), 이메일 인증 면제",
     "recipient": "폼 입력(이름·전화) → useRecipient().register",
+    "inquiry": "화면 진입 시 useInquiry().fetchConfig()로 소유자 설정을 읽어 분기(생성 시점 값 고정 금지) — enabled=false면 disabled_message만 표시하고 폼 숨김 · consent_label은 체크박스 라벨, consent_body는 줄바꿈 단위로 렌더 → 폼 입력(이름·연락처 또는 이메일 중 하나 이상·내용·동의 체크) → submit({…, consent_agreed, consent_version: config.consent_version})(공개, 로그인 불필요·로그인 이점 없음) → 반환 result.message를 그대로 안내(\"접수되었습니다\"·\"이미 접수되었습니다\" 둘 다 성공) + 폼 초기화 · 실패는 error.message 그대로 · 접수 여부/알림 이메일은 소유자 백오피스 소관 — 앱이 설정하는 API 없음, 준비 작업 0 · 뉴스레터·구독·연락처 수집은 recipient",
     "notice": "useNotice().fetchPosts → post_id → fetchPost 상세 (공개) · 카테고리(분류 그룹)는 posts.board_settings.categories([{name,values}])가 있을 때만 필터 UI 렌더, 게시글 선택값은 item.categories({그룹:[값]}) — fetchPosts({category, category_group})로 서버 필터 또는 전체 받아 클라 필터",
     "faq": "useFaq().fetchPosts → fetchPost 상세 (공개) · 카테고리 규칙은 notice 와 동일",
     "board": "프로비저닝 담당이 게시판 생성(board_id) → 코드 주입 → useBoard().fetchPosts(boardId) → post_id → fetchPost → (로그인) submitPost",
@@ -172,11 +176,32 @@
           "keywords": [
             "연락처",
             "발송대상",
-            "문의",
-            "상담신청",
             "뉴스레터",
             "구독",
             "예약 접수"
+          ]
+        }
+      ]
+    },
+    "inquiry": {
+      "surface_sections": [
+        "문의하기 (inquiry)"
+      ],
+      "features": [
+        {
+          "id": "inquiry",
+          "label": "문의하기",
+          "auth": false,
+          "keywords": [
+            "문의",
+            "문의하기",
+            "상담신청",
+            "상담 신청",
+            "고객문의",
+            "1:1 문의",
+            "Contact",
+            "contact us",
+            "inquiry"
           ]
         }
       ]
