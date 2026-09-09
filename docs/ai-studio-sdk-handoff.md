@@ -53,7 +53,7 @@ https://cdn.mbaas.kr/public/baas-integration-sdk/<version>/baas-react.js  (불�
 
 ## 4. 검증 계약 (SDK 표면)
 - 모든 백엔드 호출은 `window.BaasSDK` 경유(raw fetch 없음). 표면 목록: `skills/baas-integration-sdk/reference/sdk-surface.md`.
-- 커버 기능: 인증·발송대상·공지/FAQ·동적게시판·댓글·설문·예약·스토어. 게시판 board_id 는 `baas` CLI로 생성해 주입(CLI 핸드오프는 baas-cli repo 문서 참조).
+- 커버 기능: 인증·발송대상·문의하기·공지/FAQ·동적게시판·댓글·설문·예약·스토어. 게시판 board_id 는 `baas` CLI로 생성해 주입(CLI 핸드오프는 baas-cli repo 문서 참조).
 - 빌드 시 `.d.ts` 참조하면 tsc 가 표면 오타를 잡음(선택, 없어도 동작).
 
 ## 5. 버전 관리·업데이트 (AI Studio 구현)

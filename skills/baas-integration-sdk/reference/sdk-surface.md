@@ -45,9 +45,11 @@ state 가 **없는** 함수만 반환값을 로컬 state 로 받으면 된다.
 | `useStore` | `config` · `products` = **배열** | 같은 값(배열) | state 또는 반환값 |
 | `useSurvey` | `surveys` = **배열** · `survey` | 같은 값(배열) | state 또는 반환값 |
 | `useReservation` | `targets` = 배열 | `fetchTargets` 는 같은 값 | state 또는 반환값 |
+| `useInquiry` | `config` | `fetchConfig` 는 같은 값 | state 또는 반환값 |
 | — **state 없음** — | | | |
 | `useReservation` | — | `fetchTarget` · `fetchSlots` · `myBookings` | **반환값을 로컬 state 로** |
 | `useStore` | — | `fetchProduct` · `myOrders` | **반환값을 로컬 state 로** |
+| `useInquiry` | — | `submit` → `{ accepted, message }` | **반환값**(`result.message` 를 그대로 노출) |
 
 **목록 형태가 두 가지인 이유**: 페이지네이션이 있는 조회(게시판·공지·댓글<!--collection:start-->·동적 컬렉션<!--collection:end-->)는 총 개수가
 필요해 `{items, total}` 봉투를, 전량 조회(스토어 상품·설문·예약 대상)는 **배열**을 준다.
@@ -259,12 +261,49 @@ SNS 계정은 비밀번호 변경 불가(서버가 에러 반환) — `error.mes
 
 ## 발송대상 (recipient)
 
-문의/상담신청/뉴스레터 구독/예약 접수 등 "연락처를 남기는" 폼.
+뉴스레터 구독/예약 접수 등 "연락처(이름·전화)를 남기는" 폼. **문의·상담신청은 아래 `문의하기 (inquiry)` 를 쓴다**(연락처 목록이 아니라 문의 접수함으로 들어가고, 접수 여부·동의 문구를 소유자가 관리).
 ```tsx
 const { register, loading, error } = BaasSDK.useRecipient();
 await register({ name, phone, description?, metadata? });  // metadata 는 객체 → SDK가 직렬화
 ```
 UX: 제출 성공 시 "접수되었습니다" 안내, 폼 초기화. 인증 불필요.
+
+---
+
+## 문의하기 (inquiry)
+
+비로그인 방문자가 이름·연락처(전화 **또는** 이메일)·내용을 남기는 "Contact us / 상담신청" 폼. 접수 여부·안내 문구·개인정보 동의 문구는 **서버(소유자 설정)가 내려준다** — 화면은 진입 시 `fetchConfig()` 로 읽어 분기하고, 문구를 코드에 박아 두지 않는다. 앱이 설정을 바꾸는 API 는 없다(백오피스 소관) — 준비 작업 0.
+```tsx
+const { config, fetchConfig, submit, loading, error } = BaasSDK.useInquiry();
+useEffect(() => { fetchConfig(); }, []);                     // config === 반환값 (아래 형태)
+
+if (config && !config.enabled) return <p>{config.disabled_message}</p>;   // 폼 자체를 숨김
+
+const result = await submit({
+  name, contact, email, content,                              // contact·email 중 하나 이상(클라 1차 검사, 서버도 400) — 빈 값은 SDK 가 생략
+  consent_agreed: agreed,                                     // 동의 체크박스 값. false 면 서버 400
+  consent_version: config.consent_version,                    // fetchConfig 로 받은 값을 그대로 echo(하드코딩 금지)
+});
+if (result) { showMessage(result.message); resetForm(); }    // "접수되었습니다" · "이미 접수되었습니다" 둘 다 성공 — message 그대로
+// result === null → error.message 그대로 노출(접수 중단·동의 누락·형식 오류·문구 버전 불일치 전부 한국어 문구)
+```
+```jsonc
+// config — GET /public/inquiry/{project_id}/config (소유자 설정이 없으면 서버 기본값)
+{
+  "enabled": true,                                   // false → disabled_message 만 표시, 폼 숨김
+  "disabled_message": "지금은 문의를 받지 않습니다",
+  "complete_message": "접수되었습니다",              // 참고값 — 실제 표시는 submit 반환 result.message
+  "consent_version": "1.0",                          // 예시값 — submit 의 consent_version 으로 그대로 전달(하드코딩 금지)
+  "consent_label": "개인정보 수집·이용에 동의합니다 (필수)",   // 체크박스 라벨
+  "consent_body": "- 수집 항목 — …\n- 이용 목적 — …\n…"     // 여러 줄 — split("\n") 후 줄 단위 <p>/<li> 로 렌더(한 줄로 합치지 않음)
+}
+```
+- **필드 규칙(서버 강제, 클라는 1차 검사만)**: `name` 1~64자(HTML 태그·줄바꿈 불가) · `contact` 숫자 9~11자리(하이픈 무관 — 전화 입력은 `onChange={e => setContact(BaasSDK.formatPhone(e.target.value))}`) · `email` 형식 · `content` 5~2000자 · `contact`/`email` 중 **하나 이상** · `consent_agreed === true`.
+- **중복 접수**: 같은 내용+같은 연락처를 5분 안에 다시 보내면 200 + `accepted: true` + `message: "이미 접수되었습니다"` 로 응답하고 저장하지 않는다. **에러가 아니다** — `result.message` 를 그대로 보여주면 끝. `accepted` 로 분기하지 않는다.
+- **로그인 무관**: 비로그인 전용 경로. `RequireAuth` 로 감싸거나 로그인을 유도하지 않는다. 크레딧 게이트 없음.
+- **에러**: 전부 `400 BAD_REQUEST`/`VALIDATION_ERROR` + 한국어 `message`(접수 중단이면 소유자의 `disabled_message` 가 그대로 옴, 문구 버전 불일치면 "…새로고침한 뒤 다시 시도해 주세요") → `error.message` 노출. `500`(동의 문구 원장 미준비)도 `error.message` 그대로. 엣지 속도제한(403) 가능 — 별도 처리 없음.
+- **UX**: `result` 비-null 이면 `result.message` 안내 + 폼 초기화. 허니팟·캡차 등 봇 방지 필드는 만들지 않는다(서버 범위 밖).
+- **발송대상(recipient) 과의 경계**: 문의/상담신청 → `inquiry`. 뉴스레터·구독·연락처 수집 → `recipient`. 한 폼에서 둘을 같이 호출하지 않는다.
 
 ---
 
@@ -607,7 +646,7 @@ await fetchRecord("notice", recordId, { includeFields: true });
 // ⚠️ 렌더러는 widget 하나만 본다 — type/ui 폴백 규칙을 앱에서 다시 구현하지 않는다
 
 // ── 멱등 생성 — 네트워크 재시도가 중복 접수를 만들지 않게. 키는 제출 1회당 하나를 만들어 유지
-await submitRecord("inquiry", form, { clientTxnId: submitId });
+await submitRecord("application", form, { clientTxnId: submitId });
 
 // ── 집계 — count 외에는 field 필요(number 타입만). 인가는 목록과 동일
 const agg = await aggregate("order", "sum", { field: "amount", groupBy: "status" });
@@ -743,6 +782,7 @@ await BaasSDK.useCollection().submitRecord("products", { name, image_url: res.cd
 | errorCode | HTTP | 의미 | 사용 주의 |
 |-----------|------|------|----------|
 | `VALIDATION_ERROR` | 400 | 입력이 규칙 위반 | 상세는 `.message` |
+| `BAD_REQUEST` | 400 | 요청이 규칙 위반(문의하기: 접수 중단·동의 누락·동의 문구 버전 불일치·연락처/이메일 둘 다 없음) | 상세는 `.message` — 그대로 노출 |
 | `INVALID_USER` | 400 | 로그인 자격증명 불일치 | 로그인 맥락 |
 | `UNAUTHORIZED` | 401 | 미인증(로그인 안 됨) | `useAuth`의 비로그인 401은 **정상**(에러 처리 금지) |
 | `TOKEN_EXPIRED`/`INVALID_TOKEN` | 401 | 세션 만료·무효 | 재로그인 유도 대상 |

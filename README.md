@@ -28,7 +28,7 @@ docs/          설계·운영·핸드오프 문서
 
 | 스킬 | 방식 | 용도 |
 |------|------|------|
-| `baas-integration-sdk` | **SDK** | 런타임 CDN SDK 위에서 BaaS UI/UX 생성 — 인증(AuthProvider 전역 상태)·발송대상·공지/FAQ·동적 게시판·댓글·설문·예약(토스 결제)·스토어 |
+| `baas-integration-sdk` | **SDK** | 런타임 CDN SDK 위에서 BaaS UI/UX 생성 — 인증(AuthProvider 전역 상태)·발송대상·문의하기·공지/FAQ·동적 게시판·댓글·설문·예약(토스 결제)·스토어 |
 | `baas-integration` | API | 회원 인증 + 발송대상 + 게시판 + 설문 + 예약 + 스토어 통합 (transport vendored) |
 | `baas-common` | API | 공통 타입과 API 규칙 — 다른 BaaS 스킬과 함께 사용 |
 | `baas-account-integrations` | API | 회원 인증 통합 (회원가입·로그인·로그아웃·계정정보) |
