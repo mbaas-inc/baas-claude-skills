@@ -622,7 +622,7 @@ const { records, record, fields, loading, error,
         fetchRecords, fetchPublicRecords, fetchRecord, submitRecord, editRecord, removeRecord,
         restore, increment, aggregate, batch, transaction } = BaasSDK.useCollection();
 
-// 읽기 — 로그인 여부와 무관하게 같은 함수. 범위는 접근 정책(settings.access)이 서버에서 판정
+// 읽기 — 로그인 여부와 무관하게 같은 함수. 접근은 서버가 플랫폼 기본값으로 판정
 await fetchRecords("inventory", { limit: 20, offset: 0, sort: "-created_at",
                                   filter: { quantity: { lt: 5 }, category: { eq: "전자" } } });
 // records = { items, total_count, offset, limit }; item = { id, collection, data:{...}, account_id, created_at }
@@ -668,36 +668,27 @@ await transaction([
   { op: "create", collection: "history", data: { post_id: newId } },  // 부모 id 를 미리 정해 참조
 ]);
 ```
-- **접근 정책 (settings.access — CRUD 연산별 grants, 서버 강제)**: `{create, read, update, delete}`,
-  값 = **atom 또는 배열(OR 합집합)**. atom ∈ `public`(누구나) | `member`(로그인) | `owner`(레코드 작성자)
-  | `ref_owner:<field>`(그 레코드의 reference 필드가 가리키는 **부모 레코드의 작성자** — #626).
-  기본값 create:member/read:member/update:owner/delete:owner, create 는 public|member 만.
+- **접근은 플랫폼 기본값 하나뿐 (서버 강제)**: 규칙 없는 컬렉션은 **로그인한 회원이 컬렉션 전체를
+  조회**하고 **각 행은 만든 사람만 수정·삭제**한다. 연산별 권한을 설계하지 않는다 — 이 스킬에는
+  그럴 어휘가 없다. 기본과 다른 게 필요하면(호출자 구분, 조회 범위 축소, 비로그인 공개) 그건
+  규칙이고 serverFn 이 판정한다.
   - **읽기 함수는 하나다** — 목록은 `fetchRecords`, 단건은 `fetchRecord`. 로그인 여부로 함수를 고르지
-    않는다. 비로그인이면 `read:public` 범위, 로그인이면 회원 범위로 **서버가 정책을 보고 판정**한다.
+    않는다.
 
     | | 목록(다건) | 단건 |
     |---|---|---|
     | 로그인 무관 | `fetchRecords(name, {filter,sort})` | `fetchRecord(name, id)` |
 
     `fetchPublicRecords`·`BaasSDK.getPublicRecord` 는 **deprecated 별칭**이다(경로 통합으로 동작 동일).
-    기존 앱 호환용이라 신규 코드에서는 쓰지 않는다. 로그인 상태에서 별칭을 부르면 회원 범위로
-    판정되므로, `read: [public, owner]` 같은 혼합 정책에서 공개분만 보려면 `filter` 로 명시해야 한다.
-  - ⚠️ **정책이 거부하면(예: `read:member`/`owner` 인데 비로그인) `BaasError` throw가 아니라 `null` 을
-    resolve** 한다 → 반환값을 `res?.items ?? []`/null 로 가드. 쓰기·기타 작업은 실패 시
-    `BaasError`(.message) throw(상단 §성공/실패 규약) — 에러 **표시 방식**(토스트/모달/인라인)은 앱 UX 소관.
-  - `read:owner` → `fetchRecords`가 **본인 레코드만** 반환(개인 데이터).
-  - `read:["owner","ref_owner:post_id"]` → `fetchRecords`는 **내 레코드(owner)** ∪ **내가 주인인 부모
-    (post_id)에 달린 레코드(ref_owner)** 의 **합집합**을 반환한다. ⚠️ 응답은 **각 행이 어느 자격으로
-    매칭됐는지 표시하지 않는다** → 이 목록을 "받은 신청 관리 뷰"로 **그대로 렌더하면 안 된다**(내가 낸
-    신청까지 섞여 나옴). 관점으로 나눠 소비한다:
-    - `r.account_id === user.id` → **내가 낸** 레코드(내 신청 현황).
-    - `r.account_id !== user.id` → **내가 주인인 부모에 달린** 레코드(받은 신청) = 수락/거절 대상.
-    "받은 신청 관리"와 "내 신청 현황"은 **별도 화면·별도 부분집합**으로 분리하는 게 안전하다.
-  - `update/delete` 에 `owner`/`ref_owner:<f>` → 해당 주체가 아닌 회원의 `editRecord`/`removeRecord`는
-    서버가 403(클라 버튼 숨김은 보조). 예: 신청 수락(update)=`ref_owner`(부모 소유자)만, 신청 취소
-    (delete)=`owner`(작성자 본인). **ref_owner 전용 액션 버튼은 위 `account_id !== user.id` 부분집합에만
-    노출**한다 — 내가 낸 신청에 "수락" 버튼을 붙이면 누를 때 403(실제 발생 오류).
-  - UI는 이 정책을 **읽어서** 로그인 게이트·버튼 노출을 맞춘다(정책 자체는 서버가 강제).
+    기존 앱 호환용이라 신규 코드에서는 쓰지 않는다.
+  - ⚠️ **비로그인이면 `BaasError` throw 가 아니라 `null` 을 resolve** 한다 → 반환값을
+    `res?.items ?? []`/null 로 가드. 쓰기·기타 작업은 실패 시 `BaasError`(.message) throw
+    (상단 §성공/실패 규약) — 에러 **표시 방식**(토스트/모달/인라인)은 앱 UX 소관.
+  - 작성자가 아닌 회원의 `editRecord`/`removeRecord` 는 서버가 403 을 낸다. 클라의 버튼 숨김은
+    보조일 뿐이고, 판정은 서버가 한다.
+  - **목록은 컬렉션 전체가 온다.** "내 것만" 화면이 필요하면 `r.account_id === user.id` 로 거르는 건
+    표시 편의일 뿐 보호가 아니다 — 다른 사람의 행이 이미 브라우저에 도착해 있다. 보이면 안 되는
+    데이터라면 serverFn 으로 올린다.
 - **reference 무결성(서버 강제)**: `reference` 필드 값은 대상 컬렉션의 실존 레코드 id 여야 하며
   아니면 `submitRecord`/`editRecord`가 400. self-reference(같은 컬렉션) 허용 — 트리는 root anchor
   (`post_id`)+parent(`parent_id`) 이중 참조로 설계하고 anchor 평면 조회 후 클라에서 조립한다.
@@ -739,7 +730,7 @@ await transaction([
   조회수 증가에는 `update: public` 이 필요하고 그건 본문 수정까지 열어 버린다. 필드 단위 권한이
   없어서 생기는 제약이다(로그인 회원 기준 카운터·관리자 경로에서는 문제없다).
 - 표현 가능 범위(필드 타입·정책·제약)의 **권위 원본은 SDK 타입 + 런타임 컬렉션 스키마** — 이 문서는
-  프리미티브 사용법만. 스키마·정책은 런타임 컬렉션 상세 조회로 확인한다(fields + settings.access).
+  프리미티브 사용법만. 스키마는 런타임 컬렉션 상세 조회로 확인한다(fields).
 
 ---
 
@@ -786,7 +777,7 @@ await BaasSDK.useCollection().submitRecord("products", { name, image_url: res.cd
 | `INVALID_USER` | 400 | 로그인 자격증명 불일치 | 로그인 맥락 |
 | `UNAUTHORIZED` | 401 | 미인증(로그인 안 됨) | `useAuth`의 비로그인 401은 **정상**(에러 처리 금지) |
 | `TOKEN_EXPIRED`/`INVALID_TOKEN` | 401 | 세션 만료·무효 | 재로그인 유도 대상 |
-| `FORBIDDEN` | 403 | 인증됐으나 권한 없음 | **401과 달리 재로그인 대상 아님.**<!--collection:start--> 컬렉션 access(owner/ref_owner) 백스톱 —<!--collection:end--> 클라 버튼 숨김이 1차 |
+| `FORBIDDEN` | 403 | 인증됐으나 권한 없음 | **401과 달리 재로그인 대상 아님.**<!--collection:start--> 작성자가 아닌 수정·삭제의 서버 백스톱 —<!--collection:end--> 클라 버튼 숨김이 1차 |
 | `NOT_FOUND` | 404 | 대상 없음 | |
 | `ALREADY_EXISTS` | 409 | 중복·충돌 | 회원가입 아이디 중복 등 |
 | `INTERNAL_SERVER_ERROR` | 500 | 서버 오류 | 재시도 가능 |
