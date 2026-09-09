@@ -5,7 +5,7 @@ BaaS 프론트 SDK — 런타임 CDN에서 로드되는 **부패 방지 계층**
 `baas-integration-sdk` 스킬이 이 SDK 표면 위에서 UI를 생성한다. (기존 `baas-integration` 스킬은 transport를 프로젝트에 복사(vendored)했다 — 이 SDK가 그 방식을 대체한다.)
 
 ## 구조
-- `src/core/` — framework 무관: config(project_id 해석)·http(fetch·envelope·`X-Baas-Sdk-Version` 헤더)·auth·board·notice·recipient·survey·reservation·store
+- `src/core/` — framework 무관: config(project_id 해석)·http(fetch·envelope·`X-Baas-Sdk-Version` 헤더)·auth·board·notice·recipient·inquiry·survey·reservation·store
 - `src/react/` — host React 사용(번들 미포함): AuthProvider·useAuth·RequireAuth + 기능별 훅
 - 빌드: `baas-core.js`(전역 `BaasCore`) / `baas-react.js`(전역 `window.BaasSDK`) IIFE + ESM
 
