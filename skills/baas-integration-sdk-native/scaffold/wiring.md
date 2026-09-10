@@ -88,8 +88,20 @@ products.map(...);                 // ✅ tsc 통과 — 그러나 런타임 크
 
 - `scripts/sync-manifest.mjs` — `src/` 의 `BaasSDK.<name>` 사용을 스캔 → `features.json.hook_groups` 매핑으로
   `features_used` 도출, `skill_version` 을 `features.json.version` 으로 세팅해 `baas-manifest.json` 갱신.
+- **`features.json` 이 없으면 no-op 으로 빠진다(필수)**: 이 스크립트가 읽는 `features.json` 은
+  `skills/` 아래에 있는 **워크스페이스 전용 스킬 자산**이라 출시 파이프라인이 받는 소스 스냅샷에는
+  없다(워크스페이스 영속화가 커밋 직전 `skills/` 를 통째로 제거한다).
+  그래서 파일 부재를 `exit 1` 로 처리하면 typecheck·lint 결과와 무관하게 **모든 출시 빌드가 실패**한다.
+  게이트는 워크스페이스(개발 시점)에서만 판정하고, 소스에 `features.json` 이 없으면 경고 후 `exit 0`:
+  ```js
+  if (!existsSync(featuresPath)) {
+    console.warn(`features.json 이 없어 manifest 동기화를 건너뜁니다: ${featuresPath}`)
+    process.exit(0)
+  }
+  ```
 - **`package.json` 배선(고정)**: `prebuild` 에 물려 **`npm run build` 직전 자동 실행**(배포는 build 가
   불가피하므로 건너뛸 수 없는 관문이 된다). `validate` 엔 `--check`(불일치 시 exit 1)로 건다.
+  `--check` 의 `exit 1` 은 **`features.json` 이 있는데 manifest 가 stale 할 때만** 낸다.
 ```jsonc
 "scripts": {
   "prebuild": "node scripts/sync-manifest.mjs",
