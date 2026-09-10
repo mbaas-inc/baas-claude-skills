@@ -52,6 +52,7 @@ export {
 export { uploadFile } from "./storage";
 export { getPurchaseTerms } from "./payment";
 export { registerRecipient } from "./recipient";
+export { getInquiryConfig, submitInquiry } from "./inquiry";
 export { normalizePhone, formatPhone } from "./phone";
 export { listSurveys, getSurvey, submitSurveyResponse } from "./survey";
 export {
@@ -137,6 +138,7 @@ export type {
 } from "./storage";
 export type { PurchaseTerms } from "./payment";
 export type { RecipientInput } from "./recipient";
+export type { InquiryConfig, InquiryInput, InquiryResult } from "./inquiry";
 export type { Survey } from "./survey";
 export type {
   ReservationTarget,

@@ -11,6 +11,7 @@ import { useFileUpload } from "./useFileUpload";
 import {
   usePayment,
   useRecipient,
+  useInquiry,
   useNotice,
   useFaq,
   useComments,
@@ -68,8 +69,10 @@ export const BaasSDK = {
   // phone (형식 유틸 — formatPhone: 입력 자동 하이픈 / normalizePhone: 전송 정규화)
   normalizePhone: core.normalizePhone,
   formatPhone: core.formatPhone,
-  // recipient / survey / reservation / store
+  // recipient / inquiry / survey / reservation / store
   registerRecipient: core.registerRecipient,
+  getInquiryConfig: core.getInquiryConfig,
+  submitInquiry: core.submitInquiry,
   listSurveys: core.listSurveys,
   getSurvey: core.getSurvey,
   submitSurveyResponse: core.submitSurveyResponse,
@@ -108,6 +111,7 @@ export const BaasSDK = {
   useFileUpload,
   usePayment,
   useRecipient,
+  useInquiry,
   useNotice,
   useFaq,
   useComments,
@@ -119,6 +123,6 @@ export const BaasSDK = {
 export {
   AuthProvider, useAuth, RequireAuth, useLogin, useSignup, useLogout, useBoard, useCollection,
   useFileUpload,
-  usePayment, useRecipient, useNotice, useFaq, useComments, useSurvey, useReservation, useStore,
+  usePayment, useRecipient, useInquiry, useNotice, useFaq, useComments, useSurvey, useReservation, useStore,
 };
 export * from "../core/index";

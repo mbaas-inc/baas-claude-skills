@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  init, signup, registerRecipient, listNoticePosts, listFaqPosts, getNoticePost, getFaqPost,
+  init, signup, registerRecipient, getInquiryConfig, submitInquiry, listNoticePosts, listFaqPosts, getNoticePost, getFaqPost,
   listComments, createComment,
   listSurveys, submitSurveyResponse, listTargets, createBooking, prepareOrder,
   listProducts, getStoreConfig, changePassword,
@@ -27,6 +27,28 @@ test("recipient — POST /recipient/{project}, metadata→data 직렬화", async
   assert.equal(last.method, "POST");
   assert.equal(last.body.phone, "010-1234-5678"); // SDK 가 전송 시 정규화
   assert.equal(last.body.data, JSON.stringify({ a: 1 }));
+});
+
+test("inquiry — GET /public/inquiry/{project}/config", async () => {
+  init({ projectId: PROJECT }); mockFetch();
+  await getInquiryConfig();
+  assert.match(last.url, new RegExp(`/public/inquiry/${PROJECT}/config$`));
+  assert.equal(last.method, "GET");
+});
+
+test("inquiry — POST /public/inquiry/{project}, contact 정규화 + 동의 필드 passthrough + 빈 값 생략", async () => {
+  init({ projectId: PROJECT }); mockFetch();
+  await submitInquiry({
+    name: "홍", contact: "01012345678", email: "", content: "문의 내용입니다",
+    consent_agreed: true, consent_version: "1.0",
+  });
+  assert.match(last.url, new RegExp(`/public/inquiry/${PROJECT}$`));
+  assert.equal(last.method, "POST");
+  assert.equal(last.body.contact, "010-1234-5678");  // SDK 가 전송 시 정규화
+  assert.equal("email" in last.body, false);          // 빈 문자열은 생략(서버는 "" 를 형식 오류로 봄)
+  assert.equal(last.body.consent_agreed, true);
+  assert.equal(last.body.consent_version, "1.0");
+  assert.equal(last.body.content, "문의 내용입니다");
 });
 
 test("notice/faq — 통합 엔드포인트 경로", async () => {

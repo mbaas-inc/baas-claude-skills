@@ -111,7 +111,7 @@
 
 ## 7. 커버 기능 / 표면
 
-인증(회원가입·로그인·로그아웃·내정보·비번변경), 발송대상, 공지/FAQ, 동적게시판(FREE/REVIEW)·댓글, 설문, 예약(슬롯·토스결제), 스토어(상품·토스결제·주문).
+인증(회원가입·로그인·로그아웃·내정보·비번변경), 발송대상, 문의하기, 공지/FAQ, 동적게시판(FREE/REVIEW)·댓글, 설문, 예약(슬롯·토스결제), 스토어(상품·토스결제·주문).
 표면 시그니처·에러→UI 규약: [`skills/baas-integration-sdk/reference/sdk-surface.md`](../skills/baas-integration-sdk/reference/sdk-surface.md).
 게시판 board_id 등 백엔드 리소스는 `baas` CLI로 생성해 코드에 주입(별도 repo).
 
