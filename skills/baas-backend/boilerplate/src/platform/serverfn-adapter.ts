@@ -10,8 +10,18 @@ import type { Context } from 'hono'
 import type { RequestContext } from './envelope'
 import type { Sdk } from './sdk'
 
-/** 저작 쪽 `serverFn` 이 넘겨받는 컨텍스트. 프론트에는 이 타입이 노출되지 않는다. */
-export type ServerCtx = { accountId: string | null; sdk: Sdk }
+/** 저작 쪽 `serverFn` 이 넘겨받는 컨텍스트. 프론트에는 이 타입이 노출되지 않는다.
+ *
+ * envelope의 `RequestContext` 를 그대로 주지 않고 필요한 것만 추린다 — `token` 은 SDK 가
+ * 이미 장착했고, 사용자 코드가 만지면 안 된다. 그래서 **여기 없는 필드는 serverFn 에서
+ * 보이지 않는다**: envelope에 값을 추가할 때 이 타입과 아래 전달을 함께 고쳐야 한다.
+ */
+export type ServerCtx = {
+  accountId: string | null
+  /** 이 요청자가 프로젝트 소유자인가. 관리자 판정의 1순위 — `envelope.ts` 주석 참조. */
+  isProjectOwner: boolean
+  sdk: Sdk
+}
 
 type Handler<I, O> = (input: I, ctx: ServerCtx) => Promise<O>
 
@@ -25,6 +35,11 @@ export async function runServerFn<I, O>(handler: Handler<I, O>, c: Context) {
   const raw = await c.req.text()
   const input = (raw ? JSON.parse(raw) : {}) as I
   const ctx = c.var.ctx as RequestContext
-  const result = await handler(input, { accountId: ctx.accountId, sdk: c.var.sdk as Sdk })
+  const result = await handler(input, {
+    accountId: ctx.accountId,
+    // 옛 디스패처(필드 추가 이전)와 섞여도 **권한이 열리지 않도록** false 로 떨어뜨린다.
+    isProjectOwner: ctx.isProjectOwner === true,
+    sdk: c.var.sdk as Sdk,
+  })
   return c.json(result as object, 200)
 }

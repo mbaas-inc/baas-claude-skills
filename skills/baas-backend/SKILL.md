@@ -293,6 +293,35 @@ const admin = await sdk.dyncol.list('admins', { filter: { account_id: accountId 
 if (!admin.items.length) throw new SdkError('관리자만 접근할 수 있습니다.', 403)
 ```
 
+#### 첫 관리자는 `ctx.isProjectOwner` 로 정한다 — 선착순으로 만들지 마라
+
+위 예시에는 함정이 있다. **관리자 컬렉션이 비어 있을 때 누가 첫 관리자가 되는가.**
+"먼저 들어온 회원을 관리자로" 로 부트스트랩하면 서비스 공개 뒤 아무나 가입해서 관리자가
+된다. 실제로 그렇게 만들어진 적이 있다(2026-09-14).
+
+`ctx.isProjectOwner` 가 그 답이다 — 디스패처가 **프로젝트 소유자인지** 판정해 넣어 준다.
+소유자는 프로젝트 회원이 아니므로(통합회원) **`accountId` 는 null 인데 이 값만 true** 인
+조합이 정상이다.
+
+```ts
+type Role = 'owner' | 'delegate'
+
+async function requireOperator(sdk: Sdk, ctx: ServerCtx): Promise<Role> {
+  if (ctx.isProjectOwner) return 'owner'            // 1순위: 플랫폼이 보증한 소유자
+  const accountId = ctx.accountId                   // 2순위: 소유자가 임명한 회원
+  if (accountId) {
+    const found = await sdk.dyncol.list('operators', { filter: { account_id: accountId }, limit: 1 })
+    if (found.items.length) return 'delegate'
+  }
+  throw new SdkError('운영자 권한이 필요합니다.', 403)
+}
+```
+
+- **소유자만 할 수 있는 일**(운영자 임명·해제, 위험한 일괄 처리)은 `role === 'owner'` 로 가른다.
+- 스케줄(크론)에서는 항상 false 다 — 요청한 사람이 없다.
+- 이 값은 **데이터 접근을 넓히지 않는다.** dyncol 인가는 `service` grants 만 보므로, 소유자라고
+  해서 코드가 부르지 않은 컬렉션이 열리지는 않는다.
+
 #### 이름·연락처는 `sdk.account` 로 조회한다
 
 ```ts
@@ -325,7 +354,9 @@ const page = await sdk.account.list({ limit: 50, keyword: '구매' })
 schedule('daily-close', async (sdk) => { ... })
 ```
 
-- **`ctx.accountId === null`** 이다. 요청 회원이 없으므로 소유자 스코프 조회를 기대하지 마라.
+- **`ctx.accountId === null`** 이고 **`ctx.isProjectOwner === false`** 다. 요청한 사람이
+  없으므로 소유자 스코프 조회도, 운영자 판정도 기대하지 마라 — 관리자 전용 처리가 필요하면
+  그 처리를 크론 핸들러 안에 직접 둔다.
 - **몇 번 실행돼도 결과가 같아야 한다**(멱등). 스케줄러는 재시도할 수 있다.
   결과 레코드의 `unique` 필드가 확정 잠금 역할을 한다 — 409 를 받으면 **먼저 박힌 결과를
   읽어 그대로 따른다**(자기 계산을 밀어붙이면 중복 확정과 같아진다).
