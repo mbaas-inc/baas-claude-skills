@@ -45,6 +45,8 @@ const usedSecrets = new Set()
 /** 시크릿으로 볼 이름. 실제 도입 시에는 팀 규칙으로 확정해야 한다. */
 const SECRET_HINT = /SECRET|API_KEY|TOKEN|PASSWORD|CREDENTIAL/i
 
+// 파일당 한 번만 파싱한다 — 여러 serverFn 이 같은 헬퍼 모듈을 가져올 수 있다.
+const moduleCache = new Map()
 const violations = []
 const extracted = []
 
@@ -257,6 +259,106 @@ function collectGrants(call, bindings, file, grants) {
   ts.forEachChild(call, walk)
 }
 
+/**
+ * 파일에서 **호출 가능한 함수**를 이름 → 노드로 모은다.
+ *
+ * `function f() {}` 와 `const f = () => {}` 둘 다 잡는다. `serverFn(...)` 자신은 제외한다 —
+ * 그건 진입점이지 헬퍼가 아니다.
+ */
+function localFunctions(source) {
+  const out = new Map()
+  for (const stmt of source.statements) {
+    if (ts.isFunctionDeclaration(stmt) && stmt.name && stmt.body) {
+      out.set(stmt.name.text, stmt.body)
+      continue
+    }
+    if (!ts.isVariableStatement(stmt) || serverFnName(stmt)) continue
+    for (const decl of stmt.declarationList.declarations) {
+      const init = decl.initializer
+      if (!init || !ts.isIdentifier(decl.name)) continue
+      if (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) {
+        out.set(decl.name.text, init.body)
+      }
+    }
+  }
+  return out
+}
+
+/**
+ * `src/services/` 안에서 상대 경로로 가져온 이름 → 그 함수 본문.
+ *
+ * 밖에서 온 것(플랫폼 SDK 등)은 쫓지 않는다. 우리가 보려는 것은 **사용자가 나눈 코드**이지
+ * 프레임워크가 아니고, 무한정 따라가면 해석 못 하는 호출마다 오탐이 난다.
+ */
+function importedFunctions(source, file, cache) {
+  const out = new Map()
+  for (const stmt of source.statements) {
+    if (!ts.isImportDeclaration(stmt) || !stmt.importClause) continue
+    const spec = stmt.moduleSpecifier.text
+    if (!spec.startsWith('.')) continue
+    const resolved = resolveServiceModule(path.dirname(file), spec)
+    if (!resolved) continue
+    const named = stmt.importClause.namedBindings
+    if (!named || !ts.isNamedImports(named)) continue
+    const fns = loadLocalFunctions(resolved, cache)
+    for (const el of named.elements) {
+      const source_name = (el.propertyName ?? el.name).text
+      const body = fns.get(source_name)
+      if (body) out.set(el.name.text, body)
+    }
+  }
+  return out
+}
+
+/** `./_shared` → `src/services/_shared.ts`. services 밖으로 나가는 경로는 버린다. */
+function resolveServiceModule(fromDir, spec) {
+  const base = path.resolve(fromDir, spec)
+  for (const candidate of [`${base}.ts`, path.join(base, 'index.ts')]) {
+    if (!fs.existsSync(candidate)) continue
+    if (!path.resolve(candidate).startsWith(path.resolve(SERVICES) + path.sep)) return null
+    return candidate
+  }
+  return null
+}
+
+function loadLocalFunctions(file, cache) {
+  if (cache.has(file)) return cache.get(file)
+  const source = ts.createSourceFile(
+    file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.ES2022, true)
+  const fns = localFunctions(source)
+  cache.set(file, fns)
+  return fns
+}
+
+/**
+ * serverFn 이 부르는 헬퍼들의 본문을 **호출 그래프를 따라** 모은다.
+ *
+ * 왜 필요한가: 추출기가 serverFn 본문만 훑으면, 헬퍼로 뺀 `dyncol` 호출의 grant 가 유도되지
+ * 않아 런타임 403 이 난다. **빌드는 통과하므로 조용한 실패다.** 실제로 생성된 프로젝트가
+ * 그걸 알아채고 *"헬퍼로 분리했을 때 read 가 유도되지 않는다"* 며 일부러 복붙으로 되돌아갔다
+ * (`proj-1a6e5d40`, 2026-09 실측). 공통화는 좋은 코드인데 도구가 벌하고 있었다.
+ *
+ * 방문 기록으로 순환을 막는다 — 서로 부르는 두 헬퍼에서 무한히 돌지 않게.
+ */
+function reachableBodies(call, scopes) {
+  const bodies = []
+  const visited = new Set()
+  const walk = (node, scope) => {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+      const name = node.expression.text
+      const body = scope.get(name)
+      if (body && !visited.has(body)) {
+        visited.add(body)
+        bodies.push(body)
+        ts.forEachChild(body, (child) => walk(child, scope))
+      }
+    }
+    ts.forEachChild(node, (child) => walk(child, scope))
+  }
+  ts.forEachChild(call, (child) => walk(child, scopes))
+  return bodies
+}
+
 function checkBody(call, bindings, file) {
   const seen = new Set()
   const walk = (node) => {
@@ -280,10 +382,17 @@ for (const entry of fs.readdirSync(SERVICES)) {
 
   checkImports(source, file)
   const bindings = moduleScopeBindings(source)
+  // 같은 파일의 헬퍼 + services 안에서 가져온 헬퍼. 이름이 겹치면 import 가 이긴다(자바스크립트 규칙).
+  const scope = new Map([...localFunctions(source), ...importedFunctions(source, file, moduleCache)])
   for (const fn of fns) {
     checkBody(fn.call, bindings, file)
     collectGrants(fn.call, bindings, file, serviceGrants)
     collectSecretNames(fn.call, bindings, file, usedSecrets)
+    // serverFn 이 부르는 헬퍼도 같은 눈으로 본다 — 공통화했다고 grant 가 사라지면 안 된다.
+    for (const body of reachableBodies(fn.call, scope)) {
+      collectGrants(body, bindings, file, serviceGrants)
+      collectSecretNames(body, bindings, file, usedSecrets)
+    }
   }
   extracted.push({ module: entry.replace(/\.ts$/, ''), names: fns.map((f) => f.name) })
 }
