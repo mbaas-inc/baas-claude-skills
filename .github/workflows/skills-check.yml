@@ -57,3 +57,8 @@ jobs:
       # `ctx.isProjectOwner` 가 새어 나갔다(2026-09-15) — 골격은 통과하는데 생성 코드가 깨졌다.
       - name: 저작 표면 검사
         run: npx tsc -p ../checks/tsconfig.json
+      # 골격 갱신은 남의 프로젝트 파일을 덮어쓴다. 애매할 때 덮는 쪽으로 기울면 사용자 코드가
+      # 조용히 사라지므로, 충돌·계약 게이트가 정말 멈추는지를 종료 코드로 고정한다.
+      - name: 업그레이드 판정 검사
+        working-directory: skills/baas-backend
+        run: node --test checks/upgrade.test.mjs
