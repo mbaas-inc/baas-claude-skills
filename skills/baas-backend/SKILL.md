@@ -173,6 +173,8 @@ CLI 는 `baas` 이름으로 PATH 에 있고 자격 증명도 환경에 이미 �
 ```
 dyncol.get/list/aggregate → read     dyncol.create           → create
 dyncol.update/increment   → update   dyncol.remove/restore   → delete
+```
+
 dyncol.batch  → 넘긴 키(create·update·delete)가 그대로 grant 가 된다
 dyncol.transaction → 항목마다 그 항목의 collection·op 로 유도된다
 ```
@@ -191,6 +193,27 @@ await ctx.sdk.dyncol.list(`items_${kind}`)   // ✗ 빌드 실패 — 이름을 
 ```
 
 읽기만 하는 컬렉션에 쓰기 권한이 생기지 않는다 — **코드가 부르는 연산만** 열린다.
+
+### 공통 로직은 함수로 빼도 된다
+
+추출기가 `serverFn` 이 부르는 헬퍼를 **따라 들어가** 그 안의 `dyncol`·`secrets` 호출까지
+유도한다 — 같은 파일의 함수든, `src/services/` 안에서 import 한 함수든 마찬가지다.
+로그인·운영자 판정처럼 여러 serverFn 이 같이 쓰는 것은 한 곳에 모아라.
+
+```ts
+// src/services/_shared.ts
+export async function requireOperator(sdk: Sdk, ctx: ServerCtx) {
+  if (ctx.isProjectOwner) return 'owner'
+  const found = await sdk.dyncol.list('operators', { filter: { account_id: ctx.accountId }, limit: 1 })
+  if (found.items.length) return 'delegate'          // ← operators:read 가 유도된다
+  throw new SdkError('운영자 권한이 필요합니다.', 403)
+}
+```
+
+헬퍼 안에서도 **컬렉션명 규칙은 같다** — 정적으로 풀리지 않으면 거기서 빌드가 선다.
+
+(예전에는 추출기가 `serverFn` 본문만 봐서 헬퍼 안의 호출을 놓쳤다. 그래서 생성 코드가 같은
+판정을 serverFn 마다 복붙하는 일이 있었는데, 지금은 그럴 이유가 없다.)
 
 ## 당신이 쓰는 것 / 쓰지 않는 것
 
