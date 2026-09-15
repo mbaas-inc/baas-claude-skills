@@ -38,12 +38,21 @@ export class SdkError extends Error {
   // 이 형태를 되돌리면 배포는 멀쩡한데 로컬 기동만 조용히 깨진다.
   readonly status: number
   readonly errorCode?: string
+  /**
+   * 서버가 실패에 실어 보낸 구조화 정보. 지금은 트랜잭션이 `{ failed: TxnFailure }` 를 넣는다.
+   *
+   * 메시지 문자열을 파싱해 분기하지 말라고 두는 값이다 — 문구는 언제든 바뀌지만 이 모양은
+   * 계약이다.
+   */
+  readonly detail?: Record<string, unknown>
 
-  constructor(message: string, status: number, errorCode?: string) {
+  constructor(message: string, status: number, errorCode?: string,
+              detail?: Record<string, unknown>) {
     super(message)
     this.name = 'SdkError'
     this.status = status
     this.errorCode = errorCode
+    this.detail = detail
   }
 }
 
@@ -94,13 +103,62 @@ export interface AggregateBucket {
   count: number
 }
 
+/** 레코드 지정 — id 또는 등호 필터. **정확히 하나만** 채운다.
+ *
+ * 필터로 지정할 수 있어야 트랜잭션이 자기완결이 된다. 밖에서 조회해 id 를 구하면 그 사이
+ * 대상이 바뀔 수 있고, 트랜잭션이 낡은 id 로 시작한다.
+ */
+export type RecordTarget = { id: string } | { filter: Record<string, unknown> }
+
+/** 증감 **후** 값이 만족해야 할 경계. 연산자 하나만 쓴다.
+ *
+ * `{ field: 'capacity' }` 로 **같은 레코드의 다른 필드**와 비교할 수 있다 — 정원은
+ * `booked <= capacity` 라 상수로 표현되지 않는다.
+ */
+export type GuardBound = number | { field: string }
+export type GuardCondition =
+  | { gte: GuardBound } | { lte: GuardBound } | { gt: GuardBound } | { lt: GuardBound }
+
 /** 트랜잭션 한 단계. `collection` 이 항목마다 있어 복수 컬렉션에 걸칠 수 있다. */
-export interface TxnOperation {
-  op: 'create' | 'update' | 'delete'
+export type TxnOperation =
+  | {
+      op: 'create'
+      collection: string
+      /** `create` 에서 id 를 미리 정할 수 있다 — 같은 요청에서 자식의 reference 값으로 쓰려면 필요하다. */
+      id?: string
+      data: Record<string, unknown>
+      label?: string
+    }
+  | {
+      op: 'update'
+      collection: string
+      target: RecordTarget
+      data: Record<string, unknown>
+      /** 전제조건 — 내가 읽은 그 상태가 아직 그대로인가. */
+      if?: Record<string, unknown>
+      label?: string
+    }
+  | { op: 'delete'; collection: string; target: RecordTarget; label?: string }
+  | {
+      op: 'increment'
+      collection: string
+      target: RecordTarget
+      field: string
+      by: number
+      /** 경계를 **연산과 함께** 보낸다. 없으면 음수·초과가 그대로 들어간다. */
+      guard?: Record<string, GuardCondition>
+      label?: string
+    }
+
+/** 어느 연산이 왜 걸렸는지. `label` 로 갈라 도메인 결과로 옮긴다. */
+export interface TxnFailure {
+  index: number
+  op: string
   collection: string
-  /** `create` 에서 id 를 미리 정할 수 있다 — 같은 요청에서 자식의 reference 값으로 쓰려면 필요하다. */
-  id?: string
-  data?: Record<string, unknown>
+  label?: string
+  reason: 'guard_failed' | 'not_found' | 'ambiguous' | 'condition_failed'
+  field?: string
+  value?: number
 }
 
 /** 회원 1명. 플랫폼이 노출 범위를 정한다 — `data`(자유형 JSON)·과금·운영 메모는 오지 않는다. */
@@ -156,6 +214,10 @@ function buildSdk(ctx: RequestContext) {
         String(payload.message ?? `BaaS ${res.status}`),
         res.status,
         typeof payload.errorCode === 'string' ? payload.errorCode : undefined,
+        // 실패 본문의 `data` — 트랜잭션은 여기에 `failed` 를 싣는다(어느 연산이 왜 걸렸는지).
+        payload.data && typeof payload.data === 'object'
+          ? (payload.data as Record<string, unknown>)
+          : undefined,
       )
     }
     return (payload.data ?? payload) as T
@@ -228,29 +290,28 @@ function buildSdk(ctx: RequestContext) {
       call<void>('DELETE', `/collections/${collection}/records/${recordId}`),
 
     /**
-     * number 필드 원자 증감. **갱신된 레코드를 돌려준다** — 이 반환값이 상한 강제의 핵심이다.
+     * number 필드 원자 증감 — **카운터 하나만** 건드릴 때 쓴다.
      *
-     * ⚠️ **경계 가드가 없다** — 정원을 넘고 0 을 지나 음수로 내려간다. 그래서 상한은
-     * 이 백엔드가 강제한다. 방법은 **반환된 새 값을 자기 순번으로 읽는 것**이다:
+     * 갱신된 레코드를 돌려준다. **경계 가드가 없어** 0 을 지나 음수로 내려가므로, 상한이
+     * 필요하면 반환값으로 판정한다.
      *
      * ```ts
-     * const after = await sdk.dyncol.increment<Slot>('slots', id, 'booked', 1)
-     * if (after.data.booked > after.data.capacity) {
-     *   await sdk.dyncol.increment('slots', id, 'booked', -1)   // 보상
-     *   return 정원마감
-     * }
+     * const after = await sdk.dyncol.increment<Post>('posts', { id }, 'views', 1)
      * ```
      *
+     * ⚠️ **두 개 이상의 레코드를 바꾸면 이걸 쓰지 마라.** 중간에 실패했을 때 손으로 되돌려야
+     * 하고, 그 되돌리는 사이가 남에게 보인다 — 실측(2026-09-15): 실패한 4품목 주문이 중간
+     * 상태를 **2.8초 이상** 노출했고 **부분 복구 상태**까지 관측됐다. 그동안 다른 손님에게는
+     * 있는 재고가 품절로 보인다. 그런 경우는 `transaction` 이다.
+     *
      * **조회해서 확인한 뒤 증가시키면 안 된다.** 확인과 증가 사이에 다른 요청이 끼어든다.
-     * unique 제약으로 선점을 먼저 해도 막히지 않는다 — unique 는 *같은 회원*의 중복만
-     * 막으므로 서로 다른 회원들은 여전히 같은 값을 읽는다. 실측(정원 100 · 회원 120명 동시):
-     * 조회→확인→증가 = 120 ❌ / 선점→확인→증가 = 120 ❌ / 선점→원자증가→보상 = 100 ✅
+     * 실측(정원 100 · 회원 120명 동시): 조회→확인→증가 = 120 ❌ / 원자증가→반환값 판정 = 100 ✅
      */
     increment: <T = Record<string, unknown>>(
-      collection: string, recordId: string, field: string, by: number,
+      collection: string, target: RecordTarget, field: string, by: number,
     ) =>
-      call<DyncolRecord<T>>('POST', `/collections/${collection}/records/${recordId}/increment`,
-        { field, by }),
+      call<DyncolRecord<T>>('POST', `/collections/${collection}/records/increment`,
+        { target, field, by }),
 
     /**
      * 집계 — `count`·`sum`·`avg`·`min`·`max` + 단일 필드 `group_by`. 인가는 목록과 같다.
@@ -294,23 +355,54 @@ function buildSdk(ctx: RequestContext) {
     },
 
     /**
-     * **복수 컬렉션 한 트랜잭션** — 하나라도 실패하면 전부 되돌린다. 최대 25 작업.
+     * **여러 레코드를 한 트랜잭션으로** — 하나라도 실패하면 전부 되돌린다. 최대 25 작업.
      *
-     * "따로 남으면 안 되는 쌍"이 이걸 쓴다 — 주문+재고, 본문+이력, 신청+집계.
-     * 이게 있으면 잠금 전용 unique 컬럼이나 보상 삭제를 손으로 짜지 않아도 된다.
+     * **두 개 이상의 레코드를 바꾸는데 중간에 실패할 수 있으면 이걸 쓴다.** 재고 차감·정원
+     * 확보·주문 생성처럼 따로 남으면 안 되는 묶음이 여기 들어간다.
      *
      * ```ts
      * await sdk.dyncol.transaction([
-     *   { op: 'create', collection: 'orders', id: orderId, data: {...} },
-     *   { op: 'update', collection: 'stock',  id: itemId,  data: { qty: next } },
+     *   { op: 'increment', collection: 'pickup_slots', target: { filter: { slot_id } },
+     *     field: 'booked', by: 1,
+     *     guard: { booked: { lte: { field: 'capacity' } } }, label: 'slot' },
+     *   ...lines.map((l) => ({
+     *     op: 'increment' as const, collection: 'menu_stock',
+     *     target: { filter: { menu_item_id: l.menuItemId } },
+     *     field: 'remaining', by: -l.quantity,
+     *     guard: { remaining: { gte: 0 } }, label: `stock:${l.menuItemId}`,
+     *   })),
+     *   { op: 'create', collection: 'orders', data: { ... }, label: 'order' },
      * ])
      * ```
      *
-     * 상한 강제에는 이것만으로 부족하다 — 트랜잭션은 원자성을 주지만 "지금 몇 개인지"를
-     * 안전하게 읽어주지는 않는다. 카운터가 있는 상한은 `increment` 반환값으로 판정한다.
+     * **경계는 `guard` 로 함께 보낸다.** 여기서 판정해야 어긴 순간 전체가 되돌아가고, 중간
+     * 상태가 밖에서 보이지 않는다. 받아서 TypeScript 로 보면 이미 늦다 — 그때는 「쓴다 →
+     * 본다 → 되돌린다」가 되고 그 사이가 남에게 노출된다.
+     *
+     * **실패는 `SdkError` 로 온다(409).** `error.detail.failed` 에 어느 연산이 왜 걸렸는지
+     * 들어 있고, `label` 로 갈라 도메인 결과로 옮긴다:
+     *
+     * ```ts
+     * catch (e) {
+     *   const failed = e instanceof SdkError ? (e.detail?.failed as TxnFailure) : undefined
+     *   if (failed?.label?.startsWith('stock:'))
+     *     return { status: 'sold_out', menuItemId: failed.label.slice(6) }
+     *   if (failed?.label === 'slot') return { status: 'slot_full' }
+     *   throw e
+     * }
+     * ```
+     *
+     * `label` 로 가르는 이유: index 로 분기하면 항목 수가 바뀌는 순간 조용히 어긋난다.
+     *
+     * 잠금은 서버가 정규 순서로 걸고 **실행은 보낸 순서 그대로**다 — 앞에서 만든 레코드를
+     * 뒤 작업의 reference 로 쓸 수 있다(`create` 에 id 를 미리 정하는 이유).
      */
     transaction: (operations: TxnOperation[]) =>
-      call<{ results: { index: number; op: string; collection: string; id?: string }[]; count: number }>(
+      call<{
+        results: { index: number; op: string; collection: string; id?: string
+                   label?: string; value?: number }[]
+        count: number
+      }>(
         'POST', '/collections/transaction', { operations },
       ),
 
