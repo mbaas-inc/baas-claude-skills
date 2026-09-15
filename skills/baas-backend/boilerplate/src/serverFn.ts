@@ -28,6 +28,36 @@ export type ServerCtx<S = unknown> = {
   isProjectOwner: boolean
   sdk: S
 }
-export function serverFn<I, O>(handler: (input: I, ctx: ServerCtx) => Promise<O>) {
+/**
+ * 이 함수를 **누가 부를 수 있는가**. 선언은 필수다 — 빠뜨리면 타입 검사에서 걸린다.
+ *
+ * 침묵을 허용하지 않는 이유: 「공개로 열어 둔 것」과 「검사를 잊은 것」은 코드에서 똑같이
+ * 생겼다. 그래서 도구가 추론할 수 없고, 사람이 읽어도 의도를 알 수 없다. 반찬가게는 같은
+ * 판정을 9개 함수에 8번 손으로 썼는데(로그인 3 · 소유자 5), 그중 하나를 빠뜨려도 아무도
+ * 몰랐을 것이다.
+ *
+ * | 값 | 플랫폼이 하는 일 |
+ * |---|---|
+ * | `public` | 아무것도 막지 않는다. 비로그인 포함 누구나 |
+ * | `member` | 로그인하지 않았으면 401. **인증**이지 인가가 아니다 |
+ * | `owner`  | 프로젝트 소유자가 아니면 403 |
+ * | `custom` | **네 코드가 판정한다.** 역할·계층·자원 범위는 전부 네 것이다 |
+ *
+ * 플랫폼은 **자기가 이미 아는 사실**(로그인 여부·소유자 여부)까지만 강제한다. 매니저·직원
+ * 같은 역할은 플랫폼이 모르므로 `custom` 안에서 네가 정한다 — 그래야 어떤 권한 체계든
+ * 표현할 수 있다.
+ */
+export type ServerFnAccess = 'public' | 'member' | 'owner' | 'custom'
+
+export interface ServerFnOptions {
+  access: ServerFnAccess
+}
+
+export function serverFn<I, O>(
+  handler: (input: I, ctx: ServerCtx) => Promise<O>,
+  options: ServerFnOptions,
+) {
+  // 런타임에 쓰이지 않는다 — 추출기가 정적으로 읽어 라우트에 싣는다.
+  void options
   return handler
 }

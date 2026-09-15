@@ -27,7 +27,14 @@ export const readsEveryContextField = serverFn<{ q: string }, { status: string }
     await sdk.dyncol.list(input.q)
     return { status: accountId ? 'ok' : 'anon' }
   },
+  // 접근 선언은 필수다 — 빠뜨리면 여기서 타입 에러가 난다(생성 코드도 마찬가지).
+  { access: 'custom' },
 )
+
+/** 네 값이 모두 받아들여지는지 고정한다 — 하나라도 빠지면 생성 코드가 표현을 잃는다. */
+export const publicFn = serverFn<undefined, null>(async () => null, { access: 'public' })
+export const memberFn = serverFn<undefined, null>(async () => null, { access: 'member' })
+export const ownerFn = serverFn<undefined, null>(async () => null, { access: 'owner' })
 
 /** 어댑터가 좁히는 형태(`ServerCtx<Sdk>`)가 성립하는지도 함께 고정한다. */
 type NarrowedIsAssignable = ServerCtx<{ dyncol: unknown }> extends ServerCtx ? true : never
