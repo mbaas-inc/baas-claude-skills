@@ -26,56 +26,59 @@ interface Slot {
  * 회원 쓰기 권한이 필요한데, 그러면 수업명·시간·정원까지 고칠 수 있게 된다. dyncol 의
  * 권한 어휘는 컬렉션 단위라 "이 필드만"이 표현되지 않는다.
  *
- * **여기서의 해법 — 두 제약을 서로 다른 수단으로 막는다**:
- *   1) `slot_account_key` 를 unique 로 선언해 예약 레코드를 **먼저 만든다**
- *      → **1인 1회**를 막는다 (dyncol advisory lock, 중복은 409).
- *   2) 카운터를 **원자 증가시키고 돌아온 새 값을 자기 순번으로 읽는다**
- *      → **총량**을 막는다. 순번이 정원을 넘으면 자기가 초과분이다.
- *   3) 초과면 카운터와 선점을 **되돌린다**(보상 트랜잭션).
+ * **여기서의 해법 — 두 제약을 한 트랜잭션에서 서로 다른 수단으로 막는다**:
+ *   1) 카운터를 `guard` 와 함께 증가시킨다 → **총량**을 막는다.
+ *      `booked <= capacity` 를 서버가 판정하고, 어기면 트랜잭션 전체가 되돌아간다.
+ *   2) `slot_account_key` 를 unique 로 선언해 예약 레코드를 만든다 → **1인 1회**를 막는다
+ *      (dyncol advisory lock, 중복은 409).
  *
- * ⚠️ **"조회해서 정원 확인 → 증가" 순서는 틀렸다.** unique 선점을 먼저 해도 마찬가지다 —
- * unique 는 *같은 회원*의 중복만 막으므로, 서로 다른 회원들은 여전히 같은 `booked` 값을
- * 읽고 전원 통과한다. 실측(정원 100 · 서로 다른 회원 120명 동시):
+ * 둘이 한 트랜잭션이라 **중간 상태가 밖에서 보이지 않는다.** 예전 방식(증가 → 반환값 판정 →
+ * 손으로 보상)은 결과는 맞지만 되돌리는 사이가 노출됐다 — 실측(2026-09-15): 실패한 4품목
+ * 주문이 중간 상태를 **2.8초 이상** 노출했고 **부분 복구 상태**까지 관측됐다. 그동안 다른
+ * 손님에게는 남은 자리가 마감으로 보이고, 서버가 실제로 그 거절을 돌려줄 수 있다.
+ *
+ * ⚠️ **"조회해서 정원 확인 → 증가" 순서는 여전히 틀렸다.** unique 선점을 먼저 해도
+ * 마찬가지다 — unique 는 *같은 회원*의 중복만 막으므로, 서로 다른 회원들은 같은 `booked`
+ * 값을 읽고 전원 통과한다. 실측(정원 100 · 서로 다른 회원 120명 동시):
  *
  *   조회→확인→증가            : booked = 120  ❌
  *   선점→조회·확인→증가       : booked = 120  ❌   ← unique 로도 안 막힌다
- *   선점→원자증가→보상        : booked = 100  ✅
+ *   원자증가 + guard          : booked = 100  ✅
  *
- * 판정에 **조회가 개입하면 경합할 틈이 생긴다.** 원자 연산의 반환값만 보고 판단하면
- * 각 요청이 남의 상태를 볼 필요 없이 혼자 결론을 낼 수 있다.
+ * 판정에 **조회가 개입하면 경합할 틈이 생긴다.** 경계를 연산과 함께 보내면 각 요청이 남의
+ * 상태를 볼 필요 없이 서버 안에서 결론이 난다.
  */
 route.post('/reservations', async (c) => {
   const { slotId } = (await c.req.json()) as { slotId?: string }
   if (!slotId) return c.json({ error: 'slotId 가 필요합니다' }, 400)
   if (!c.var.ctx.accountId) return c.json({ error: '로그인이 필요합니다' }, 401)
 
-  // 1) 1인 1회 — unique 제약이 경합을 원자적으로 정리한다
-  let reservationId: string
   try {
-    const created = await c.var.sdk.dyncol.create('reservations', {
-      slot_id: slotId,
-      slot_account_key: `${slotId}:${c.var.ctx.accountId}`,
-    })
-    reservationId = created.id
+    const { results } = await c.var.sdk.dyncol.transaction([
+      // 총량 — 경계를 연산과 함께 보낸다. 넘으면 아래 create 까지 함께 되돌아간다.
+      {
+        op: 'increment', collection: 'slots', target: { id: slotId },
+        field: 'booked', by: 1,
+        guard: { booked: { lte: { field: 'capacity' } } }, label: 'slot',
+      },
+      // 1인 1회 — unique 제약이 경합을 원자적으로 정리한다
+      {
+        op: 'create', collection: 'reservations',
+        data: { slot_id: slotId, slot_account_key: `${slotId}:${c.var.ctx.accountId}` },
+        label: 'reservation',
+      },
+    ])
+    const slot = results.find((r) => r.label === 'slot')
+    const reservation = results.find((r) => r.label === 'reservation')
+    // increment 결과값이 내 순번이다 — 별도 조회가 필요 없다
+    return c.json({ id: reservation?.id, slotId, number: slot?.value }, 201)
   } catch (e) {
-    if (e instanceof SdkError && e.status === 409) {
-      return c.json({ error: '이미 예약한 수업입니다' }, 409)
-    }
-    throw e
+    if (!(e instanceof SdkError) || e.status !== 409) throw e
+    // guard 위반은 `failed` 를 싣고 온다. unique 위반은 싣지 않는다 — 그게 두 거절을 가른다.
+    const failed = e.detail?.failed as { label?: string } | undefined
+    if (failed?.label === 'slot') return c.json({ error: '정원이 모두 찼습니다' }, 409)
+    return c.json({ error: '이미 예약한 수업입니다' }, 409)
   }
-
-  // 2) 총량 — 원자 증가의 반환값이 내 순번이다. 조회하지 않는다.
-  const after = await c.var.sdk.dyncol.increment<Slot>('slots', slotId, 'booked', 1)
-  const myNumber = after.data.booked
-
-  if (myNumber > after.data.capacity) {
-    // 3) 보상 — 카운터를 되돌리고 선점도 해제한다
-    await c.var.sdk.dyncol.increment('slots', slotId, 'booked', -1)
-    await c.var.sdk.dyncol.remove('reservations', reservationId)
-    return c.json({ error: '정원이 모두 찼습니다' }, 409)
-  }
-
-  return c.json({ id: reservationId, slotId, number: myNumber }, 201)
 })
 
 /**

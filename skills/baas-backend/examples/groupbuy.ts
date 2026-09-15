@@ -147,7 +147,7 @@ route.post('/join', async (c) => {
   // 즉 반환된 joined 를 그대로 내 순번으로 읽으면 중복도 유실도 없다.
   let after
   try {
-    after = await sdk.dyncol.increment<Product>(PRODUCT, productId, 'joined', 1)
+    after = await sdk.dyncol.increment<Product>(PRODUCT, { id: productId }, 'joined', 1)
   } catch (e) {
     // 증가가 반영됐는지 알 수 없는 상태(네트워크 실패 등). 참여 레코드를 되돌려
     // 회원이 재시도할 수 있게 한다 — 남겨두면 unique 에 막혀 영영 참여할 수 없다.
@@ -160,9 +160,13 @@ route.post('/join', async (c) => {
   // 스냅샷으로 판정하는 이유는, 그 값이 내 증가가 반영된 시점의 상태라서
   // "내 증가가 마감 전이었나"를 가장 좁은 창으로 판단할 수 있기 때문이다.
   if (!isJoinable(after.data)) {
+    // ⚠️ 여기 보상이 남아 있는 이유: 판정이 **숫자 경계가 아니라 상태**(`isJoinable`)다.
+    // 수량 상한이라면 `transaction` + `guard` 로 옮겨 이 코드가 통째로 사라진다 —
+    // 「원자 증감」·「트랜잭션」 절 참조. 상태 판정은 아직 guard 로 표현되지 않는다.
+    //
     // 보상은 **카운터 먼저**. 참여 레코드를 먼저 지우면, 그 다음 감소가 실패했을 때
     // 근거 없는 +1 이 남아 성사 판정을 왜곡한다. 집계 정확성이 상위 요구사항이다.
-    await sdk.dyncol.increment(PRODUCT, productId, 'joined', -1).catch(() => {})
+    await sdk.dyncol.increment(PRODUCT, { id: productId }, 'joined', -1).catch(() => {})
     await sdk.dyncol.remove(JOIN, joinRecord.id).catch(() => {})
     return c.json({ error: '마감된 공동구매입니다.', status: after.data.status }, 409)
   }

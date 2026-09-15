@@ -206,18 +206,47 @@ await ctx.sdk.dyncol.list(`items_${kind}`)   // ✗ 빌드 실패 — 이름을 
 - unique 는 *같은 값*의 중복만 막는다. **정원 같은 상한은 막지 못한다** — 서로 다른 값이면
   전원 통과한다. 상한은 아래 `increment` 반환값으로 판정한다.
 
-### 원자 증감 — 반환값이 내 순번
+### 먼저 판정하라 — 레코드 하나인가, 묶음인가
 
-`increment` 는 갱신된 레코드를 돌려준다. **경계 가드는 없다**(정원을 넘고 0 을 지나
-음수로 내려간다). 그래서 상한·하한은 **반환값으로 판정**한다.
+> **두 개 이상의 레코드를 바꾸는데 중간에 실패할 수 있으면 `transaction` 이다.**
+
+| 상황 | 쓸 것 |
+|---|---|
+| 조회수·좋아요처럼 **카운터 하나** | `increment` |
+| 재고 차감 + 정원 확보 + 주문 생성처럼 **묶음** | **`transaction`** |
+
+이 판정을 틀리면 조용히 망가진다. 아래가 그 실측이다.
+
+### 보상을 손으로 짜지 마라
+
+예전 가이드는 「증감 → 반환값 판정 → 어기면 되돌리기」였다. 결과는 맞지만 **과정이 밖에서
+보인다.** 실패하는 4품목 주문을 띄우고 다른 손님 시점으로 동시 조회한 실측(2026-09-15):
+
+| t(ms) | 계란말이 | 시금치 | 겉절이 | 정원 |
+|---|---|---|---|---|
+| 2039 | 12 | 12 | 4 | **2** |
+| 2718 | **9** | 12 | 4 | 2 |
+| 3786 | 9 | **10** | **3** | 2 |
+| 4465 | 9 | **12** | **4** | 2 |
+| 4833 | **12** | 12 | 4 | **2** |
+
+- **2.8초 이상** 중간 상태가 노출된다
+- t=4465 에 **부분 복구 상태**가 보인다 — 되돌리는 것 자체도 원자적이 아니다
+- 그동안 다른 손님에게 **있는 재고가 품절로** 보이고, 서버가 실제로 `sold_out` 을 돌려줄 수 있다.
+  최종 일관성은 지켜지지만 **그 사이의 거절은 되돌아오지 않는다**
+
+되돌리는 코드가 틀려서가 아니다. **되돌린다는 발상 자체가 늦다.**
+
+### 원자 증감 — 카운터 하나일 때
 
 ```ts
-const after = await sdk.dyncol.increment<Slot>('slots', id, 'booked', 1)
-if (after.data.booked > after.data.capacity) {
-  await sdk.dyncol.increment('slots', id, 'booked', -1)   // 보상
-  return 정원마감
-}
+const after = await sdk.dyncol.increment<Post>('posts', { id }, 'views', 1)
 ```
+
+대상은 `{ id }` 또는 `{ filter: { … } }` 다. 필터로 지정하면 id 를 찾는 왕복이 없고, 조회와
+증감 사이에 대상이 바뀌는 틈도 없다.
+
+경계가 필요하면 반환값으로 판정하되, **되돌릴 일이 생기면 그건 `transaction` 자리다.**
 
 **조회해서 확인한 뒤 증가시키면 안 된다.** unique 로 선점을 먼저 해도 막히지 않는다 —
 unique 는 *같은 회원*의 중복만 막으므로 서로 다른 회원들은 여전히 같은 값을 읽는다.
@@ -228,7 +257,7 @@ unique 는 *같은 회원*의 중복만 막으므로 서로 다른 회원들은 
 |---|---|
 | 조회 → 확인 → 증가 | 120 ❌ |
 | unique 선점 → 조회·확인 → 증가 | 120 ❌ |
-| unique 선점 → **원자증가 → 반환값 판정** → 보상 | **100** ✅ |
+| **원자증가 → 반환값 판정** | **100** ✅ |
 
 ### 조건부 갱신 — 상태 전이는 이걸로
 
@@ -259,18 +288,62 @@ await sdk.dyncol.update('po', id, { status: 'approved' },
 
 ### 트랜잭션 — 복수 컬렉션 전부-아니면-전무
 
-`transaction` 은 여러 컬렉션의 create/update/delete 를 한 트랜잭션으로 묶는다(최대 25 작업).
-하나라도 실패하면 전부 되돌린다. "본문 + 이력", "주문 + 재고 차감" 처럼 따로 남으면 안 되는
-쌍에 쓴다.
+`transaction` 은 여러 컬렉션의 create/update/delete/**increment** 를 한 트랜잭션으로 묶는다
+(최대 25 작업). 하나라도 실패하면 전부 되돌린다.
 
 ```ts
 await sdk.dyncol.transaction([
-  { op: 'create', collection: 'orders', id: orderId, data: {...} },
-  { op: 'update', collection: 'stock',  id: itemId,  data: { qty: next } },
+  // 정원 확보 — booked 가 capacity 를 넘으면 전체가 되돌아간다
+  { op: 'increment', collection: 'pickup_slots', target: { filter: { slot_id } },
+    field: 'booked', by: 1,
+    guard: { booked: { lte: { field: 'capacity' } } }, label: 'slot' },
+
+  // 재고 차감 — 음수가 되면 전체가 되돌아간다
+  ...lines.map((l) => ({
+    op: 'increment' as const, collection: 'menu_stock',
+    target: { filter: { menu_item_id: l.menuItemId } },
+    field: 'remaining', by: -l.quantity,
+    guard: { remaining: { gte: 0 } }, label: `stock:${l.menuItemId}`,
+  })),
+
+  { op: 'create', collection: 'orders', data: { ... }, label: 'order' },
 ])
 ```
 
+#### 경계는 `guard` 로 **함께 보낸다**
+
+받아서 TypeScript 로 보면 이미 늦다 — 그때는 「쓴다 → 본다 → 되돌린다」가 되고 그 사이가
+남에게 보인다(위 실측). `guard` 는 증감 **후** 값을 서버에서 판정해, 어기면 전체를 되돌린다.
+SQL 로 치면 `UPDATE … WHERE remaining - 2 >= 0` 의 뒷부분이다.
+
+| 형태 | 뜻 |
+|---|---|
+| `{ remaining: { gte: 0 } }` | 상수와 비교 |
+| `{ booked: { lte: { field: 'capacity' } } }` | **같은 레코드의 다른 필드**와 비교 |
+
+연산자는 `gte`·`lte`·`gt`·`lt` 중 **하나만** 쓴다. 다른 컬렉션 참조나 서브쿼리는 없다.
+
+#### 실패는 `label` 로 갈라 도메인 결과로 옮긴다
+
+```ts
+catch (e) {
+  const failed = e instanceof SdkError ? (e.detail?.failed as TxnFailure) : undefined
+  if (failed?.label?.startsWith('stock:'))
+    return { status: 'sold_out', menuItemId: failed.label.slice(6) }
+  if (failed?.label === 'slot') return { status: 'slot_full' }
+  throw e
+}
+```
+
+**index 로 분기하지 마라** — 항목 수가 바뀌는 순간 조용히 어긋난다.
+
+#### 대상은 `target` 으로 — id 를 먼저 찾지 마라
+
+`{ id }` 또는 `{ filter: { … } }` 다. 밖에서 조회해 id 를 구하면 그 사이 대상이 바뀔 수 있고,
+트랜잭션이 낡은 id 로 시작한다. 필터는 **정확히 1건**에 맞아야 하고, 아니면 실패한다.
+
 `create` 는 id 를 미리 정할 수 있다 — 같은 요청에서 자식의 `reference` 값으로 쓰려면 필요하다.
+잠금은 서버가 정규 순서로 걸고 **실행은 보낸 순서 그대로**라, 이 의존이 지켜진다.
 
 **잠금 전용 컬럼이나 보상 삭제를 손으로 짜지 마라.** 그건 이 연산이 없던 시절의 우회이고,
 보상을 빠뜨리면 그 레코드가 영구히 막힌다(서버 주석에 그 사고가 기록돼 있다).
