@@ -366,7 +366,34 @@ function buildSdk(ctx: RequestContext) {
     },
   }
 
-  return { dyncol, account, ctx }
+  /** 시크릿 평문 캐시. 이 SDK 인스턴스는 요청 하나에 대응하므로 한 요청 안에서만 산다. */
+  const secretCache = new Map<string, string>()
+
+  // 외부 서드파티 API 자격 증명(aiapp-service#763).
+  //
+  // **환경변수로 주지 않는다.** Lambda 환경변수는 저장 시 암호화되지만
+  // `lambda:GetFunctionConfiguration` 권한이 있으면 평문으로 조회된다 — 최종 사용자에게는
+  // 안 보여도 플랫폼 운영자에게는 보인다. 런타임에 가져오면 평문이 함수 메모리에만, 그 요청을
+  // 처리하는 동안만 존재한다. 덤으로 실행 런타임(작업 중 MicroVM 프로세스, 미리보기·출시
+  // Lambda)이 무엇이든 동작이 같아진다.
+  //
+  // 값은 되읽을 수 없는 자원이므로 `list` 는 두지 않는다 — 이름을 알아야 쓰는 것이고, 이름은
+  // 코드에 이미 있다.
+  const secrets = {
+    /** 이름 하나의 평문. 같은 요청 안에서는 한 번만 왕복한다. */
+    get: async (name: string): Promise<string> => {
+      const cached = secretCache.get(name)
+      if (cached !== undefined) return cached
+      const { value } = await call<{ name: string; value: string }>(
+        'GET',
+        `/service/secrets/${encodeURIComponent(name)}`,
+      )
+      secretCache.set(name, value)
+      return value
+    },
+  }
+
+  return { dyncol, account, secrets, ctx }
 }
 
 export type Sdk = ReturnType<typeof buildSdk>
