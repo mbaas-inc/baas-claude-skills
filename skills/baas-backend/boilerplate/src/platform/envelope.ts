@@ -42,6 +42,35 @@ export interface RequestContext {
    * 값이 있으면 SDK 호출이 그 회원 권한으로 나가고 dyncol 레코드 소유자도 이 회원이 된다.
    */
   accountId: string | null
+  /**
+   * 원 요청의 로그인 계정이 **이 프로젝트의 소유자**인가.
+   *
+   * 소유자는 프로젝트 회원이 아니다(통합회원이라 계정의 `project_id` 가 NULL). 그래서
+   * `accountId` 는 **null 인데 이 값만 true** 인 조합이 정상이고, 반대로 회원으로 로그인한
+   * 사람은 `accountId` 가 있고 이 값이 false 다.
+   *
+   * 관리자 판정의 **1순위**로 쓴다. 플랫폼은 "소유자인가" 까지만 알려주고, "이 소유자에게
+   * 무엇을 허용할지" 와 "누구를 운영자로 위임할지" 는 이 백엔드가 정한다 — 관리자의 정의가
+   * 프로젝트마다 다르기 때문이다.
+   *
+   * ```ts
+   * async function requireOperator(sdk: Sdk, ctx: Ctx) {
+   *   if (ctx.isProjectOwner) return 'owner'          // 소유자는 항상 통과
+   *   const id = ctx.accountId
+   *   if (id && await isDelegated(sdk, id)) return 'delegate'
+   *   throw new SdkError('운영자 권한이 필요합니다', 403)
+   * }
+   * ```
+   *
+   * **데이터 접근을 넓히지 않는다.** dyncol 인가는 주입 토큰의 `scope=service` grants 만
+   * 보고, 이 값은 토큰에 실리지 않는다. 즉 소유자라고 해서 선언하지 않은 컬렉션을 읽을 수
+   * 있게 되지는 않는다.
+   *
+   * 스케줄(크론) 실행에서는 **항상 false** 다 — 요청한 사람이 없으므로(`accountId` 도 null)
+   * 소유자일 수 없다. 크론이 관리자 전용 처리를 해야 하면 이 값이 아니라 그 처리를 크론
+   * 핸들러에 직접 둔다.
+   */
+  isProjectOwner: boolean
 }
 
 export interface InvokeEnvelope {
