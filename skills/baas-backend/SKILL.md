@@ -63,8 +63,37 @@ export type ClaimResult = { status: 'issued' | 'already_claimed' | 'sold_out' }
 export const claim = serverFn<ClaimInput, ClaimResult>(async (input, ctx) => {
   // ctx.sdk 로 dyncol·네이티브에 접근한다. fetch 직접 호출 금지.
   ...
-})
+}, { access: 'member' })
 ```
+
+### 접근 선언은 **필수**다
+
+두 번째 인자의 `access` 를 빠뜨리면 빌드가 선다. 「공개로 열어 둔 것」과 「검사를 잊은 것」은
+코드에서 똑같이 생겨 도구도 사람도 구별할 수 없기 때문이다.
+
+| 값 | 플랫폼이 하는 일 | 언제 |
+|---|---|---|
+| `public` | 아무것도 막지 않는다 | 비로그인도 봐야 하는 목록·조회 |
+| `member` | 비로그인이면 **401** | 로그인한 회원의 행동 |
+| `owner`  | 소유자가 아니면 **403** | 프로젝트 소유자 전용 |
+| `custom` | 막지 않는다 — **네 코드가 판정한다** | 역할·계층·자원 범위가 있는 경우 |
+
+플랫폼은 **자기가 이미 아는 사실**(로그인 여부·소유자 여부)까지만 집행한다. 매니저·직원 같은
+역할은 플랫폼이 모르므로 `custom` 안에서 네가 정한다 — 그래야 어떤 권한 체계든 표현된다.
+
+```ts
+// 매니저 계층이 있는 경우 — 판정은 전부 네 코드다
+export const completeOrder = serverFn<Input, Result>(async (input, ctx) => {
+  await requirePermission(ctx, ctx.sdk, 'orders.complete')
+  ...
+}, { access: 'custom' })
+```
+
+`member`·`owner` 를 쓰면 **본문에서 그 검사를 다시 쓰지 마라.** 어댑터가 핸들러 앞에서 이미
+막는다 — 본문에서 하면 그 앞에 쓴 코드가 이미 돌아 중간 효과가 남는다.
+
+추출기가 `backend/serverfn-access.json` 으로 전체 표면을 낸다. *"비로그인이 부를 수 있는 게
+뭐지?"* 를 파일 하나로 답하기 위한 것이다.
 
 작성 후 **반드시** 추출을 돌린다:
 

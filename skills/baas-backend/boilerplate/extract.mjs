@@ -33,6 +33,8 @@ const GRANTS_OUT = path.join(ROOT, 'backend', 'service-grants.json')
 const SECRETS_OUT = path.join(ROOT, 'backend', 'secret-names.json')
 // 선언에서 만든 레코드 타입. 손으로 쓰던 두 번째 출처를 없앤다.
 const TYPES_OUT = path.join(ROOT, 'src', 'types', 'collections.ts')
+// 함수별 접근 선언. 공개 표면을 한 파일로 검토할 수 있게 한다.
+const ACCESS_OUT = path.join(ROOT, 'backend', 'serverfn-access.json')
 
 /** 서버로 넘어가면 안 되는 import. 확장자와 경로 관례 둘 다 본다. */
 const CLIENT_ONLY = [/\.(tsx|jsx|css)$/, /\/components\//, /^react$/, /^react-dom/]
@@ -55,6 +57,29 @@ function report(file, kind, detail) {
 }
 
 /** 이 선언이 serverFn(...) 호출인가. `export const x = serverFn(...)` 형태만 인정한다. */
+const ACCESS_VALUES = new Set(['public', 'member', 'owner', 'custom'])
+
+/**
+ * `serverFn(handler, { access: 'member' })` 의 선언을 읽는다.
+ *
+ * 정적으로 못 읽으면 `null` 을 내고 호출부가 빌드를 세운다. 「공개로 열어 둔 것」과 「검사를
+ * 잊은 것」은 코드에서 똑같이 생겨 추론할 수 없으므로, **침묵을 허용하지 않는 것**이 유일한
+ * 방법이다.
+ */
+function readAccess(call) {
+  const opts = call.arguments[1]
+  if (!opts || !ts.isObjectLiteralExpression(opts)) return null
+  for (const prop of opts.properties) {
+    if (!ts.isPropertyAssignment(prop)) continue
+    const key = ts.isIdentifier(prop.name) || ts.isStringLiteral(prop.name) ? prop.name.text : null
+    if (key !== 'access') continue
+    const value = prop.initializer
+    if (!ts.isStringLiteral(value)) return null
+    return ACCESS_VALUES.has(value.text) ? value.text : null
+  }
+  return null
+}
+
 function serverFnName(stmt) {
   if (!ts.isVariableStatement(stmt)) return null
   const exported = stmt.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
@@ -62,7 +87,7 @@ function serverFnName(stmt) {
   for (const decl of stmt.declarationList.declarations) {
     const init = decl.initializer
     if (init && ts.isCallExpression(init) && ts.isIdentifier(init.expression) && init.expression.text === 'serverFn') {
-      return { name: decl.name.getText(), call: init }
+      return { name: decl.name.getText(), call: init, access: readAccess(init) }
     }
   }
   return null
@@ -385,6 +410,10 @@ for (const entry of fs.readdirSync(SERVICES)) {
   // 같은 파일의 헬퍼 + services 안에서 가져온 헬퍼. 이름이 겹치면 import 가 이긴다(자바스크립트 규칙).
   const scope = new Map([...localFunctions(source), ...importedFunctions(source, file, moduleCache)])
   for (const fn of fns) {
+    if (!fn.access) {
+      report(file, 'missing-access',
+        `'${fn.name}' 에 접근 선언이 없다 — serverFn(handler, { access: 'public'|'member'|'owner'|'custom' })`)
+    }
     checkBody(fn.call, bindings, file)
     collectGrants(fn.call, bindings, file, serviceGrants)
     collectSecretNames(fn.call, bindings, file, usedSecrets)
@@ -394,7 +423,10 @@ for (const entry of fs.readdirSync(SERVICES)) {
       collectSecretNames(body, bindings, file, usedSecrets)
     }
   }
-  extracted.push({ module: entry.replace(/\.ts$/, ''), names: fns.map((f) => f.name) })
+  extracted.push({
+    module: entry.replace(/\.ts$/, ''),
+    fns: fns.map((f) => ({ name: f.name, access: f.access })),
+  })
 }
 
 if (violations.length > 0) {
@@ -456,19 +488,34 @@ if (secretNames.length > 0) {
   console.log('  등록 확인: baas secret list')
 }
 
-for (const { module, names } of extracted) {
-  const routes = names
-    .map((n) => `route.post('/${module}/${n}', (c) => runServerFn(${n}, c))`)
+for (const { module, fns } of extracted) {
+  const routes = fns
+    .map(({ name, access }) =>
+      `route.post('/${module}/${name}', (c) => runServerFn(${name}, c, '${access}'))`)
     .join('\n')
   fs.writeFileSync(
     path.join(ROUTES_OUT, `${module}.ts`),
     `// 생성 파일 — src/services/${module}.ts 에서 추출됨. 직접 고치지 마라.\n` +
       `import { route } from '../platform/app.ts'\n` +
       `import { runServerFn } from '../platform/serverfn-adapter.ts'\n` +
-      `import { ${names.join(', ')} } from '../../../src/services/${module}.ts'\n\n` +
+      `import { ${fns.map((f) => f.name).join(', ')} } from '../../../src/services/${module}.ts'\n\n` +
       `${routes}\n`,
   )
 }
+// ── 접근 선언 매니페스트 ──────────────────────────────────────────────────
+// "비로그인이 부를 수 있는 게 뭐지?" 에 파일 하나로 답하기 위한 것이다. 9개 파일을 읽어야
+// 알 수 있으면 아무도 안 읽는다.
+const accessManifest = Object.fromEntries(
+  extracted.flatMap(({ module, fns }) =>
+    fns.map(({ name, access }) => [`${module}.${name}`, access])),
+)
+fs.writeFileSync(ACCESS_OUT, `${JSON.stringify(accessManifest, null, 2)}\n`)
+const publicFns = Object.entries(accessManifest).filter(([, a]) => a === 'public').map(([k]) => k)
+console.log(
+  `접근 선언 ${Object.keys(accessManifest).length}개 → backend/serverfn-access.json` +
+    (publicFns.length ? ` (비로그인 호출 가능: ${publicFns.join(', ')})` : ''),
+)
+
 // ── 클라이언트 스텁 ────────────────────────────────────────────────────────
 // 계약 이중화를 없애는 지점이다. 프론트가 응답 모양을 **다시 선언하지 않고** 원본에서
 // 가져오므로, 서버가 필드명을 바꾸면 프론트 타입체크가 깨진다. 지금은 런타임 타입가드로
@@ -476,10 +523,10 @@ for (const { module, names } of extracted) {
 //
 // `Parameters`/`ReturnType` 으로 원본 시그니처에서 유도한다 — 타입을 손으로 다시 쓰면
 // 그 순간 이중화가 되살아난다.
-for (const { module, names } of extracted) {
-  const body = names
+for (const { module, fns } of extracted) {
+  const body = fns
     .map(
-      (n) =>
+      ({ name: n }) =>
         `export const ${n} = (input: Parameters<typeof impl.${n}>[0]): Promise<Awaited<ReturnType<typeof impl.${n}>>> =>\n` +
         `  call('/${module}/${n}', input)`,
     )
@@ -525,9 +572,9 @@ fs.writeFileSync(
     `}\n`,
 )
 
-console.log(`추출 완료 — ${extracted.length}개 모듈 / ${extracted.reduce((a, e) => a + e.names.length, 0)}개 함수`)
+console.log(`추출 완료 — ${extracted.length}개 모듈 / ${extracted.reduce((a, e) => a + e.fns.length, 0)}개 함수`)
 for (const e of extracted) {
-  console.log(`  backend/src/routes/${e.module}.ts   ←  ${e.names.join(', ')}`)
+  console.log(`  backend/src/routes/${e.module}.ts   ←  ${e.fns.map((f) => f.name).join(', ')}`)
   console.log(`  src/services/${e.module}.client.ts  ←  타입 유도 스텁`)
 }
 console.log(`  backend/src/index.ts                ←  라우트 ${extracted.length}개 등록`)
