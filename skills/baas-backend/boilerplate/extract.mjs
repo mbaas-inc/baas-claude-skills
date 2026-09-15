@@ -20,6 +20,8 @@ import ts from 'typescript'
 import fs from 'node:fs'
 import path from 'node:path'
 
+import { convergeSchema, readSchema, renderTypes } from './schema.mjs'
+
 // 프로젝트 루트에서 실행한다: `node backend/extract.mjs`
 // 추출기가 backend/ 안에 살아도 대상은 **앱의** src/services 다.
 const ROOT = process.cwd()
@@ -29,6 +31,8 @@ const ROUTES_OUT = path.join(ROOT, 'backend', 'src', 'routes')
 const GRANTS_OUT = path.join(ROOT, 'backend', 'service-grants.json')
 // 코드가 참조하는 시크릿 이름. 배포 전에 "코드는 부르는데 저장소에 없다" 를 잡는 근거다.
 const SECRETS_OUT = path.join(ROOT, 'backend', 'secret-names.json')
+// 선언에서 만든 레코드 타입. 손으로 쓰던 두 번째 출처를 없앤다.
+const TYPES_OUT = path.join(ROOT, 'src', 'types', 'collections.ts')
 
 /** 서버로 넘어가면 안 되는 import. 확장자와 경로 관례 둘 다 본다. */
 const CLIENT_ONLY = [/\.(tsx|jsx|css)$/, /\/components\//, /^react$/, /^react-dom/]
@@ -288,6 +292,24 @@ if (violations.length > 0) {
   console.error('경계 위반 — 빌드를 중단한다\n')
   for (const v of violations) console.error(`  ✗ ${v.file}  [${v.kind}]  ${v.detail}`)
   console.error(`\n총 ${violations.length}건`)
+  process.exit(1)
+}
+
+// ── 컬렉션 스키마 ─────────────────────────────────────────────────────────
+// 타입 생성이 먼저다 — 순수 계산이라 네트워크 없이 되고, 수렴이 실패해도 타입은 맞아 있다.
+// 수렴은 그다음이다. 여기서 막히면 그 위에 코드를 쌓는 것이 의미가 없다.
+let schema = null
+try {
+  schema = readSchema(ROOT)
+  if (schema) {
+    fs.mkdirSync(path.dirname(TYPES_OUT), { recursive: true })
+    fs.writeFileSync(TYPES_OUT, renderTypes(schema))
+    console.log(`레코드 타입 생성 ${schema.collections.length}개 → src/types/collections.ts`)
+    console.log(convergeSchema(ROOT))
+  }
+} catch (error) {
+  // 스택 트레이스를 그대로 던지면 무엇을 고쳐야 하는지 묻힌다. 경계 위반과 같은 형식으로 낸다.
+  console.error(`스키마 수렴 실패 — 빌드를 중단한다\n\n${error.message}`)
   process.exit(1)
 }
 
