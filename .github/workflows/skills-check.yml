@@ -59,6 +59,8 @@ jobs:
         run: npx tsc -p ../checks/tsconfig.json
       # 골격 갱신은 남의 프로젝트 파일을 덮어쓴다. 애매할 때 덮는 쪽으로 기울면 사용자 코드가
       # 조용히 사라지므로, 충돌·계약 게이트가 정말 멈추는지를 종료 코드로 고정한다.
-      - name: 업그레이드 판정 검사
+      # 검사들은 한 번에 돌린다 — 파일을 하나 더할 때마다 워크플로를 고치게 하면, 언젠가
+      # 고치지 않은 검사가 생기고 그건 없는 것과 같다.
+      - name: 골격 검사 일괄
         working-directory: skills/baas-backend
-        run: node --test checks/upgrade.test.mjs
+        run: node --test checks/*.test.mjs
