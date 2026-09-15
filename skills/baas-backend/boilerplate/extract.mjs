@@ -27,12 +27,17 @@ const SERVICES = path.join(ROOT, 'src', 'services')
 const ROUTES_OUT = path.join(ROOT, 'backend', 'src', 'routes')
 // 유도된 service grant 매니페스트. 프로비저닝이 이걸 읽어 컬렉션 정책에 반영한다.
 const GRANTS_OUT = path.join(ROOT, 'backend', 'service-grants.json')
+// 코드가 참조하는 시크릿 이름. 배포 전에 "코드는 부르는데 저장소에 없다" 를 잡는 근거다.
+const SECRETS_OUT = path.join(ROOT, 'backend', 'secret-names.json')
 
 /** 서버로 넘어가면 안 되는 import. 확장자와 경로 관례 둘 다 본다. */
 const CLIENT_ONLY = [/\.(tsx|jsx|css)$/, /\/components\//, /^react$/, /^react-dom/]
 
 // 컬렉션명 -> 필요한 grant 연산 집합. 빌드가 유도해 매니페스트로 낸다(사람이 선언하지 않는다).
 const serviceGrants = new Map()
+
+// sdk.secrets.get() 에 넘어간 이름 집합. grant 와 같은 이유로 코드에서 유도한다.
+const usedSecrets = new Set()
 /** 시크릿으로 볼 이름. 실제 도입 시에는 팀 규칙으로 확정해야 한다. */
 const SECRET_HINT = /SECRET|API_KEY|TOKEN|PASSWORD|CREDENTIAL/i
 
@@ -117,6 +122,42 @@ const ITEM_OP_TO_GRANT = { create: 'create', update: 'update', delete: 'delete' 
  * **풀 수 없으면 빌드를 세운다** — 볼 수 없는 이름에는 최소권한을 줄 수 없다.
  * (client-import·closure-capture·secret-reference 와 같은 kill 게이트 계열이다.)
  */
+/**
+ * serverFn 본문의 `sdk.secrets.get('<이름>')` 에서 쓰는 시크릿 이름을 모은다.
+ *
+ * grant 유도와 같은 이유로 **사람이 선언하지 않는다** — 어느 시크릿을 쓰는지는 이 빌드가
+ * 알고 있다. 매니페스트로 내면 배포 전에 "코드가 참조하는데 저장소에 없는" 상태를 잡을 수
+ * 있고, 런타임 404 가 되기 전에 드러난다.
+ *
+ * 이름을 정적으로 풀 수 없으면 세운다. 볼 수 없는 이름은 존재 검사도 최소권한도 못 한다.
+ */
+function collectSecretNames(call, bindings, file, secrets) {
+  const walk = (node) => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === 'get' &&
+      ts.isPropertyAccessExpression(node.expression.expression) &&
+      node.expression.expression.name.text === 'secrets'
+    ) {
+      const arg = node.arguments[0]
+      let name
+      if (arg && ts.isStringLiteral(arg)) name = arg.text
+      else if (arg && ts.isIdentifier(arg)) name = bindings.get(arg.text)?.literal
+      if (name) secrets.add(name)
+      else {
+        report(
+          file,
+          'dynamic-secret',
+          "sdk.secrets.get() 의 이름을 정적으로 풀 수 없다 — 문자열 리터럴이나 모듈 스코프 const 로 쓴다",
+        )
+      }
+    }
+    ts.forEachChild(node, walk)
+  }
+  ts.forEachChild(call, walk)
+}
+
 function collectGrants(call, bindings, file, grants) {
   const walk = (node) => {
     if (
@@ -238,6 +279,7 @@ for (const entry of fs.readdirSync(SERVICES)) {
   for (const fn of fns) {
     checkBody(fn.call, bindings, file)
     collectGrants(fn.call, bindings, file, serviceGrants)
+    collectSecretNames(fn.call, bindings, file, usedSecrets)
   }
   extracted.push({ module: entry.replace(/\.ts$/, ''), names: fns.map((f) => f.name) })
 }
@@ -272,6 +314,16 @@ console.log(
     ? 'service grant 없음 — 백엔드가 컬렉션을 만지지 않는다'
     : `service grant 유도 ${grantCount}개 컬렉션 → backend/service-grants.json`,
 )
+
+// ── 시크릿 이름 매니페스트 ────────────────────────────────────────────────
+// 값은 여기 없다. **이름만** 낸다 — 배포 도구가 `baas secret list` 와 대조해 빠진 것을
+// 배포 전에 알리기 위한 것이다. 없으면 런타임 404 로 뒤늦게 드러난다.
+const secretNames = [...usedSecrets].sort()
+fs.writeFileSync(SECRETS_OUT, `${JSON.stringify({ secrets: secretNames }, null, 2)}\n`)
+if (secretNames.length > 0) {
+  console.log(`시크릿 참조 ${secretNames.length}개 → backend/secret-names.json (${secretNames.join(', ')})`)
+  console.log('  등록 확인: baas secret list')
+}
 
 for (const { module, names } of extracted) {
   const routes = names
