@@ -7,21 +7,22 @@
  * 추출기를 걷어내면 손으로 쓴 라우트로 돌아갈 뿐 런타임은 건드릴 게 없다.
  */
 import type { Context } from 'hono'
+import type { ServerCtx as BaseServerCtx } from '../serverFn'
 import type { RequestContext } from './envelope'
 import type { Sdk } from './sdk'
 
-/** 저작 쪽 `serverFn` 이 넘겨받는 컨텍스트. 프론트에는 이 타입이 노출되지 않는다.
+/** 저작 쪽 `serverFn` 이 넘겨받는 컨텍스트 — **필드 목록은 `../serverFn` 이 정본이다.**
  *
- * envelope의 `RequestContext` 를 그대로 주지 않고 필요한 것만 추린다 — `token` 은 SDK 가
- * 이미 장착했고, 사용자 코드가 만지면 안 된다. 그래서 **여기 없는 필드는 serverFn 에서
- * 보이지 않는다**: envelope에 값을 추가할 때 이 타입과 아래 전달을 함께 고쳐야 한다.
+ * 여기서는 `sdk` 만 좁힌다(저작 시점에는 `unknown`, 런타임에는 `Sdk`). 필드를 손으로 다시
+ * 적지 않는 이유: 예전에 그렇게 두 곳에 복제했다가 `isProjectOwner` 추가 때 한쪽만 고쳐져
+ * 저작 시점 타입 에러가 났다. 이제 필드는 한 곳에서만 는다.
+ *
+ * envelope의 `RequestContext` 를 그대로 주지 않고 필요한 것만 추리는 원칙은 그대로다 —
+ * `token` 은 SDK 가 이미 장착했고 사용자 코드가 만지면 안 된다. **여기(정본 타입)에 없는
+ * 필드는 serverFn 에서 보이지 않는다**: envelope 에 값을 추가하고 노출하려면 `../serverFn`
+ * 의 `ServerCtx` 에 넣고, 아래 전달도 함께 채운다(빠뜨리면 이 파일에서 타입 에러가 난다).
  */
-export type ServerCtx = {
-  accountId: string | null
-  /** 이 요청자가 프로젝트 소유자인가. 관리자 판정의 1순위 — `envelope.ts` 주석 참조. */
-  isProjectOwner: boolean
-  sdk: Sdk
-}
+export type ServerCtx = BaseServerCtx<Sdk>
 
 type Handler<I, O> = (input: I, ctx: ServerCtx) => Promise<O>
 
