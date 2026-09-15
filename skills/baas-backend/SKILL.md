@@ -108,11 +108,48 @@ serverFn 이 **하나도 없으면 `backend/` 를 만들지 않는다** — 서�
 
 ### 컬렉션 접근 권한은 선언하지 않는다 — 빌드가 유도한다
 
-프로젝트의 **동적 컬렉션은 전부 이 역할이 만든다** — 스키마·필드·접근을 `baas` CLI 로 직접
-선언한다. CLI 는 `baas` 이름으로 PATH 에 있고 자격 증명도 환경에 이미 들어 있다 — **경로를
-찾지 마라**(`which`·`find /` 로 파일시스템을 훑는 것은 순수 낭비다). 문법은 이 문서가 아니라
-`baas <group> <action> --help` 가 권위이므로 필요할 때 거기서 읽는다. 규칙과 그 규칙이 지배하는 데이터는 소유자가 하나여야 한다. 스펙만 적어 다른
-역할에 넘기면 산문으로 번역됐다가 재현되면서 어긋난다.
+프로젝트의 **동적 컬렉션은 전부 이 역할이 만든다.** 규칙과 그 규칙이 지배하는 데이터는
+소유자가 하나여야 한다 — 스펙만 적어 다른 역할에 넘기면 산문으로 번역됐다가 재현되면서 어긋난다.
+
+**스키마는 `backend/schema.json` 에 선언한다.** 명령을 하나씩 치지 마라. 추출기가 이 파일을
+읽어 서버를 맞추고 TS 타입을 만든다.
+
+```jsonc
+// backend/schema.json — 스키마의 유일한 정본
+{
+  "collections": [
+    { "name": "menu_stock", "label": "메뉴 재고",
+      "access": {"read":"service","create":"service","update":"service","delete":"service"},
+      "fields": [
+        {"name":"menu_item_id","type":"string","required":true,"unique":true},
+        {"name":"remaining","type":"number","required":true}
+      ] }
+  ]
+}
+```
+
+`node backend/extract.mjs` 한 번이 둘을 한다:
+
+| 산출 | 쓰임 |
+|---|---|
+| 서버 컬렉션 | 선언과 현재를 비교해 **차이만** 적용(멱등). 빠뜨림이 원리적으로 불가능해진다 |
+| `src/types/collections.ts` | 레코드 타입. **`interface MenuStockRecord` 를 손으로 쓰지 마라** |
+
+**레코드 타입을 직접 선언하지 마라.** 손으로 쓰면 스키마와 두 출처가 되고 조용히 갈라진다
+(실측: `status` 를 `'confirmed' | 'cancelled'` 로 썼는데 스키마에는 `picked_up` 이 있었다).
+
+```ts
+import type { MenuStock } from '../types/collections'
+const rec = await sdk.dyncol.get<MenuStock>('menu_stock', id)
+```
+
+**추가만 한다.** 선언에서 필드를 빼도 지워지지 않는다 — 빠뜨린 것과 지우려는 것을 구별할 수
+없기 때문이다. 타입 변경·`required`/`unique` 승격은 기존 레코드에 영향을 주므로 **멈추고**
+무엇을 하면 되는지 알려 준다. 그 지시를 따르거나 선언을 현재에 맞춰라.
+
+CLI 는 `baas` 이름으로 PATH 에 있고 자격 증명도 환경에 이미 들어 있다 — **경로를 찾지 마라**
+(`which`·`find /` 로 파일시스템을 훑는 것은 순수 낭비다). 문법은 이 문서가 아니라
+`baas <group> <action> --help` 가 권위이므로 필요할 때 거기서 읽는다.
 
 **규칙이 없는 컬렉션도 이 역할 소유다.** 스키마만 만들고 `serverFn` 을 하나도 쓰지 않는 것도
 완결된 결과다 — 정당화하려고 없는 규칙을 지어내지 말고, 강제할 게 없다고 되돌려 보내지도 마라.
