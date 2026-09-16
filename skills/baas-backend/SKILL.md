@@ -602,7 +602,10 @@ const slug = document.querySelector('meta[name="baas-project-id"]')?.getAttribut
 const consoleHost = location.hostname.endsWith('.aiapp.help') ? 'baas.aiapp.help' : 'baas.jjunmo.link'
 
 // 라벨은 **지금 로그인 상태에 따라 갈린다.** 회원으로 로그인한 사람에게 "로그인" 이라고
-// 하면 이미 한 일을 다시 하라는 말이 된다. 상태는 네이티브 훅에서 온다.
+// 하면 이미 한 일을 다시 하라는 말이 된다.
+//
+// `AuthProvider` 가 앱 루트에서 1회 조회해 둔 전역 상태를 **읽기만** 한다 — 여기서 인증을
+// 다시 확인하지 않는다. 앱 루트에 Provider 가 없으면 그것부터 두라(네이티브 표면 참조).
 const { isLoggedIn } = BaasSDK.useAuth()
 const label = isLoggedIn ? '사장님 계정으로 전환' : '사장님 계정으로 로그인'
 
@@ -611,6 +614,10 @@ const label = isLoggedIn ? '사장님 계정으로 전환' : '사장님 계정�
 </a>
 // 로그인 → 플랫폼이 소유권을 확인하고 **이 화면으로 되돌려보낸다**(커스텀 도메인 포함)
 ```
+
+`RequireAuth` 로 감싸는 화면이 아니다 — 그 가드는 「로그인 안 했으면 못 들어감」이고,
+여기는 **로그인한 회원도 소유자가 아니면 못 보는** 화면이라 축이 다르다. 관리자 화면은
+누구나 열 수 있게 두고 **내용을 소유자에게만** 보인다(서버가 403 으로 강제한다).
 
 **「관리자 콘솔로 이동」 같은 문구는 쓰지 마라.** 목적지가 다른 콘솔이 아니라 **지금 보고 있는
 이 화면**이다 — 인증만 하고 제자리로 돌아온다. 떠나는 것처럼 적으면 사용자가 하던 일을
