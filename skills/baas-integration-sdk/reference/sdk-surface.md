@@ -407,6 +407,14 @@ await submitResponse(surveyId, answers);   // 공개 제출
 - 결제창 닫힘/취소는 `code === "USER_CANCEL"` 에러 → 앱에서 무시(토스트 금지).
 - **결제 실행 버튼 라벨은 "결제하기"**(또는 "N원 결제하기") — 위젯이 카드·계좌이체·간편결제 등 **결제수단 선택**을
   제공하므로 **"카드로 결제하기" 같은 수단 한정 문구는 쓰지 말 것.** (위젯 = 다중 결제수단, 카드 전용 아님)
+- **⚠ `customerKey` 를 직접 만들지 마라 — 넘기지 않으면 SDK가 익명 키를 쓴다.**
+  토스 제약은 `^[a-zA-Z0-9\-_=.@]{2,50}$` 이고, 회원 id 가 UUID 면 `user-{id}-{Date.now()}` 같은
+  조합이 **55자로 길이를 넘겨** `"고객키는 … 2자 이상 50자 이하여야 합니다"` 로 위젯이 뜨지 않는다
+  (실측 2026-09-17). 그리고 `Date.now()` 를 섞으면 **결제할 때마다 다른 구매자**가 되어 카드 등록·
+  재사용이 성립하지 않는다 — `customerKey` 는 같은 구매자에게 **안정적**이어야 하는 값이지
+  주문마다 유일해야 하는 값이 아니다(그건 `order_no` 고 SDK가 만든다).
+  회원별로 분리해야 할 이유가 생기면 **UUID 에서 하이픈을 뺀 32자**처럼 길이와 안정성을 함께
+  만족시키는 값을 쓰고, 그럴 이유가 없으면 **그냥 넘기지 마라.**
 - **위젯 생명주기 주의**: 동의 토글 등으로 위젯 컨테이너(셀렉터 div)를 **조건부 언마운트**하면, 동의 해제 시
   위젯 상태(ready 플래그·handle ref)를 **리셋**해 재동의 시 `beginWidgetCheckout` 를 다시 호출·재렌더해야 한다.
   리셋 없이 "이미 렌더함" 가드만 두면 **재체크 시 빈 컨테이너로 위젯이 안 뜬다**(실측 결함). 컨테이너를 항상
@@ -547,7 +555,8 @@ await r.beginWidgetCheckout(targetId, { reserved_at: selected.slot, form_data: {
 // 카드예약(위젯 인라인 — store 와 동일 계약). 앱에 결제수단/약관 컨테이너 div 2개를 두고:
 const w = await r.beginWidgetCheckout(targetId, {
   reserved_at, form_data,
-  methodsSelector: "#toss-payment-methods", agreementSelector: "#toss-agreement", customerKey });
+  methodsSelector: "#toss-payment-methods", agreementSelector: "#toss-agreement" });
+//   customerKey 는 넘기지 않는다 — 넘기면 SDK 의 익명 키 폴백이 걸리지 않는다(아래 규칙).
 //   → 진입 시 SDK가 start(예약 PENDING+세션 생성, 슬롯 선점) → 위젯 렌더(w.amount, w.orderId). 결제 버튼 클릭 시(동기):
 await w.requestPayment({
   successUrl: `${location.origin}/reservation-payment-success`,
@@ -582,7 +591,8 @@ await fetchProduct(productId);            // ⚠️ state 없음 — 반환값�
 // 결제(위젯 인라인) — 앱 화면 안에서 결제(뒤로가기 유지, 위젯이 결제수단 선택 제공). 동의 완료 후:
 // 1) 앱에 결제수단/약관 컨테이너 div 2개를 두고, 준비 시작:
 const w = await s.beginWidgetCheckout({ productId, quantity: qty,
-  methodsSelector: "#toss-payment-methods", agreementSelector: "#toss-agreement", customerKey });
+  methodsSelector: "#toss-payment-methods", agreementSelector: "#toss-agreement" });
+//   customerKey 는 넘기지 않는다 — 넘기면 SDK 의 익명 키 폴백이 걸리지 않는다(아래 규칙).
 //    → 진입 시 SDK가 start(주문 PENDING+세션 생성) → 위젯 렌더(w.amount, w.orderNo).
 // 2) 결제 버튼 클릭 시(동기 — 앞에 await 금지, 현대카드 등 팝업 제스처 유지):
 await w.requestPayment({ successUrl: `${location.origin}/checkout-success`,
