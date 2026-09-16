@@ -12,7 +12,7 @@ import { buildSdk, SdkError, type Sdk } from './sdk.ts'
 type Vars = { ctx: RequestContext; sdk: Sdk }
 type Bindings = { ctx: RequestContext; sdk: Sdk }
 
-/** 에이전트가 라우트를 등록하는 대상. `c.var.ctx` / `c.var.sdk` 로 플랫폼 자원에 접근한다. */
+/** 추출기가 만든 라우트 파일이 등록하는 대상. 에이전트는 이걸 직접 쓰지 않는다 — `serverFn` 으로 쓰면 빌드가 여기에 붙인다. */
 export const route = new Hono<{ Variables: Vars; Bindings: Bindings }>()
 
 // 어댑터는 컨텍스트를 `fetch(request, env)` 의 env 로 넘긴다(요청마다 값이 다르므로).
@@ -33,10 +33,26 @@ route.use('*', async (c, next) => {
  * (실측: `throw new SdkError('중복입니다', 409)` → `{status:500, body:"Internal Server Error"}`).
  * 예외를 여기서 받아야 dyncol 의 409(중복·정원)가 500 으로 뭉개지지 않는다.
  */
+/** `status` 를 든 오류는 전부 그 코드로 내보낸다.
+ *
+ * `instanceof SdkError` 만 보면 **앱 트리가 낸 실패가 전부 500 으로 뭉개진다** — 그쪽은
+ * 백엔드 트리를 임포트할 수 없어 `SdkError` 를 만들 수 없기 때문이다(`serverFn.ts` 의
+ * `ServerFnError` 참조). 그래서 클래스가 아니라 **모양**으로 알아본다. */
+function statusOf(err: unknown): number | undefined {
+  // **아는 두 모양만** 신뢰한다. `status` 를 가진 아무 오류나 통과시키면 라이브러리 내부
+  // 메시지가 최종 사용자에게 그대로 나간다 — 상태코드를 보존하려다 정보를 흘리는 셈이다.
+  const known = err instanceof SdkError || (err as { name?: unknown } | null)?.name === 'ServerFnError'
+  if (!known) return undefined
+  const s = (err as { status?: unknown }).status
+  return typeof s === 'number' && s >= 400 && s <= 599 ? s : undefined
+}
+
 route.onError((err, c) => {
-  if (err instanceof SdkError) {
-    return new Response(JSON.stringify({ error: err.message, code: err.errorCode }), {
-      status: err.status,
+  const status = statusOf(err)
+  if (status !== undefined) {
+    const e = err as { message?: string; errorCode?: string }
+    return new Response(JSON.stringify({ error: e.message, code: e.errorCode }), {
+      status,
       headers: { 'content-type': 'application/json' },
     })
   }
@@ -88,8 +104,10 @@ export async function handleInvoke(envelope: InvokeEnvelope): Promise<InvokeResu
   } catch (e) {
     // 라우트 예외는 `route.onError` 가 이미 처리했다 — 여기 오는 것은 그 바깥의 실패
     // (envelope 로 Request 를 만들지 못했거나 본문을 읽지 못한 경우)뿐이다.
-    if (e instanceof SdkError) {
-      return toResult(e.status, { error: e.message, code: e.errorCode })
+    const st = statusOf(e)
+    if (st !== undefined) {
+      const err = e as { message?: string; errorCode?: string }
+      return toResult(st, { error: err.message, code: err.errorCode })
     }
     console.error('[unhandled]', { requestId: context.requestId, error: String(e) })
     return toResult(500, { error: '서버 오류가 발생했습니다.' })

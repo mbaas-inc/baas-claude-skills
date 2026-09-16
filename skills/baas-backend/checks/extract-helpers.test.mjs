@@ -56,7 +56,7 @@ async function readSetting(sdk: any) { return sdk.dyncol.get('settings', 'main')
 export const board = serverFn<undefined, { ok: boolean }>(async (_i, ctx) => {
   await readSetting(ctx.sdk as any)
   return { ok: true }
-}, { access: 'custom' })`,
+}, { access: 'member' })`,
   })
   assert.equal(r.status, 0, r.out)
   assert.deepEqual(r.grants.settings, { read: ['service'] })
@@ -71,7 +71,7 @@ test('services 안에서 import 한 헬퍼를 따라간다', () => {
 export const board = serverFn<undefined, { ok: boolean }>(async (_i, ctx) => {
   await loadAdmins(ctx.sdk as any)
   return { ok: true }
-}, { access: 'custom' })`,
+}, { access: 'member' })`,
   })
   assert.equal(r.status, 0, r.out)
   assert.deepEqual(r.grants.admin_accounts, { read: ['service'] })
@@ -87,7 +87,7 @@ test('헬퍼 안의 시크릿 이름도 유도한다', () => {
 export const run = serverFn<undefined, { ok: boolean }>(async (_i, ctx) => {
   await callErp(ctx.sdk as any)
   return { ok: true }
-}, { access: 'custom' })`,
+}, { access: 'member' })`,
   })
   assert.equal(r.status, 0, r.out)
   assert.deepEqual(r.secrets.secrets, ['ERP_API_KEY'])
@@ -101,7 +101,7 @@ async function outer(sdk: any) { return inner(sdk) }
 export const act = serverFn<undefined, { ok: boolean }>(async (_i, ctx) => {
   await outer(ctx.sdk as any)
   return { ok: true }
-}, { access: 'custom' })`,
+}, { access: 'member' })`,
   })
   assert.equal(r.status, 0, r.out)
   assert.deepEqual(r.grants.audit_log, { create: ['service'] })
@@ -116,7 +116,7 @@ async function b(sdk: any): Promise<unknown> { return a(sdk) }
 export const act = serverFn<undefined, { ok: boolean }>(async (_i, ctx) => {
   await a(ctx.sdk as any)
   return { ok: true }
-}, { access: 'custom' })`,
+}, { access: 'member' })`,
   })
   assert.equal(r.status, 0, r.out)
   assert.deepEqual(r.grants.x, { read: ['service'] })
@@ -127,10 +127,10 @@ test('여러 serverFn 이 같은 헬퍼를 써도 한 번만 센다', () => {
     '_shared.ts': `export async function touch(sdk: any) { return sdk.dyncol.get('shared', '1') }`,
     'a.ts': SERVER_FN + `import { touch } from './_shared'
 export const one = serverFn<undefined, { ok: boolean }>(async (_i, ctx) => {
-  await touch(ctx.sdk as any); return { ok: true } }, { access: 'custom' })`,
+  await touch(ctx.sdk as any); return { ok: true } }, { access: 'member' })`,
     'b.ts': SERVER_FN + `import { touch } from './_shared'
 export const two = serverFn<undefined, { ok: boolean }>(async (_i, ctx) => {
-  await touch(ctx.sdk as any); return { ok: true } }, { access: 'custom' })`,
+  await touch(ctx.sdk as any); return { ok: true } }, { access: 'member' })`,
   })
   assert.equal(r.status, 0, r.out)
   assert.deepEqual(r.grants.shared, { read: ['service'] })
@@ -144,7 +144,7 @@ async function pick(sdk: any, name: string) { return sdk.dyncol.get(name, '1') }
 export const act = serverFn<{ n: string }, { ok: boolean }>(async (input, ctx) => {
   await pick(ctx.sdk as any, input.n)
   return { ok: true }
-}, { access: 'custom' })`,
+}, { access: 'member' })`,
   })
   assert.notEqual(r.status, 0)
   assert.match(r.out, /dynamic-collection/)
@@ -158,7 +158,7 @@ export const act = serverFn<undefined, { ok: boolean }>(async (_i, ctx) => {
   if (!ctx.accountId) throw new SdkError('로그인이 필요합니다.', 401)
   await (ctx.sdk as any).dyncol.get('here', '1')
   return { ok: true }
-}, { access: 'custom' })`,
+}, { access: 'member' })`,
   })
   assert.equal(r.status, 0, r.out)
   assert.deepEqual(Object.keys(r.grants), ['here'])

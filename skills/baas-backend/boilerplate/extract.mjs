@@ -57,7 +57,7 @@ function report(file, kind, detail) {
 }
 
 /** 이 선언이 serverFn(...) 호출인가. `export const x = serverFn(...)` 형태만 인정한다. */
-const ACCESS_VALUES = new Set(['public', 'member', 'owner', 'custom'])
+const ACCESS_VALUES = new Set(['public', 'member', 'owner'])
 
 /**
  * `serverFn(handler, { access: 'member' })` 의 선언을 읽는다.
@@ -66,6 +66,40 @@ const ACCESS_VALUES = new Set(['public', 'member', 'owner', 'custom'])
  * 잊은 것」은 코드에서 똑같이 생겨 추론할 수 없으므로, **침묵을 허용하지 않는 것**이 유일한
  * 방법이다.
  */
+/** `serverFn(handler, { access, authorizes: true })` 의 두 번째 축을 읽는다. */
+function readAuthorizes(call) {
+  const opts = call.arguments[1]
+  if (!opts || !ts.isObjectLiteralExpression(opts)) return false
+  for (const prop of opts.properties) {
+    if (!ts.isPropertyAssignment(prop)) continue
+    const key = ts.isIdentifier(prop.name) || ts.isStringLiteral(prop.name) ? prop.name.text : null
+    if (key === 'authorizes') return prop.initializer.kind === ts.SyntaxKind.TrueKeyword
+  }
+  return false
+}
+
+/**
+ * 본문이 403 을 던지는가 — 「이 요청자는 자격이 없다」는 판정이 코드 안에 있다는 신호다.
+ *
+ * 선언만 보고는 「로그인 회원 아무나」와 구분할 수 없어서 감사도 리뷰도 통과해 버린다
+ * (2026-09-16 실측: 지점 담당자 전용 함수 2개가 `member` 로 선언돼 있었다).
+ */
+function throwsForbidden(node) {
+  let found = false
+  const walk = (n) => {
+    if (found) return
+    if (ts.isNewExpression(n) && ts.isIdentifier(n.expression) &&
+        (n.expression.text === 'ServerFnError' || n.expression.text === 'SdkError')) {
+      for (const arg of n.arguments ?? []) {
+        if (ts.isNumericLiteral(arg) && arg.text === '403') { found = true; return }
+      }
+    }
+    ts.forEachChild(n, walk)
+  }
+  ts.forEachChild(node, walk)
+  return found
+}
+
 function readAccess(call) {
   const opts = call.arguments[1]
   if (!opts || !ts.isObjectLiteralExpression(opts)) return null
@@ -87,7 +121,7 @@ function serverFnName(stmt) {
   for (const decl of stmt.declarationList.declarations) {
     const init = decl.initializer
     if (init && ts.isCallExpression(init) && ts.isIdentifier(init.expression) && init.expression.text === 'serverFn') {
-      return { name: decl.name.getText(), call: init, access: readAccess(init) }
+      return { name: decl.name.getText(), call: init, access: readAccess(init), authorizes: readAuthorizes(init) }
     }
   }
   return null
@@ -412,20 +446,31 @@ for (const entry of fs.readdirSync(SERVICES)) {
   for (const fn of fns) {
     if (!fn.access) {
       report(file, 'missing-access',
-        `'${fn.name}' 에 접근 선언이 없다 — serverFn(handler, { access: 'public'|'member'|'owner'|'custom' })`)
+        `'${fn.name}' 에 접근 선언이 없다 — serverFn(handler, { access: 'public'|'member'|'owner' })`)
     }
     checkBody(fn.call, bindings, file)
+    // 인가가 본문에 있으면 선언에도 있어야 한다. 없으면 `serverfn-access.json` 만 보고
+    // 「로그인 회원 아무나」로 읽히고, 그 상태로 감사·리뷰를 통과한다.
+    if (!fn.authorizes && throwsForbidden(fn.call)) {
+      report(file, 'authz-undeclared',
+        `'${fn.name}' 본문이 403 을 던진다 — 역할·범위를 판정하면 { access: '${fn.access ?? 'member'}', authorizes: true } 로 선언한다`)
+    }
     collectGrants(fn.call, bindings, file, serviceGrants)
     collectSecretNames(fn.call, bindings, file, usedSecrets)
     // serverFn 이 부르는 헬퍼도 같은 눈으로 본다 — 공통화했다고 grant 가 사라지면 안 된다.
     for (const body of reachableBodies(fn.call, scope)) {
       collectGrants(body, bindings, file, serviceGrants)
       collectSecretNames(body, bindings, file, usedSecrets)
+      // 인가를 공통 헬퍼로 뽑아도 선언 의무는 그대로다 — 공통화가 은폐가 되면 안 된다.
+      if (!fn.authorizes && throwsForbidden(body)) {
+        report(file, 'authz-undeclared',
+          `'${fn.name}' 이 부르는 헬퍼가 403 을 던진다 — { access: '${fn.access ?? 'member'}', authorizes: true } 로 선언한다`)
+      }
     }
   }
   extracted.push({
     module: entry.replace(/\.ts$/, ''),
-    fns: fns.map((f) => ({ name: f.name, access: f.access })),
+    fns: fns.map((f) => ({ name: f.name, access: f.access, authorizes: f.authorizes })),
   })
 }
 
@@ -507,10 +552,13 @@ for (const { module, fns } of extracted) {
 // 알 수 있으면 아무도 안 읽는다.
 const accessManifest = Object.fromEntries(
   extracted.flatMap(({ module, fns }) =>
-    fns.map(({ name, access }) => [`${module}.${name}`, access])),
+    fns.map(({ name, access, authorizes }) => [
+      `${module}.${name}`,
+      authorizes ? { access, authorizes: true } : { access },
+    ])),
 )
 fs.writeFileSync(ACCESS_OUT, `${JSON.stringify(accessManifest, null, 2)}\n`)
-const publicFns = Object.entries(accessManifest).filter(([, a]) => a === 'public').map(([k]) => k)
+const publicFns = Object.entries(accessManifest).filter(([, a]) => a.access === 'public').map(([k]) => k)
 console.log(
   `접근 선언 ${Object.keys(accessManifest).length}개 → backend/serverfn-access.json` +
     (publicFns.length ? ` (비로그인 호출 가능: ${publicFns.join(', ')})` : ''),
