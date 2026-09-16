@@ -22,6 +22,34 @@ type AnyEnvelope = (InvokeEnvelope | ScheduleEnvelope) & { scheduleName?: string
  * 그래서 여기서 **가장 먼저** 막고, 양쪽 버전을 메시지에 담는다. 어느 쪽을 올려야
  * 하는지 로그만 보고 알 수 있어야 한다.
  */
+/** 버전 질의 전용 경로. 릴리스 스모크가 "당신 계약 버전이 뭐요?" 를 묻는 데 쓴다. */
+const CONTRACT_PROBE_PATH = '/__contract'
+
+/**
+ * 버전 질의에 답한다 — **불일치가 아니다.**
+ *
+ * 스모크(`user_backend_deployer._smoke`)는 `contractVersion` 을 일부러 비워 보내
+ * 백엔드가 자기 버전을 말하게 한다. 이 질의를 아래 `contractMismatch` 가 처리하면
+ * 두 가지가 한 경로를 공유한다 — **질문**과 **진짜 배포 어긋남**. 그러면 릴리스마다
+ * ERROR 가 하나씩 쌓여 진짜 어긋남이 그 소음에 묻히고, 로그를 보는 사람은 코드를
+ * 역추적해야 정상인지 알 수 있다(실측 2026-09-16: 미리보기 기동 로그의 이 ERROR 를
+ * 결함으로 오인해 조사에 들어갔다).
+ *
+ * 질의는 전용 경로로 오므로 여기서 먼저 답한다. 그러면 `contractVersion` 이 비어 있는
+ * 채로 **실제 요청 경로**에 오는 것은 남김없이 진짜 어긋남이 되어, 아래 경고가 다시
+ * 신호가 된다.
+ */
+function contractProbe(envelope: AnyEnvelope) {
+  if ((envelope as { path?: unknown })?.path !== CONTRACT_PROBE_PATH) return null
+  return {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ contractVersion: ENVELOPE_CONTRACT_VERSION }),
+    // 스모크는 status 를 보지 않고 이 필드를 찾는다 — 중첩 body 까지 뒤지므로 양쪽에 둔다.
+    contractVersion: ENVELOPE_CONTRACT_VERSION,
+  }
+}
+
 function contractMismatch(envelope: AnyEnvelope) {
   const got = (envelope as { contractVersion?: unknown })?.contractVersion
   if (got === ENVELOPE_CONTRACT_VERSION) return null
@@ -44,6 +72,9 @@ function contractMismatch(envelope: AnyEnvelope) {
 }
 
 async function dispatch(envelope: AnyEnvelope) {
+  // 질의를 불일치보다 **먼저** 본다. 순서가 바뀌면 질의가 다시 ERROR 로 샌다.
+  const probe = contractProbe(envelope)
+  if (probe) return probe
   const mismatch = contractMismatch(envelope)
   if (mismatch) return mismatch
   return 'scheduleName' in envelope && envelope.scheduleName
