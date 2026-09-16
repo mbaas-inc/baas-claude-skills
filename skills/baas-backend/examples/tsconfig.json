@@ -1,10 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES2023",
-    "lib": ["ES2023"],
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "types": ["node"],
+    "types": [],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noEmit": true,
@@ -13,5 +12,7 @@
     "verbatimModuleSyntax": true,
     "baseUrl": "."
   },
-  "include": ["*.ts"]
+  "include": [
+    "*.ts"
+  ]
 }
