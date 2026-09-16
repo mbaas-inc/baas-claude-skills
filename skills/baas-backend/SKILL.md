@@ -294,7 +294,7 @@ export async function requireOperator(sdk: OperatorSdk, ctx: ServerCtx) {
 (선착순 상한, 자격 검증, 클라이언트가 알면 안 되는 산식)이고, 결제·로그인 자체는 프론트가
 네이티브 훅으로 호출한다.
 
-**데이터 접근은 반드시 `c.var.sdk` 를 지난다.** `fetch` 직접 호출 금지.
+**데이터 접근은 반드시 `ctx.sdk` 를 지난다.** `fetch` 직접 호출 금지.
 
 ## 플랫폼 프리미티브 — 성질과 실측 근거
 
@@ -649,7 +649,7 @@ if (!input.id) throw new ServerFnError('id 가 필요합니다', 400)
 | 입력이 틀렸다 | `throw new ServerFnError(메시지, 400)` |
 | 로그인이 필요하다 | **아무것도 쓰지 않는다** — `access: 'member'` 가 핸들러 앞에서 막는다 |
 | 소유자만 | **아무것도 쓰지 않는다** — `access: 'owner'` |
-| 역할·범위 판정 | `access: 'custom'` + 본문에서 `throw new ServerFnError(…, 403)` |
+| 역할·범위 판정 | `authorizes: true` + 본문에서 `throw new ServerFnError(…, 403)` |
 | 경합·중복 | `throw new ServerFnError(…, 409)` |
 
 플랫폼이 던진 실패는 **클래스가 아니라 모양으로** 판정한다 — 앱 트리는 `SdkError` 로

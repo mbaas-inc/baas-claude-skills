@@ -12,7 +12,7 @@ import { buildSdk, SdkError, type Sdk } from './sdk.ts'
 type Vars = { ctx: RequestContext; sdk: Sdk }
 type Bindings = { ctx: RequestContext; sdk: Sdk }
 
-/** 에이전트가 라우트를 등록하는 대상. `c.var.ctx` / `c.var.sdk` 로 플랫폼 자원에 접근한다. */
+/** 추출기가 만든 라우트 파일이 등록하는 대상. 에이전트는 이걸 직접 쓰지 않는다 — `serverFn` 으로 쓰면 빌드가 여기에 붙인다. */
 export const route = new Hono<{ Variables: Vars; Bindings: Bindings }>()
 
 // 어댑터는 컨텍스트를 `fetch(request, env)` 의 env 로 넘긴다(요청마다 값이 다르므로).
@@ -39,7 +39,11 @@ route.use('*', async (c, next) => {
  * 백엔드 트리를 임포트할 수 없어 `SdkError` 를 만들 수 없기 때문이다(`serverFn.ts` 의
  * `ServerFnError` 참조). 그래서 클래스가 아니라 **모양**으로 알아본다. */
 function statusOf(err: unknown): number | undefined {
-  const s = (err as { status?: unknown } | null)?.status
+  // **아는 두 모양만** 신뢰한다. `status` 를 가진 아무 오류나 통과시키면 라이브러리 내부
+  // 메시지가 최종 사용자에게 그대로 나간다 — 상태코드를 보존하려다 정보를 흘리는 셈이다.
+  const known = err instanceof SdkError || (err as { name?: unknown } | null)?.name === 'ServerFnError'
+  if (!known) return undefined
+  const s = (err as { status?: unknown }).status
   return typeof s === 'number' && s >= 400 && s <= 599 ? s : undefined
 }
 

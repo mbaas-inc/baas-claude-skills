@@ -446,7 +446,7 @@ for (const entry of fs.readdirSync(SERVICES)) {
   for (const fn of fns) {
     if (!fn.access) {
       report(file, 'missing-access',
-        `'${fn.name}' 에 접근 선언이 없다 — serverFn(handler, { access: 'public'|'member'|'owner'|'custom' })`)
+        `'${fn.name}' 에 접근 선언이 없다 — serverFn(handler, { access: 'public'|'member'|'owner' })`)
     }
     checkBody(fn.call, bindings, file)
     // 인가가 본문에 있으면 선언에도 있어야 한다. 없으면 `serverfn-access.json` 만 보고
