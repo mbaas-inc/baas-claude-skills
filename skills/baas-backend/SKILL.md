@@ -68,29 +68,36 @@ export const claim = serverFn<ClaimInput, ClaimResult>(async (input, ctx) => {
 
 ### 접근 선언은 **필수**다
 
-두 번째 인자의 `access` 를 빠뜨리면 빌드가 선다. 「공개로 열어 둔 것」과 「검사를 잊은 것」은
-코드에서 똑같이 생겨 도구도 사람도 구별할 수 없기 때문이다.
+두 가지를 따로 선언한다. **섞지 않는 이유**: 「매니저만 보는 목록」은 *로그인이 필요하면서
+동시에 역할 판정이 필요한* 함수다. 하나의 값으로 고르게 하면 둘 중 하나를 포기하게 된다.
+
+**① `access` — 플랫폼이 강제하는 것**
 
 | 값 | 플랫폼이 하는 일 | 언제 |
 |---|---|---|
 | `public` | 아무것도 막지 않는다 | 비로그인도 봐야 하는 목록·조회 |
-| `member` | 비로그인이면 **401** | 로그인한 회원의 행동 |
+| `member` | 비로그인이면 **401** | 로그인이 필요한 모든 것 |
 | `owner`  | 소유자가 아니면 **403** | 프로젝트 소유자 전용 |
-| `custom` | 막지 않는다 — **네 코드가 판정한다** | 역할·계층·자원 범위가 있는 경우 |
 
-플랫폼은 **자기가 이미 아는 사실**(로그인 여부·소유자 여부)까지만 집행한다. 매니저·직원 같은
-역할은 플랫폼이 모르므로 `custom` 안에서 네가 정한다 — 그래야 어떤 권한 체계든 표현된다.
+**② `authorizes` — 본문이 추가로 판정한다는 사실**
+
+역할·계층·자원 범위는 플랫폼이 모른다. 그 판정을 코드가 하면 `authorizes: true` 로 **드러낸다.**
 
 ```ts
-// 매니저 계층이 있는 경우 — 판정은 전부 네 코드다
-export const completeOrder = serverFn<Input, Result>(async (input, ctx) => {
-  await requirePermission(ctx, ctx.sdk, 'orders.complete')
+// 매니저 계층 — 로그인은 플랫폼이 막고, 지점 판정은 코드가 한다
+export const listBranchReservations = serverFn<Input, Result>(async (input, ctx) => {
+  const staff = await findStaff(ctx)                       // 역할 조회
+  if (!staff) throw new ServerFnError('권한이 없습니다', 403)
   ...
-}, { access: 'custom' })
+}, { access: 'member', authorizes: true })
 ```
 
-`member`·`owner` 를 쓰면 **본문에서 그 검사를 다시 쓰지 마라.** 어댑터가 핸들러 앞에서 이미
-막는다 — 본문에서 하면 그 앞에 쓴 코드가 이미 돌아 중간 효과가 남는다.
+**본문이 403 을 던지는데 `authorizes` 가 없으면 빌드가 선다.** 헬퍼로 뽑아도 마찬가지다 —
+공통화가 은폐가 되면 안 된다. 선언만 보고는 「로그인 회원 아무나」와 구분할 수 없고, 그
+상태로 감사도 리뷰도 통과해 버린다(2026-09-16 실측: 지점 담당자 전용 함수 2개가 그랬다).
+
+`access` 의 검사는 **핸들러 앞**에서 끝난다. `member`·`owner` 를 쓰면 본문에서 그 검사를
+다시 쓰지 마라 — 본문에서 하면 그 앞에 쓴 코드가 이미 돌아 중간 효과가 남는다.
 
 추출기가 `backend/serverfn-access.json` 으로 전체 표면을 낸다. *"비로그인이 부를 수 있는 게
 뭐지?"* 를 파일 하나로 답하기 위한 것이다.

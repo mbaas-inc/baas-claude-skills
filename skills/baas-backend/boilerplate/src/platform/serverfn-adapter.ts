@@ -36,7 +36,7 @@ type Handler<I, O> = (input: I, ctx: ServerCtx) => Promise<O>
  * 선언한 접근 수준을 **실제로 막는다**. lint 가 아니라 게이트다.
  *
  * 플랫폼은 자기가 아는 사실까지만 집행한다 — 로그인 여부와 소유자 여부. 역할·계층은 모르므로
- * `custom` 으로 넘기고 사용자 코드가 판정한다.
+ * 사용자 코드가 판정하고, 그 사실은 `authorizes: true` 로 선언된다(집행과 선언은 독립이다).
  *
  * 검사가 **핸들러 앞**에 있는 것이 요점이다. 본문 안에서 하면 그 앞에 쓴 코드가 이미 돌아
  * 중간 효과가 남는다.
@@ -46,7 +46,7 @@ function enforceAccess(access: ServerFnAccess, ctx: RequestContext): void {
     throw new SdkError('로그인이 필요합니다.', 401)
   }
   if (access === 'owner' && ctx.isProjectOwner !== true) {
-    // 위임 운영자는 여기서 통과하지 않는다 — 그건 프로젝트가 정하는 것이라 `custom` 이다.
+    // 위임 운영자는 여기서 통과하지 않는다 — 그건 프로젝트가 정하는 것이라 본문의 일이다.
     throw new SdkError('프로젝트 소유자만 접근할 수 있습니다.', 403)
   }
 }

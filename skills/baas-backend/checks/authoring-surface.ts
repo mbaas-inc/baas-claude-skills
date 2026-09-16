@@ -28,13 +28,23 @@ export const readsEveryContextField = serverFn<{ q: string }, { status: string }
     return { status: accountId ? 'ok' : 'anon' }
   },
   // 접근 선언은 필수다 — 빠뜨리면 여기서 타입 에러가 난다(생성 코드도 마찬가지).
-  { access: 'custom' },
+  // 두 번째 축: 본문이 역할을 판정하면 그 사실도 선언한다.
+  { access: 'member', authorizes: true },
 )
 
-/** 네 값이 모두 받아들여지는지 고정한다 — 하나라도 빠지면 생성 코드가 표현을 잃는다. */
+/** 세 값이 모두 받아들여지는지 고정한다 — 하나라도 빠지면 생성 코드가 표현을 잃는다. */
 export const publicFn = serverFn<undefined, null>(async () => null, { access: 'public' })
 export const memberFn = serverFn<undefined, null>(async () => null, { access: 'member' })
 export const ownerFn = serverFn<undefined, null>(async () => null, { access: 'owner' })
+
+/**
+ * **집행과 인가가 독립임을 고정한다.** 예전에는 `access: 'custom'` 하나로 눌러 담아
+ * 「로그인 강제」와 「역할 판정」 중 하나를 포기해야 했다(2026-09-16).
+ */
+export const managerFn = serverFn<undefined, null>(async (_i, ctx) => {
+  if (!ctx.accountId) throw new ServerFnError('권한이 없습니다', 403)
+  return null
+}, { access: 'member', authorizes: true })
 
 /** 어댑터가 좁히는 형태(`ServerCtx<Sdk>`)가 성립하는지도 함께 고정한다. */
 type NarrowedIsAssignable = ServerCtx<{ dyncol: unknown }> extends ServerCtx ? true : never

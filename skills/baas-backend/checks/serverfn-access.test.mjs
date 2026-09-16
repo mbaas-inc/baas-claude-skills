@@ -58,17 +58,23 @@ test('선언이 없으면 빌드가 선다', () => {
   assert.match(r.out, /forgotten/)
 })
 
-test('네 값을 모두 받는다', () => {
+test('세 값을 모두 받는다', () => {
   const r = extract({
-    'shop.ts': mod(
-      fn('menu', 'public'), fn('order', 'member'),
-      fn('settle', 'owner'), fn('staffOnly', 'custom')),
+    'shop.ts': mod(fn('menu', 'public'), fn('order', 'member'), fn('settle', 'owner')),
   })
   assert.equal(r.status, 0, r.out)
   assert.deepEqual(r.manifest, {
-    'shop.menu': 'public', 'shop.order': 'member',
-    'shop.settle': 'owner', 'shop.staffOnly': 'custom',
+    'shop.menu': { access: 'public' },
+    'shop.order': { access: 'member' },
+    'shop.settle': { access: 'owner' },
   })
+})
+
+test("예전 'custom' 은 더 이상 받지 않는다", () => {
+  // 한 값에 두 축을 눌러 담으면 로그인 강제와 인가 선언 중 하나를 포기하게 된다.
+  const r = extract({ 'shop.ts': mod(fn('staffOnly', 'custom')) })
+  assert.notEqual(r.status, 0)
+  assert.match(r.out, /missing-access/)
 })
 
 test('모르는 값은 거부한다', () => {
