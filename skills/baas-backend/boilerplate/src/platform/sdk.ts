@@ -184,6 +184,37 @@ export interface ServiceAccountPage {
   offset: number
 }
 
+/** 예약 1건. 플랫폼 예약 기능이 돌려주는 모양 그대로다. */
+export interface ServiceReservation {
+  id: string
+  target_id: string
+  account_id: string
+  reserved_at: string
+  status: string
+  form_data?: Record<string, unknown>
+  admin_memo?: string | null
+  created_at: string
+}
+
+export interface ServiceReservationPage {
+  items: ServiceReservation[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface ReservationListOptions {
+  targetId?: string
+  status?: string
+  /** ISO 8601. 예약 일시 기준이다. */
+  dateFrom?: string
+  dateTo?: string
+  /** 예약자 이름·전화 등 */
+  search?: string
+  limit?: number
+  offset?: number
+}
+
 export interface AccountListOptions {
   /** 1~100. 기본 20. */
   limit?: number
@@ -485,7 +516,60 @@ function buildSdk(ctx: RequestContext) {
     },
   }
 
-  return { dyncol, account, secrets, ctx }
+  // 소유자 범위 네이티브 데이터(aiapp-service, E2E 2026-09-17).
+  //
+  // 예약·공지는 **회원 표면(브라우저 SDK)에 없다.** `useReservation` 은 `myBookings`
+  // 까지고, 공지·FAQ 는 조회만 열려 있다. 그래서 「소유자가 전체를 본다·관리한다」를
+  // 프로젝트가 만들 방법이 없었다 — 실측에서 상담 관리 화면이 이 이유로 만들어지지 못했다.
+  //
+  // **인가는 여기서 하지 않는다.** `account` 와 같다 — 플랫폼은 프로젝트 경계까지 보고,
+  // "이 요청자가 관리자인가" 는 serverFn 이 `access: 'owner'` 와 `ctx.isProjectOwner` 로
+  // 먼저 판정한 뒤 이 표면을 부른다. 그 판정 없이 부르면 **전 회원이 전 예약을 본다.**
+  const reservation = {
+    /** 이 프로젝트 예약 한 페이지. 소유자 콘솔과 같은 질의를 쓴다. */
+    list: (opts: ReservationListOptions = {}) => {
+      const q = new URLSearchParams()
+      if (opts.targetId) q.set('target_id', opts.targetId)
+      if (opts.status) q.set('status', opts.status)
+      if (opts.dateFrom) q.set('date_from', opts.dateFrom)
+      if (opts.dateTo) q.set('date_to', opts.dateTo)
+      if (opts.search) q.set('search', opts.search)
+      if (opts.limit !== undefined) q.set('limit', String(opts.limit))
+      if (opts.offset !== undefined) q.set('offset', String(opts.offset))
+      const qs = q.toString()
+      return call<ServiceReservationPage>('GET', `/service/reservation/bookings${qs ? `?${qs}` : ''}`)
+    },
+
+    /** 예약 1건. 다른 프로젝트 예약이면 404 — id 를 알아도 경계를 넘지 못한다. */
+    get: (reservationId: string) =>
+      call<ServiceReservation>('GET', `/service/reservation/bookings/${reservationId}`),
+
+    /** 상태 변경(확정·취소 등). 허용 값은 플랫폼 예약 상태를 따른다. */
+    changeStatus: (reservationId: string, status: string) =>
+      call<ServiceReservation>(
+        'PATCH',
+        `/service/reservation/bookings/${reservationId}/status`,
+        { status },
+      ),
+  }
+
+  // 공지·FAQ 쓰기. **자유·후기 게시판은 여기 없다** — 그쪽은 회원이 자기 이름으로 쓰는
+  // 글이라 서버가 대신 쓰면 작성자가 거짓이 되고 "작성자 본인만 수정" 이 무너진다.
+  // 브라우저 SDK(`useBoard`)가 회원 자격으로 쓰는 것이 맞다.
+  //
+  // 작성자는 **프로젝트 소유자로 고정**된다. 주입 토큰에 `sub` 가 없어 호출한 회원을
+  // 모르는데, 작성자 id 를 본문으로 받으면 서버가 신원을 caller 말에 의존하게 된다.
+  const board = {
+    /** 공지사항·FAQ 글 작성. `type` 은 'NOTICE' 또는 'FAQ'. */
+    createPost: (type: 'NOTICE' | 'FAQ', post: Record<string, unknown>) =>
+      call<Record<string, unknown>>('POST', `/service/boards/${type}/posts`, post),
+
+    /** 공지사항·FAQ 글 수정. 다른 프로젝트 글이거나 자유·후기면 거부된다. */
+    updatePost: (postId: string, post: Record<string, unknown>) =>
+      call<Record<string, unknown>>('PUT', `/service/boards/posts/${postId}`, post),
+  }
+
+  return { dyncol, account, secrets, reservation, board, ctx }
 }
 
 export type Sdk = ReturnType<typeof buildSdk>
