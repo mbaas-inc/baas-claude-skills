@@ -588,6 +588,32 @@ async function requireOperator(sdk: Sdk, ctx: ServerCtx): Promise<Role> {
 - 관리자 화면에 "여기서 나가기" 를 둔다. 프로젝트 로그아웃은 플랫폼 세션을 지우지 않으므로,
   로그아웃했는데 관리자 화면이 열려 있는 상태가 생긴다 — 그때 돌아갈 곳이 있어야 한다
 
+#### 소유자가 **들어오는 길**을 반드시 만들어라
+
+`ctx.isProjectOwner` 가 false 일 때 "소유자 계정으로 로그인해 주세요" 라고만 적으면
+**할 수 없는 일을 지시하는 것**이다(실측 2026-09-17). 앱의 회원 로그인은 프로젝트 회원용이고
+소유자는 통합회원이라 그 폼으로는 **원리상 로그인되지 않는다.**
+
+소유자는 플랫폼 로그인으로 보낸 뒤 되돌아오게 한다.
+
+```tsx
+// 관리자 화면에서 ctx.isProjectOwner === false 일 때
+const slug = document.querySelector('meta[name="baas-project-id"]')?.getAttribute('content')
+const consoleHost = location.hostname.endsWith('.aiapp.help') ? 'baas.aiapp.help' : 'baas.jjunmo.link'
+
+<a href={`https://${consoleHost}/login?next=/account/enter-app/${slug}?to=/admin`}>
+  소유자 계정으로 로그인
+</a>
+// 로그인 → 플랫폼이 소유권을 확인하고 이 앱으로 되돌려보낸다(커스텀 도메인 포함)
+```
+
+- **앱이 자체 로그인 폼으로 통합회원을 인증하려 하지 마라.** 통합회원은 여러 프로젝트를
+  소유하므로, 앱 도메인이 그 자격을 쥐면 **다른 프로젝트까지 권한이 번진다.** 앱은 보내기만 한다
+- `next` 는 상대 경로다. 목적지 주소는 플랫폼이 DB 에서 만든다 — 앱이 정하면 오픈 리다이렉터가 된다
+- 돌아올 경로는 `?to=/admin/orders` 처럼 **앱 안의 상대 경로**다(기본 `/admin`)
+- 식별자는 **슬러그**(`p-cb604a27`)를 쓴다. UUID 는 브라우저에 없다 — 앱이 아는 것은
+  `<meta name="baas-project-id">` 뿐이고, 서버가 슬러그·UUID 를 모두 받는다
+
 #### 이름·연락처는 `sdk.account` 로 조회한다
 
 ```ts
