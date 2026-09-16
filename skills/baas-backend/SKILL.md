@@ -601,11 +601,20 @@ async function requireOperator(sdk: Sdk, ctx: ServerCtx): Promise<Role> {
 const slug = document.querySelector('meta[name="baas-project-id"]')?.getAttribute('content')
 const consoleHost = location.hostname.endsWith('.aiapp.help') ? 'baas.aiapp.help' : 'baas.jjunmo.link'
 
+// 라벨은 **지금 로그인 상태에 따라 갈린다.** 회원으로 로그인한 사람에게 "로그인" 이라고
+// 하면 이미 한 일을 다시 하라는 말이 된다. 상태는 네이티브 훅에서 온다.
+const { isLoggedIn } = BaasSDK.useAuth()
+const label = isLoggedIn ? '사장님 계정으로 전환' : '사장님 계정으로 로그인'
+
 <a href={`https://${consoleHost}/login?next=/account/enter-app/${slug}?to=/admin`}>
-  소유자 계정으로 로그인
+  {label}
 </a>
-// 로그인 → 플랫폼이 소유권을 확인하고 이 앱으로 되돌려보낸다(커스텀 도메인 포함)
+// 로그인 → 플랫폼이 소유권을 확인하고 **이 화면으로 되돌려보낸다**(커스텀 도메인 포함)
 ```
+
+**「관리자 콘솔로 이동」 같은 문구는 쓰지 마라.** 목적지가 다른 콘솔이 아니라 **지금 보고 있는
+이 화면**이다 — 인증만 하고 제자리로 돌아온다. 떠나는 것처럼 적으면 사용자가 하던 일을
+잃을까 봐 누르지 않는다.
 
 - **앱이 자체 로그인 폼으로 통합회원을 인증하려 하지 마라.** 통합회원은 여러 프로젝트를
   소유하므로, 앱 도메인이 그 자격을 쥐면 **다른 프로젝트까지 권한이 번진다.** 앱은 보내기만 한다
