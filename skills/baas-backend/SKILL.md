@@ -601,6 +601,33 @@ const page = await sdk.account.list({ limit: 50, keyword: '구매' })
 - 노출 범위는 플랫폼이 정한다 — `id`·`user_id`·`name`·`phone`·`status`·
   `is_profile_completed`·`created_at`. 자유형 `data`·과금·운영 메모는 오지 않는다
 
+### 소유자 화면 — 네이티브 데이터를 **전체 범위로** 읽는다
+
+「사장님만 보는 전체 목록·관리 화면」은 흔한 요구인데, 회원 표면으로는 만들 수 없다 —
+`useReservation` 은 `myBookings`(내 것)까지고, 공지·FAQ 는 조회만 열려 있다. 그래서
+**서버 SDK 에만** 전체 범위 표면이 있다.
+
+```ts
+// 예약 — 전체 목록·상세·상태 변경
+const page = await sdk.reservation.list({ dateFrom: '2026-09-01T00:00:00Z', limit: 50 })
+await sdk.reservation.changeStatus(id, 'CONFIRMED')
+
+// 공지·FAQ — 작성·수정 (자유·후기 게시판은 여기 없다)
+await sdk.board.createPost('NOTICE', { title: '점검 안내', content: '...' })
+```
+
+- **인가는 이 표면이 하지 않는다.** `access: 'owner'` 로 선언하고 `ctx.isProjectOwner` 로
+  먼저 판정한 뒤 불러라. 그 판정 없이 부르면 **전 회원이 전 예약을 본다**
+- 자유·후기 게시판이 `sdk.board` 에 **없는 것은 의도다.** 회원이 자기 이름으로 쓰는 글이라
+  서버가 대신 쓰면 작성자가 거짓이 되고 「작성자 본인만 수정」 이 무너진다. 그쪽은 브라우저
+  SDK(`useBoard`)가 회원 자격으로 쓴다
+- 공지·FAQ 의 작성자는 **프로젝트 소유자로 고정**된다. 주입 토큰에 회원 정보가 없고, 작성자를
+  본문으로 받으면 서버가 신원을 caller 말에 의존하게 되기 때문이다
+
+> 실측(2026-09-17): 이 표면이 없던 동안 「소유자만 보는 상담 신청 관리 화면」이 **만들어지지
+> 못했다.** 우회로 고려된 「신청 내역을 커스텀 컬렉션에 복사해 쌓기」는 시작 시점 이후만
+> 잡히고 실제 예약과 어긋나므로 **하지 마라.**
+
 ### 외부 API 자격 증명 — `sdk.secrets` 로 꺼낸다
 
 외부 서드파티(사내 ERP·재고 시스템·서드파티 SaaS)를 부르려면 키가 필요하다. **코드에 쓰지
