@@ -1,6 +1,6 @@
 ---
 name: baas-backend
-description: "(BaaS 백엔드) 프로젝트 전용 Node 백엔드의 서비스 로직을 작성하는 가이드. 프레임워크(envelope 파싱·주입 토큰·에러 직렬화·배포·라우트 생성)는 플랫폼이 담당하고, 서버 로직을 프론트와 같은 트리(`src/services/*.ts`)에 `serverFn` 으로 작성하면 빌드가 envelope 라우트와 타입 유도 fetch 스텁을 만든다. 제공: dyncol 데이터 접근(unique·원자 증감·조건부 갱신·트랜잭션·집계), 네이티브 기능 호출, 스케줄 핸들러. Use when: 구현 브리프의 '백엔드 연결 후보'가 채워졌을 때 — 여러 레코드의 합·개수로 판정되는 규칙(선착순·정원·재고), 상태 전이·승인 흐름, 아무도 접속하지 않아도 도는 처리(마감·정산·리마인더), 플랫폼이 감싸지 않은 외부 연동(사내 시스템·서드파티 API). 결제와 회원 인증은 네이티브가 담당하므로 여기서 다루지 않고, 프론트 코드·화면도 다루지 않는다."
+description: "(BaaS 백엔드) 프로젝트 전용 Node 백엔드의 서비스 로직을 작성하는 가이드. 프레임워크(envelope 파싱·주입 토큰·에러 직렬화·배포·라우트 생성)는 플랫폼이 담당하고, 서버 로직을 프론트와 같은 트리(`src/services/*.ts`)에 `serverFn` 으로 작성하면 빌드가 envelope 라우트와 타입 유도 fetch 스텁을 만든다. 제공: dyncol 데이터 접근(unique·원자 증감·조건부 갱신·트랜잭션·집계), 네이티브 기능 호출. Use when: 구현 브리프의 '백엔드 연결 후보'가 채워졌을 때 — 여러 레코드의 합·개수로 판정되는 규칙(선착순·정원·재고), 상태 전이·승인 흐름, 플랫폼이 감싸지 않은 외부 연동(사내 시스템·서드파티 API). 결제와 회원 인증은 네이티브가 담당하므로 여기서 다루지 않고, 프론트 코드·화면도 다루지 않는다."
 ---
 
 # BaaS 백엔드 스킬 (서비스 로직 작성 가이드)
@@ -231,11 +231,17 @@ await ctx.sdk.dyncol.list(`items_${kind}`)   // ✗ 빌드 실패 — 이름을 
 
 ```ts
 // src/services/_shared.ts
-export async function requireOperator(sdk: Sdk, ctx: ServerCtx) {
+import { ServerFnError } from './serverFn'
+import type { ServerCtx } from './serverFn'
+
+// 앱 트리는 `Sdk` 타입을 임포트할 수 없다 — 쓰는 만큼만 좁혀 선언한다.
+type OperatorSdk = { dyncol: { list: (c: string, o?: unknown) => Promise<{ items: unknown[] }> } }
+
+export async function requireOperator(sdk: OperatorSdk, ctx: ServerCtx) {
   if (ctx.isProjectOwner) return 'owner'
   const found = await sdk.dyncol.list('operators', { filter: { account_id: ctx.accountId }, limit: 1 })
   if (found.items.length) return 'delegate'          // ← operators:read 가 유도된다
-  throw new SdkError('운영자 권한이 필요합니다.', 403)
+  throw new ServerFnError('운영자 권한이 필요합니다.', 403)
 }
 ```
 
@@ -264,14 +270,16 @@ export async function requireOperator(sdk: Sdk, ctx: ServerCtx) {
 
 | 던진 것 | 응답 |
 |---|---|
-| `SdkError` | **원래 상태코드 보존** + `{ error: message, code: errorCode }` — dyncol 의 409(중복·정원)가 그대로 프론트에 도착한다 |
+| `ServerFnError` (앱 트리) | **실은 상태코드 보존** + `{ error: message }` |
+| `SdkError` (플랫폼이 던짐) | **원래 상태코드 보존** + `{ error, code }` — dyncol 의 409(중복·정원)가 그대로 프론트에 도착한다 |
 | 그 밖의 예외 | `500` + `{ error: '서버 오류가 발생했습니다.' }`, 원문은 `requestId` 와 함께 서버 로그로만 |
-| 정상 반환 | 라우트가 돌려준 상태코드와 JSON 그대로 |
-| 스케줄 — 등록되지 않은 이름 | `404`(조용히 넘기지 않는다) |
-| 스케줄 — 핸들러가 throw | `500`, 원문은 로그로만 |
+| 정상 반환 | `200` + 반환한 값 그대로 (핸들러는 상태코드를 고르지 않는다) |
+
+상태코드는 **클래스가 아니라 `status` 필드로** 판정한다 — 그래서 앱 트리가 만든
+`ServerFnError` 도 백엔드의 `SdkError` 와 똑같이 보존된다.
 
 그래서 **`try/catch` 로 409 를 500 으로 바꾸지 마라.** 경합은 결과이지 장애가 아니고,
-`SdkError` 를 그대로 통과시키면 프론트가 "이미 처리됨"과 "서버 장애"를 구분할 수 있다.
+그대로 통과시키면 프론트가 "이미 처리됨"과 "서버 장애"를 구분할 수 있다.
 사용자에게 보일 실패 사유는 예외가 아니라 **정상 응답의 필드**로 돌려주는 편이 낫다
 (`{ status: 'rejected', reason: 'capacity_full' }`).
 
@@ -416,7 +424,7 @@ SQL 로 치면 `UPDATE … WHERE remaining - 2 >= 0` 의 뒷부분이다.
 
 ```ts
 catch (e) {
-  const failed = e instanceof SdkError ? (e.detail?.failed as TxnFailure) : undefined
+  const failed = errorStatus(e) === 409 ? (errorDetail(e)?.failed as TxnFailure) : undefined
   if (failed?.label?.startsWith('stock:'))
     return { status: 'sold_out', menuItemId: failed.label.slice(6) }
   if (failed?.label === 'slot') return { status: 'slot_full' }
@@ -454,7 +462,7 @@ soft-delete 된 레코드는 `restore` 로 되살린다(인가는 `delete` 권�
 |---|---|---|
 | 목록 1회 | **100건** | 세거나 합치려면 `aggregate`(서버가 센다). 좁히려면 `filter`. 그래도 전량이 필요하면 `offset` + `sort`(커서는 없다) |
 | 응답 | **6MB** | 초과분은 presigned URL |
-| 기본 타임아웃 | **10초** | 대량 순회는 스케줄 핸들러로 |
+| 기본 타임아웃 | **10초** | 대량 순회는 페이지로 나눠 요청마다 조금씩 |
 | 인덱스 | containment(=) 만 GIN | 범위·부분일치·임의 정렬은 순차 스캔 — 대량 컬렉션에서 피한다 |
 
 ### 회원 정보 — 인증은 받아 쓰고, 인가는 네 일이다
@@ -470,7 +478,7 @@ const accountId = requireAccountId(ctx.accountId)   // 인증 결과를 받아 �
 
 // 인가 — 관리자 정의는 이 프로젝트가 정한다(별도 컬렉션, service 전용 접근)
 const admin = await sdk.dyncol.list('admins', { filter: { account_id: accountId }, limit: 1 })
-if (!admin.items.length) throw new SdkError('관리자만 접근할 수 있습니다.', 403)
+if (!admin.items.length) throw new ServerFnError('관리자만 접근할 수 있습니다.', 403)
 ```
 
 #### 첫 관리자는 `ctx.isProjectOwner` 로 정한다 — 선착순으로 만들지 마라
@@ -497,12 +505,11 @@ async function requireOperator(sdk: Sdk, ctx: ServerCtx): Promise<Role> {
     const found = await sdk.dyncol.list('operators', { filter: { account_id: accountId }, limit: 1 })
     if (found.items.length) return 'delegate'
   }
-  throw new SdkError('운영자 권한이 필요합니다.', 403)
+  throw new ServerFnError('운영자 권한이 필요합니다.', 403)
 }
 ```
 
 - **소유자만 할 수 있는 일**(운영자 임명·해제, 위험한 일괄 처리)은 `role === 'owner'` 로 가른다.
-- 스케줄(크론)에서는 항상 false 다 — 요청한 사람이 없다.
 - 이 값은 **데이터 접근을 넓히지 않는다.** dyncol 인가는 `service` grants 만 보므로, 소유자라고
   해서 코드가 부르지 않은 컬렉션이 열리지는 않는다.
 
@@ -599,41 +606,72 @@ baas secret list          # 이름·시각만 나온다. 값은 나오지 않는
 **프로젝트가 정의하는 값(등급·포인트처럼 네이티브에 없는 것)은 여전히 자기 컬렉션에 둔다.**
 복제하지 말라는 것은 **네이티브가 이미 들고 있는 신원·연락처**에 한한다.
 
-## 스케줄 핸들러 — 아무도 접속하지 않아도 도는 쪽
+## 스케줄 핸들러 — **아직 제공되지 않는다**
 
-```ts
-schedule('daily-close', async (sdk) => { ... })
-```
+마감·정산·리마인더처럼 아무도 접속하지 않아도 도는 처리는 **현재 쓸 수 없다.**
 
-- **`ctx.accountId === null`** 이고 **`ctx.isProjectOwner === false`** 다. 요청한 사람이
-  없으므로 소유자 스코프 조회도, 운영자 판정도 기대하지 마라 — 관리자 전용 처리가 필요하면
-  그 처리를 크론 핸들러 안에 직접 둔다.
-- **몇 번 실행돼도 결과가 같아야 한다**(멱등). 스케줄러는 재시도할 수 있다.
-  결과 레코드의 `unique` 필드가 확정 잠금 역할을 한다 — 409 를 받으면 **먼저 박힌 결과를
-  읽어 그대로 따른다**(자기 계산을 밀어붙이면 중복 확정과 같아진다).
-- 발송은 크레딧을 쓴다. 한 번에 처리할 건수를 **스스로 제한**하라 — 스케줄은 실패해도
-  아무도 즉시 알아채지 못하는 경로라 폭주가 특히 위험하다.
+런타임에는 스케줄 봉투를 받는 자리가 있지만, 배포된 백엔드를 **주기적으로 깨우는 트리거가
+구성되지 않았다**(Lambda 라 EventBridge 규칙이 따로 필요하고, 사용자 프로젝트마다 그것을
+만드는 경로가 아직 없다). 그래서 스케줄을 쓰면 **코드는 멀쩡한데 한 번도 실행되지 않는다** —
+가장 알아채기 어려운 실패다.
+
+**브리프에 「매일 마감」·「정기 발송」 같은 요구가 있으면 구현하지 말고 그 사실을 먼저
+알려라.** 지금 표현할 수 있는 대안은 둘이다.
+
+- **사람이 여는 화면에서 처리한다** — 소유자가 정산 화면을 열 때 집계한다(`access: 'owner'`).
+  대부분의 "마감"은 이걸로 충분하고, 누가 언제 눌렀는지도 남는다.
+- **요청이 들어올 때 함께 처리한다** — 다음 예약이 생길 때 지난 것을 정리하는 식.
 
 ## 응답 규약
 
-- 상태 코드로 말한다: 201 생성 / 409 경합·중복 / 400 입력 / 401 로그인 필요
-- 경합(409)은 **오류가 아니라 결과다.** 프론트가 "이미 처리됨"과 "서버 장애"를 구분할 수
-  있어야 한다 — `SdkError.status` 를 삼키지 마라.
+성공은 **값을 반환한다.** 어댑터가 그대로 200 으로 싣는다 — 핸들러에서 상태코드를 직접
+고르지 않는다.
+
+실패는 **던진다.** 앱 트리에서 상태코드를 실으려면 `serverFn.ts` 가 함께 내보내는
+`ServerFnError` 를 쓴다. (`platform/sdk.ts` 의 `SdkError` 는 백엔드 트리 전용이라
+`src/services/` 에서 임포트할 수 없다 — `ctx.sdk` 가 `unknown` 인 것과 같은 이유다.)
+
+```ts
+import { serverFn, ServerFnError, errorStatus, errorDetail } from './serverFn'
+
+if (!input.id) throw new ServerFnError('id 가 필요합니다', 400)
+```
+
+| 상황 | 쓰는 것 |
+|---|---|
+| 입력이 틀렸다 | `throw new ServerFnError(메시지, 400)` |
+| 로그인이 필요하다 | **아무것도 쓰지 않는다** — `access: 'member'` 가 핸들러 앞에서 막는다 |
+| 소유자만 | **아무것도 쓰지 않는다** — `access: 'owner'` |
+| 역할·범위 판정 | `access: 'custom'` + 본문에서 `throw new ServerFnError(…, 403)` |
+| 경합·중복 | `throw new ServerFnError(…, 409)` |
+
+플랫폼이 던진 실패는 **클래스가 아니라 모양으로** 판정한다 — 앱 트리는 `SdkError` 로
+`instanceof` 를 할 수 없다.
+
+```ts
+try { ... } catch (e) {
+  if (errorStatus(e) !== 409) throw e            // 409 는 오류가 아니라 결과다
+  const failed = errorDetail(e)?.failed          // 트랜잭션이 실은 구조화 정보
+}
+```
+
+- 경합(409)은 **오류가 아니라 결과다.** 삼키지 마라 — 프론트가 "이미 처리됨"과 "서버 장애"를
+  구분할 수 있어야 한다.
+- 사용자에게 보일 실패 사유는 예외 대신 **정상 응답의 필드**로 돌려주는 편이 나을 때가 많다
+  (`{ status: 'rejected', reason: 'capacity_full' }`).
 - 본문은 프론트가 바로 쓸 수 있는 형태로. 내부 필드명을 그대로 노출하지 않는다.
 
 ## 참조 구현 — `examples/`
 
-경합을 실제로 막은 코드다. 비슷한 요구를 만나면 **패턴을 여기서 확인하고** 자기 도메인에
-옮긴다. 그대로 복사하지는 마라 — 컬렉션 이름과 필드가 프로젝트마다 다르다.
-
-| 파일 | 무엇을 막았나 |
+| 파일 | 무엇을 막는가 |
 |---|---|
-| `examples/groupbuy.ts` | 동시 참여로 `joined` 집계가 유실·부풀는 것 · 마감 확정이 여러 번 실행되는 것 → unique 선점 + 원자 증가 반환값 판정 |
-| `examples/purchase.ts` | 같은 결재 단계의 동시 처리 · **판정과 실행 사이에 금액이 바뀌어 결재선이 무력화되는 것** → `order_step_key` unique + `if` 조건부 갱신에 `amount` 를 함께 넣는 낙관적 락 |
-| `examples/slot-booking.ts` | 동시 예약이 같은 마지막 자리를 통과하는 것 → `slot_account_key` unique 로 **예약을 먼저 만들고** 그 다음 정원을 올린다 (순서가 뒤바뀌면 초과된다) |
+| `examples/slot-booking.ts` | 동시 예약이 같은 마지막 자리를 통과하는 것 → 한 트랜잭션에 **정원 `guard` + `slot_account_key` unique** 를 함께 보낸다 (조회로 판정하면 뚫린다) |
 
-두 번째가 특히 볼 값어치가 있다. "권한 판정의 근거가 되는 값"이 판정 후에 바뀔 수 있으면
-조건부 갱신의 `if` 에 그 값을 넣어야 한다 — 이건 조회해서 검사하는 방식으로는 못 막는다.
+예제는 **CI 에서 타입체크된다**(`examples/tsconfig.json`). 저작 모델이 바뀌면 여기서 먼저
+깨지므로, 가이드가 실제로 컴파일되지 않는 코드를 보여주는 일이 다시 생기지 않는다 —
+2026-09-16 에 옛 모델(`route.post`)과 없는 API(`sdk.baas.sendSms`)가 그렇게 살아남아 있었다.
+
+임포트 경로만 프로젝트와 다르다(`../boilerplate/src/serverFn`). 프로젝트에서는 `./serverFn` 이다.
 
 ## 체크리스트 (작성 후 스스로 확인)
 
@@ -641,6 +679,5 @@ schedule('daily-close', async (sdk) => { ... })
 - [ ] 상태 전이·순번 진행에 `if` 를 붙였다
 - [ ] 집계 판정을 조회 결과로 하지 않았다 (원자 반환값 또는 `if`)
 - [ ] 보상이 필요한 경로에서 **되돌리는 순서**를 정했다 (카운터 먼저, 선점 레코드 나중)
-- [ ] 스케줄 핸들러가 멱등하다
 - [ ] 목록 조회에 커서·상한이 있다
 - [ ] `npx tsc --noEmit` 통과

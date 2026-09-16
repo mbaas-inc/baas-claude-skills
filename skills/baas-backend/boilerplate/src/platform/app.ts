@@ -33,10 +33,22 @@ route.use('*', async (c, next) => {
  * (실측: `throw new SdkError('중복입니다', 409)` → `{status:500, body:"Internal Server Error"}`).
  * 예외를 여기서 받아야 dyncol 의 409(중복·정원)가 500 으로 뭉개지지 않는다.
  */
+/** `status` 를 든 오류는 전부 그 코드로 내보낸다.
+ *
+ * `instanceof SdkError` 만 보면 **앱 트리가 낸 실패가 전부 500 으로 뭉개진다** — 그쪽은
+ * 백엔드 트리를 임포트할 수 없어 `SdkError` 를 만들 수 없기 때문이다(`serverFn.ts` 의
+ * `ServerFnError` 참조). 그래서 클래스가 아니라 **모양**으로 알아본다. */
+function statusOf(err: unknown): number | undefined {
+  const s = (err as { status?: unknown } | null)?.status
+  return typeof s === 'number' && s >= 400 && s <= 599 ? s : undefined
+}
+
 route.onError((err, c) => {
-  if (err instanceof SdkError) {
-    return new Response(JSON.stringify({ error: err.message, code: err.errorCode }), {
-      status: err.status,
+  const status = statusOf(err)
+  if (status !== undefined) {
+    const e = err as { message?: string; errorCode?: string }
+    return new Response(JSON.stringify({ error: e.message, code: e.errorCode }), {
+      status,
       headers: { 'content-type': 'application/json' },
     })
   }
@@ -88,8 +100,10 @@ export async function handleInvoke(envelope: InvokeEnvelope): Promise<InvokeResu
   } catch (e) {
     // 라우트 예외는 `route.onError` 가 이미 처리했다 — 여기 오는 것은 그 바깥의 실패
     // (envelope 로 Request 를 만들지 못했거나 본문을 읽지 못한 경우)뿐이다.
-    if (e instanceof SdkError) {
-      return toResult(e.status, { error: e.message, code: e.errorCode })
+    const st = statusOf(e)
+    if (st !== undefined) {
+      const err = e as { message?: string; errorCode?: string }
+      return toResult(st, { error: err.message, code: err.errorCode })
     }
     console.error('[unhandled]', { requestId: context.requestId, error: String(e) })
     return toResult(500, { error: '서버 오류가 발생했습니다.' })

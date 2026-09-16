@@ -61,3 +61,42 @@ export function serverFn<I, O>(
   void options
   return handler
 }
+
+/**
+ * 앱 트리에서 **실패에 상태코드를 실어 보내는 유일한 수단**.
+ *
+ * `src/services/*.ts` 는 백엔드 트리(`platform/sdk.ts`)를 임포트할 수 없다 — `ctx.sdk` 가
+ * `unknown` 인 것과 같은 이유다. 그래서 `SdkError` 를 쓸 수 없는데, 가이드는 오랫동안
+ * 그것을 쓰라고 적어 두었다(2026-09-16 발견). 이 클래스가 그 구멍을 메운다.
+ *
+ * 플랫폼은 `status` 를 가진 오류를 **구조적으로** 알아보고 그 코드를 보존한다.
+ */
+export class ServerFnError extends Error {
+  // 파라미터 프로퍼티를 쓰지 않는다 — `node --experimental-strip-types` 가 타입만 지우고
+  // 변환은 못 해서 로컬 기동이 죽는다(`platform/sdk.ts` 의 SdkError 와 같은 제약).
+  readonly status: number
+  readonly detail?: Record<string, unknown>
+
+  constructor(message: string, status = 400, detail?: Record<string, unknown>) {
+    super(message)
+    this.name = 'ServerFnError'
+    this.status = status
+    this.detail = detail
+  }
+}
+
+/**
+ * 플랫폼이 던진 오류의 상태코드를 읽는다. **409 는 오류가 아니라 결과다** — 경합·중복을
+ * 정상 분기로 다루려면 이 값을 봐야 하는데, 앱 트리는 `SdkError` 로 `instanceof` 를 할 수
+ * 없으므로 구조로 판정한다.
+ */
+export function errorStatus(e: unknown): number | undefined {
+  const s = (e as { status?: unknown } | null)?.status
+  return typeof s === 'number' ? s : undefined
+}
+
+/** 실패에 실려 온 구조화 정보(트랜잭션은 `{ failed }` 를 넣는다). 문구 파싱 대신 이것을 본다. */
+export function errorDetail(e: unknown): Record<string, unknown> | undefined {
+  const d = (e as { detail?: unknown } | null)?.detail
+  return d && typeof d === 'object' ? (d as Record<string, unknown>) : undefined
+}
