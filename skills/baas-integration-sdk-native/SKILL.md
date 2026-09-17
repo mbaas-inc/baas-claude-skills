@@ -21,7 +21,7 @@ BaaS 백엔드와 대화하는 transport·훅은 **런타임 CDN SDK**(`window.B
 
 **왜 나누는가**: SDK 스킬과 CLI 는 **버전 라인이 독립**이다. 스킬에 플래그를 박아두면 CLI 가 바뀔 때
 아무도 잡지 못해 조용히 낡는다(실측: 없는 명령을 안내하던 사례). 또한 역할 분리 환경에서 **CLI 실행은
-프로비저닝 담당(backend_operator) 소유**이고, 이 스킬을 읽는 UI/연동 구현자는 **CLI 변경 명령을 쓰지 않는다**.
+프로비저닝 담당(`baas` CLI) 소유**이고, 이 스킬을 읽는 UI/연동 구현자는 **CLI 변경 명령을 쓰지 않는다**.
 
 접근 정책·관계 패턴 같은 **의미론은 여기 남는다** — 그것이 무엇을 프로비저닝하고 어떤 데이터를 누가
 읽을 수 있는지 결정하기 때문이다(예: `read: public` 이면 비로그인도 조회 가능).
@@ -32,7 +32,7 @@ BaaS 백엔드와 대화하는 transport·훅은 **런타임 CDN SDK**(`window.B
 
 1. **`features.json`을 읽어** 요청에 맞는 기능 그룹을 파악한다(`account`·`recipient`·`inquiry`·`notice`·`board`·`survey`·`reservation`·`store`·`storage`).
 2. 해당 기능의 **`reference/sdk-surface.md`** 섹션을 읽어 SDK 훅/함수 시그니처·반환 타입·에러→UI 규약을 확인한다.
-3. **백엔드 리소스가 필요하면 UI보다 먼저 프로비저닝한다** — 실행은 `baas` CLI를 쓰는 프로비저닝 담당(에이전트 환경의 backend_operator 역할) 소관이다. 이 스킬은 **무엇이 필요한지**(리소스 종류·스키마·접근 정책)를 정의하고, **CLI 문법은 정의하지 않는다**(권위 = 설치된 `baas <group> <action> --help`). 확정된 이름/id를 UI 코드에 주입한다 — 기억으로 다시 타이핑하지 말 것.
+3. **백엔드 리소스가 필요하면 UI보다 먼저 프로비저닝한다** — 실행은 `baas` CLI를 쓰는 프로비저닝 담당 소관이다. 이 스킬은 **무엇이 필요한지**(리소스 종류·스키마)를 정의하고, **CLI 문법은 정의하지 않는다**(권위 = 설치된 `baas <group> <action> --help`). 확정된 이름/id를 UI 코드에 주입한다 — 기억으로 다시 타이핑하지 말 것.
 4. **`scaffold/wiring.md`의 배선 보일러플레이트를 그대로** index.html·앱 진입점에 포함한다(창작 금지 — SDK 로딩·host React 노출·init).
 5. SDK 훅으로 UI를 조립한다. UI/UX(레이아웃·상태·로딩·에러 표시)는 이 스킬의 원칙을 따라 생성한다.
 6. 생성 후 **`baas-manifest.json`을 기록**한다(아래 "버전 매니페스트").
@@ -58,10 +58,48 @@ SDK는 CDN에서 로드되고 앱의 React 인스턴스를 공유한다. 이 배
 **인증 상태는 앱 루트에서 1회만 조회한다. 화면마다 조회하지 않는다.**
 
 - 앱 루트를 `BaasSDK.AuthProvider`로 감싸고, 화면은 `BaasSDK.useAuth()`로 읽기만 한다.
-- 로그인 필수 화면은 `BaasSDK.RequireAuth`로 감싼다.
+- 로그인 필수 화면은 `BaasSDK.RequireAuth`로 감싼다. **단 소유자·관리자 화면은 예외다.**
+  프로젝트 소유자는 통합회원이라 이 프로젝트의 회원 조회에서 반드시 탈락하고 `isLoggedIn` 이
+  **항상 false** 다. 관리자 화면을 이 가드로 감싸면 소유자는 앱 자체 로그인 폼으로 튕기는데,
+  그 폼으로는 통합회원이 원리상 로그인되지 않아 **막다른 길**이 된다(실측 2026-09-17: 출시된
+  앱의 `/admin` 이 이 상태였다). 관리자 화면은 **누구나 열 수 있게 두고 서버가 403 으로**
+  가린다 — 소유자를 플랫폼 로그인으로 보내는 진입 화면은 `baas-backend` 스킬의
+  「소유자가 들어오는 길」을 따른다.
 - 로그인/로그아웃은 `useLogin()`/`useLogout()` — 성공 시 전역 상태가 자동 갱신된다(내부적으로 refetch/clear).
 - **비로그인 상태의 401은 에러가 아닌 정상 신호다.** 에러 UI·강제 리다이렉트 금지. `useAuth()`가 `{isLoggedIn:false}`로 알려준다.
 - 로그인 후 다른 API의 401은 세션 만료 → 재로그인 유도.
+
+## 관리자 화면은 **셸을 분리한다**
+
+소유자·운영자 화면(`/admin` 등)을 손님 화면과 같은 레이아웃 안에 넣지 마라. 라우트만 나누고
+헤더·푸터를 공유하면 관리 콘솔에 **손님용 네비게이션과 마케팅 CTA 가 그대로 남는다.**
+
+```tsx
+// ❌ 실측된 결과(2026-09-17 출시본): 관리자 화면 상단에 「로그인 / 회원가입」 버튼이 남았다
+<div>
+  <SiteHeader />                       {/* 소개·공지사항·FAQ·… + 로그인/회원가입 */}
+  <main><Routes>… <Route path="/admin" element={<Admin/>}/> …</Routes></main>
+  <SiteFooter />                       {/* 뉴스레터 구독 + 회사 정보 */}
+</div>
+
+// ✅ 셸을 갈라 놓는다
+<Routes>
+  <Route element={<SiteLayout/>}>  {/* 손님: 헤더·푸터 */}
+    <Route path="/" element={<Home/>}/>
+    …
+  </Route>
+  <Route element={<AdminLayout/>}>  {/* 운영: 최소 크롬 + 「사이트로 돌아가기」 */}
+    <Route path="/admin" element={<Admin/>}/>
+  </Route>
+</Routes>
+```
+
+**미관 문제가 아니다.** 소유자는 통합회원이라 그 프로젝트의 회원이 아니고, 관리 화면 본문은
+「사장님 계정으로 로그인」으로 안내하는데 **헤더는 회원가입을 권한다** — 소유자가 그 버튼을
+누르면 정확히 막다른 길로 돌아간다. 인증 설계를 레이아웃이 부분적으로 무효화한다.
+
+관리자 셸에 두는 것: 화면 제목, **누구 권한으로 열렸는지**, 그리고 「사이트로 돌아가기」.
+손님용 네비게이션·로그인/회원가입 버튼·뉴스레터·회사 정보 푸터는 두지 않는다.
 
 ## 데이터 저장 — 고정 기능을 범용 저장소로 전용하지 않는다
 
@@ -90,7 +128,7 @@ SDK는 CDN에서 로드되고 앱의 React 인스턴스를 공유한다. 이 배
 
 프로젝트 루트에 `baas-manifest.json`을 만든다 — 이후 업데이트 판단의 근거(LLM 없이 diff):
 ```json
-{ "skill": "baas-integration-sdk-native", "skill_version": "1.5.1-native", "sdk_channel": "v1", "features_used": ["account", "notice", "recipient", "board"] }
+{ "skill": "baas-integration-sdk-native", "skill_version": "1.5.2-native", "sdk_channel": "v1", "features_used": ["account", "notice", "recipient", "board"] }
 ```
 - `features_used`(그룹 키: `account`, `notice`(공지+FAQ), `recipient`, `inquiry`, `board`, `survey`, `reservation`, `store`, `payment`, `storage`)와 `skill_version`(=`features.json`의 `version`)은 **손으로 유지하지 않는다.**
 - **자동 동기화(권장·고정 배선)**: `scripts/sync-manifest.mjs` 가 `src/` 의 `BaasSDK.<name>` 사용을 스캔해 `features.json.hook_groups` 매핑으로 `features_used` 를 도출하고 `skill_version` 을 맞춘다. `package.json` 의 `prebuild` 에 물려 **build 마다 자동 갱신**, `validate` 엔 `--check`(불일치 시 실패)로 건다(배선: `scaffold/wiring.md` §4).

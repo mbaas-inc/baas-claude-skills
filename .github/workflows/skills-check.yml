@@ -8,6 +8,7 @@ on:
     paths:
       - "skills/baas-integration-sdk/**"
       - "skills/baas-integration-sdk-native/**"
+      - "skills/baas-backend/**"
       - "scripts/build-native-skill.mjs"
       - ".github/workflows/skills-check.yml"
   push:
@@ -15,6 +16,7 @@ on:
     paths:
       - "skills/baas-integration-sdk/**"
       - "skills/baas-integration-sdk-native/**"
+      - "skills/baas-backend/**"
       - "scripts/build-native-skill.mjs"
 
 jobs:
@@ -31,3 +33,38 @@ jobs:
           node-version: "22"
       - name: 파생 native 스킬이 정본과 일치하는지 검증
         run: node scripts/build-native-skill.mjs --check
+
+  # 골격은 프로젝트로 **복사**되고 이후 자동 갱신되지 않는다. 그래서 여기서 새는 타입 결함은
+  # 그 시점 이후 생성되는 모든 프로젝트에 박힌다 — 되돌릴 방법이 아직 없다.
+  backend-boilerplate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: skills/baas-backend/boilerplate
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # 레포 정책상 lock 파일을 추적하지 않는다(.gitignore) — `npm ci` 는 쓸 수 없다.
+      # SKILL.md §0 이 프로젝트에서 실행하는 것과 같은 명령이라 조건도 같아진다.
+      - run: npm install --no-audit --no-fund
+      - name: 골격 타입체크
+        run: npx tsc --noEmit
+      # 골격만 검사하면 **에이전트가 쓰는 자리**는 비어 있다. 실제로 그 틈으로
+      # `ctx.isProjectOwner` 가 새어 나갔다(2026-09-15) — 골격은 통과하는데 생성 코드가 깨졌다.
+      - name: 저작 표면 검사
+        run: npx tsc -p ../checks/tsconfig.json
+      # 예제도 같은 눈으로 본다. 가이드가 컴파일되지 않는 코드를 보여주면 에이전트는
+      # 그 API 가 있다고 믿고 쓰다가 조용히 포기한다(2026-09-16 `sdk.baas.sendSms`).
+      - name: 참조 구현 타입체크
+        run: npx tsc -p ../examples/tsconfig.json
+      # 골격 갱신은 남의 프로젝트 파일을 덮어쓴다. 애매할 때 덮는 쪽으로 기울면 사용자 코드가
+      # 조용히 사라지므로, 충돌·계약 게이트가 정말 멈추는지를 종료 코드로 고정한다.
+      # 검사들은 한 번에 돌린다 — 파일을 하나 더할 때마다 워크플로를 고치게 하면, 언젠가
+      # 고치지 않은 검사가 생기고 그건 없는 것과 같다.
+      - name: 골격 검사 일괄
+        working-directory: skills/baas-backend
+        run: node --test checks/*.test.mjs

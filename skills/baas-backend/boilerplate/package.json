@@ -1,0 +1,23 @@
+{
+  "name": "baas-backend-template",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "AI Studio 사용자 커스텀 백엔드 템플릿 (프로젝트별 Lambda)",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "LOCAL_SERVER=1 node --experimental-strip-types src/index.ts",
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "hono": "^4.6.14"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "esbuild": "^0.24.2",
+    "typescript": "^5.7.2"
+  }
+}

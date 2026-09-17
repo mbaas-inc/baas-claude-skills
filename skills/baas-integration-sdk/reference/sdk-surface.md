@@ -272,7 +272,9 @@ UX: 제출 성공 시 "접수되었습니다" 안내, 폼 초기화. 인증 불�
 
 ## 문의하기 (inquiry)
 
-비로그인 방문자가 이름·연락처(전화 **또는** 이메일)·내용을 남기는 "Contact us / 상담신청" 폼. 접수 여부·안내 문구·개인정보 동의 문구는 **서버(소유자 설정)가 내려준다** — 화면은 진입 시 `fetchConfig()` 로 읽어 분기하고, 문구를 코드에 박아 두지 않는다. 앱이 설정을 바꾸는 API 는 없다(백오피스 소관) — 준비 작업 0.
+비로그인 방문자가 이름·연락처(전화 **또는** 이메일)·내용을 남기는 "Contact us / 상담신청" 폼. 접수 여부·안내 문구·개인정보 동의 문구는 **서버(소유자 설정)가 내려준다** — 화면은 진입 시 `fetchConfig()` 로 읽어 분기하고, 문구를 코드에 박아 두지 않는다. 앱(SDK)이 설정을 바꾸는 API 는 없다 — 소유자 설정이라 프로비저닝 담당이 CLI 로 바꾼다.
+
+**준비 작업 — 알림이 어디로 가는지 먼저 확인하고 알린다.** 접수 알림은 소유자가 따로 정하지 않으면 **가입 계정 이메일**로 간다(설정을 조회하면 지금 주소와, 그게 직접 정한 것인지 계정에서 따온 것인지가 함께 내려온다). 문의 폼을 넣을 때 사용자에게 그 주소를 알리고, **바꾸겠다고 할 때만** 바꾼다 — 묻지 않고 넘어가면 사장님은 문의가 어디로 오는지도, 바꿀 수 있다는 것도 모른 채 남는다. 실행 문법은 `baas <group> <action> --help`.
 ```tsx
 const { config, fetchConfig, submit, loading, error } = BaasSDK.useInquiry();
 useEffect(() => { fetchConfig(); }, []);                     // config === 반환값 (아래 형태)
@@ -356,6 +358,23 @@ await removePost(postId);                          // 로그인 필수
 - **작성자 식별 필드는 `author_id`(계정 UUID) 이며 `fetchPost`(상세)에만 있다. `fetchPosts`(목록)
   응답에는 없다** — 목록에는 표시용 `author_name` 만 온다<!--collection:start-->(동적 컬렉션 레코드의 `account_id` 와 이름이
   다르니 혼동 주의)<!--collection:end-->.
+
+### 후기 게시판 — 별점은 **네이티브가 들고 있다**
+
+「이용 후기」·「리뷰」·「만족도」 요구는 **REVIEW 종류의 게시판**으로 만든다. 별점은 게시글의
+`rating`(1~5) 필드이며 **같은 `useBoard()` 훅을 그대로 쓴다.**
+
+```tsx
+await submitPost(REVIEW_BOARD_ID, { title, content, rating: 5 })   // 1~5
+posts.items.map(p => p.rating)                                     // 없으면 null
+```
+
+- `rating` 은 **REVIEW 게시판에서만** 의미가 있다. 다른 종류에 보내면 서버가 무시하고, 읽으면 null 이다
+- **별점 때문에 후기를 따로 만들지 마라.** 실측(2026-09-17): 네이티브 후기 게시판이 있는데도
+  후기를 커스텀 백엔드<!--collection:start--> + 동적 컬렉션<!--collection:end-->으로 새로
+  구현했다 — 그러면 댓글·신고·관리자 숨김·운영 콘솔을 전부 잃는다
+- 평균 별점·분포 같은 **집계**는 이 표면에 없다. 목록을 받아 화면에서 계산하거나, 글 수가 많아
+  집계가 무거워지면 그때 백엔드 규칙으로 옮긴다
   - 상세에서 본인 글 판정: `post.author_id === user.id` (`useAuth()` 의 `user`).
   - **"내가 쓴 글 목록" 화면은 식별자 기반 필터가 불가능**하다. 그 화면이 요구되면 사람에게 제약을
     보고한다 — `author_name` 비교는 동명이인을 구분하지 못하므로 권장하지 않는다.<!--collection:start-->
@@ -405,6 +424,14 @@ await submitResponse(surveyId, answers);   // 공개 제출
 - 결제창 닫힘/취소는 `code === "USER_CANCEL"` 에러 → 앱에서 무시(토스트 금지).
 - **결제 실행 버튼 라벨은 "결제하기"**(또는 "N원 결제하기") — 위젯이 카드·계좌이체·간편결제 등 **결제수단 선택**을
   제공하므로 **"카드로 결제하기" 같은 수단 한정 문구는 쓰지 말 것.** (위젯 = 다중 결제수단, 카드 전용 아님)
+- **⚠ `customerKey` 를 직접 만들지 마라 — 넘기지 않으면 SDK가 익명 키를 쓴다.**
+  토스 제약은 `^[a-zA-Z0-9\-_=.@]{2,50}$` 이고, 회원 id 가 UUID 면 `user-{id}-{Date.now()}` 같은
+  조합이 **55자로 길이를 넘겨** `"고객키는 … 2자 이상 50자 이하여야 합니다"` 로 위젯이 뜨지 않는다
+  (실측 2026-09-17). 그리고 `Date.now()` 를 섞으면 **결제할 때마다 다른 구매자**가 되어 카드 등록·
+  재사용이 성립하지 않는다 — `customerKey` 는 같은 구매자에게 **안정적**이어야 하는 값이지
+  주문마다 유일해야 하는 값이 아니다(그건 `order_no` 고 SDK가 만든다).
+  회원별로 분리해야 할 이유가 생기면 **UUID 에서 하이픈을 뺀 32자**처럼 길이와 안정성을 함께
+  만족시키는 값을 쓰고, 그럴 이유가 없으면 **그냥 넘기지 마라.**
 - **위젯 생명주기 주의**: 동의 토글 등으로 위젯 컨테이너(셀렉터 div)를 **조건부 언마운트**하면, 동의 해제 시
   위젯 상태(ready 플래그·handle ref)를 **리셋**해 재동의 시 `beginWidgetCheckout` 를 다시 호출·재렌더해야 한다.
   리셋 없이 "이미 렌더함" 가드만 두면 **재체크 시 빈 컨테이너로 위젯이 안 뜬다**(실측 결함). 컨테이너를 항상
@@ -545,7 +572,8 @@ await r.beginWidgetCheckout(targetId, { reserved_at: selected.slot, form_data: {
 // 카드예약(위젯 인라인 — store 와 동일 계약). 앱에 결제수단/약관 컨테이너 div 2개를 두고:
 const w = await r.beginWidgetCheckout(targetId, {
   reserved_at, form_data,
-  methodsSelector: "#toss-payment-methods", agreementSelector: "#toss-agreement", customerKey });
+  methodsSelector: "#toss-payment-methods", agreementSelector: "#toss-agreement" });
+//   customerKey 는 넘기지 않는다 — 넘기면 SDK 의 익명 키 폴백이 걸리지 않는다(아래 규칙).
 //   → 진입 시 SDK가 start(예약 PENDING+세션 생성, 슬롯 선점) → 위젯 렌더(w.amount, w.orderId). 결제 버튼 클릭 시(동기):
 await w.requestPayment({
   successUrl: `${location.origin}/reservation-payment-success`,
@@ -580,7 +608,8 @@ await fetchProduct(productId);            // ⚠️ state 없음 — 반환값�
 // 결제(위젯 인라인) — 앱 화면 안에서 결제(뒤로가기 유지, 위젯이 결제수단 선택 제공). 동의 완료 후:
 // 1) 앱에 결제수단/약관 컨테이너 div 2개를 두고, 준비 시작:
 const w = await s.beginWidgetCheckout({ productId, quantity: qty,
-  methodsSelector: "#toss-payment-methods", agreementSelector: "#toss-agreement", customerKey });
+  methodsSelector: "#toss-payment-methods", agreementSelector: "#toss-agreement" });
+//   customerKey 는 넘기지 않는다 — 넘기면 SDK 의 익명 키 폴백이 걸리지 않는다(아래 규칙).
 //    → 진입 시 SDK가 start(주문 PENDING+세션 생성) → 위젯 렌더(w.amount, w.orderNo).
 // 2) 결제 버튼 클릭 시(동기 — 앞에 await 금지, 현대카드 등 팝업 제스처 유지):
 await w.requestPayment({ successUrl: `${location.origin}/checkout-success`,
@@ -622,7 +651,7 @@ const { records, record, fields, loading, error,
         fetchRecords, fetchPublicRecords, fetchRecord, submitRecord, editRecord, removeRecord,
         restore, increment, aggregate, batch, transaction } = BaasSDK.useCollection();
 
-// 읽기 — 로그인 여부와 무관하게 같은 함수. 범위는 접근 정책(settings.access)이 서버에서 판정
+// 읽기 — 로그인 여부와 무관하게 같은 함수. 접근은 서버가 플랫폼 기본값으로 판정
 await fetchRecords("inventory", { limit: 20, offset: 0, sort: "-created_at",
                                   filter: { quantity: { lt: 5 }, category: { eq: "전자" } } });
 // records = { items, total_count, offset, limit }; item = { id, collection, data:{...}, account_id, created_at }
@@ -668,36 +697,27 @@ await transaction([
   { op: "create", collection: "history", data: { post_id: newId } },  // 부모 id 를 미리 정해 참조
 ]);
 ```
-- **접근 정책 (settings.access — CRUD 연산별 grants, 서버 강제)**: `{create, read, update, delete}`,
-  값 = **atom 또는 배열(OR 합집합)**. atom ∈ `public`(누구나) | `member`(로그인) | `owner`(레코드 작성자)
-  | `ref_owner:<field>`(그 레코드의 reference 필드가 가리키는 **부모 레코드의 작성자** — #626).
-  기본값 create:member/read:member/update:owner/delete:owner, create 는 public|member 만.
+- **접근은 플랫폼 기본값 하나뿐 (서버 강제)**: 규칙 없는 컬렉션은 **로그인한 회원이 컬렉션 전체를
+  조회**하고 **각 행은 만든 사람만 수정·삭제**한다. 연산별 권한을 설계하지 않는다 — 이 스킬에는
+  그럴 어휘가 없다. 기본과 다른 게 필요하면(호출자 구분, 조회 범위 축소, 비로그인 공개) 그건
+  규칙이고 serverFn 이 판정한다.
   - **읽기 함수는 하나다** — 목록은 `fetchRecords`, 단건은 `fetchRecord`. 로그인 여부로 함수를 고르지
-    않는다. 비로그인이면 `read:public` 범위, 로그인이면 회원 범위로 **서버가 정책을 보고 판정**한다.
+    않는다.
 
     | | 목록(다건) | 단건 |
     |---|---|---|
     | 로그인 무관 | `fetchRecords(name, {filter,sort})` | `fetchRecord(name, id)` |
 
     `fetchPublicRecords`·`BaasSDK.getPublicRecord` 는 **deprecated 별칭**이다(경로 통합으로 동작 동일).
-    기존 앱 호환용이라 신규 코드에서는 쓰지 않는다. 로그인 상태에서 별칭을 부르면 회원 범위로
-    판정되므로, `read: [public, owner]` 같은 혼합 정책에서 공개분만 보려면 `filter` 로 명시해야 한다.
-  - ⚠️ **정책이 거부하면(예: `read:member`/`owner` 인데 비로그인) `BaasError` throw가 아니라 `null` 을
-    resolve** 한다 → 반환값을 `res?.items ?? []`/null 로 가드. 쓰기·기타 작업은 실패 시
-    `BaasError`(.message) throw(상단 §성공/실패 규약) — 에러 **표시 방식**(토스트/모달/인라인)은 앱 UX 소관.
-  - `read:owner` → `fetchRecords`가 **본인 레코드만** 반환(개인 데이터).
-  - `read:["owner","ref_owner:post_id"]` → `fetchRecords`는 **내 레코드(owner)** ∪ **내가 주인인 부모
-    (post_id)에 달린 레코드(ref_owner)** 의 **합집합**을 반환한다. ⚠️ 응답은 **각 행이 어느 자격으로
-    매칭됐는지 표시하지 않는다** → 이 목록을 "받은 신청 관리 뷰"로 **그대로 렌더하면 안 된다**(내가 낸
-    신청까지 섞여 나옴). 관점으로 나눠 소비한다:
-    - `r.account_id === user.id` → **내가 낸** 레코드(내 신청 현황).
-    - `r.account_id !== user.id` → **내가 주인인 부모에 달린** 레코드(받은 신청) = 수락/거절 대상.
-    "받은 신청 관리"와 "내 신청 현황"은 **별도 화면·별도 부분집합**으로 분리하는 게 안전하다.
-  - `update/delete` 에 `owner`/`ref_owner:<f>` → 해당 주체가 아닌 회원의 `editRecord`/`removeRecord`는
-    서버가 403(클라 버튼 숨김은 보조). 예: 신청 수락(update)=`ref_owner`(부모 소유자)만, 신청 취소
-    (delete)=`owner`(작성자 본인). **ref_owner 전용 액션 버튼은 위 `account_id !== user.id` 부분집합에만
-    노출**한다 — 내가 낸 신청에 "수락" 버튼을 붙이면 누를 때 403(실제 발생 오류).
-  - UI는 이 정책을 **읽어서** 로그인 게이트·버튼 노출을 맞춘다(정책 자체는 서버가 강제).
+    기존 앱 호환용이라 신규 코드에서는 쓰지 않는다.
+  - ⚠️ **비로그인이면 `BaasError` throw 가 아니라 `null` 을 resolve** 한다 → 반환값을
+    `res?.items ?? []`/null 로 가드. 쓰기·기타 작업은 실패 시 `BaasError`(.message) throw
+    (상단 §성공/실패 규약) — 에러 **표시 방식**(토스트/모달/인라인)은 앱 UX 소관.
+  - 작성자가 아닌 회원의 `editRecord`/`removeRecord` 는 서버가 403 을 낸다. 클라의 버튼 숨김은
+    보조일 뿐이고, 판정은 서버가 한다.
+  - **목록은 컬렉션 전체가 온다.** "내 것만" 화면이 필요하면 `r.account_id === user.id` 로 거르는 건
+    표시 편의일 뿐 보호가 아니다 — 다른 사람의 행이 이미 브라우저에 도착해 있다. 보이면 안 되는
+    데이터라면 serverFn 으로 올린다.
 - **reference 무결성(서버 강제)**: `reference` 필드 값은 대상 컬렉션의 실존 레코드 id 여야 하며
   아니면 `submitRecord`/`editRecord`가 400. self-reference(같은 컬렉션) 허용 — 트리는 root anchor
   (`post_id`)+parent(`parent_id`) 이중 참조로 설계하고 anchor 평면 조회 후 클라에서 조립한다.
@@ -739,7 +759,7 @@ await transaction([
   조회수 증가에는 `update: public` 이 필요하고 그건 본문 수정까지 열어 버린다. 필드 단위 권한이
   없어서 생기는 제약이다(로그인 회원 기준 카운터·관리자 경로에서는 문제없다).
 - 표현 가능 범위(필드 타입·정책·제약)의 **권위 원본은 SDK 타입 + 런타임 컬렉션 스키마** — 이 문서는
-  프리미티브 사용법만. 스키마·정책은 런타임 컬렉션 상세 조회로 확인한다(fields + settings.access).
+  프리미티브 사용법만. 스키마는 런타임 컬렉션 상세 조회로 확인한다(fields).
 
 ---
 
@@ -786,7 +806,7 @@ await BaasSDK.useCollection().submitRecord("products", { name, image_url: res.cd
 | `INVALID_USER` | 400 | 로그인 자격증명 불일치 | 로그인 맥락 |
 | `UNAUTHORIZED` | 401 | 미인증(로그인 안 됨) | `useAuth`의 비로그인 401은 **정상**(에러 처리 금지) |
 | `TOKEN_EXPIRED`/`INVALID_TOKEN` | 401 | 세션 만료·무효 | 재로그인 유도 대상 |
-| `FORBIDDEN` | 403 | 인증됐으나 권한 없음 | **401과 달리 재로그인 대상 아님.**<!--collection:start--> 컬렉션 access(owner/ref_owner) 백스톱 —<!--collection:end--> 클라 버튼 숨김이 1차 |
+| `FORBIDDEN` | 403 | 인증됐으나 권한 없음 | **401과 달리 재로그인 대상 아님.**<!--collection:start--> 작성자가 아닌 수정·삭제의 서버 백스톱 —<!--collection:end--> 클라 버튼 숨김이 1차 |
 | `NOT_FOUND` | 404 | 대상 없음 | |
 | `ALREADY_EXISTS` | 409 | 중복·충돌 | 회원가입 아이디 중복 등 |
 | `INTERNAL_SERVER_ERROR` | 500 | 서버 오류 | 재시도 가능 |
