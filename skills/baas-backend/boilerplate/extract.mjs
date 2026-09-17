@@ -589,13 +589,40 @@ for (const { module, fns } of extracted) {
       `// (\`main.tsx\` 의 runtimeBasename). 상수로 박으면 미리보기와 출시 중 한쪽이 틀린다.\n` +
       `const runtimeBasename = import.meta.env.BASE_URL === './' ? '/' : import.meta.env.BASE_URL\n` +
       `const API_BASE = \`\${runtimeBasename.replace(/\\/$/, '')}/aiapp-custom\`\n\n` +
+      `// 실패는 **상태 코드를 속성으로** 들고 온다. 메시지 문자열에만 담으면 화면이\n` +
+      `// 문구를 파싱해야 하고, 문구가 바뀌는 순간 조용히 깨진다 — 서버 SDK 의\n` +
+      `// \`SdkError\` 와 같은 이유로 같은 모양을 쓴다.\n` +
+      `//\n` +
+      `// 이것으로 403(소유자 아님)·401(비로그인)·409(중복·정원)를 화면이 구분할 수 있다.\n` +
+      `// 구분하지 못하면 선착순 마감도 서버 장애도 똑같이 \"알 수 없는 오류\" 가 된다.\n` +
+      `export class ServerFnCallError extends Error {\n` +
+      `  readonly status: number\n` +
+      `  readonly detail?: Record<string, unknown>\n` +
+      `  constructor(message: string, status: number, detail?: Record<string, unknown>) {\n` +
+      `    super(message)\n` +
+      `    this.name = 'ServerFnCallError'\n` +
+      `    this.status = status\n` +
+      `    this.detail = detail\n` +
+      `  }\n` +
+      `}\n\n` +
       `async function call(path: string, input: unknown) {\n` +
       `  const res = await fetch(\`\${API_BASE}\${path}\`, {\n` +
       `    method: 'POST',\n` +
       `    headers: { 'content-type': 'application/json' },\n` +
       `    body: JSON.stringify(input ?? {}),\n` +
       `  })\n` +
-      `  if (!res.ok) throw new Error(\`\${path} 실패: \${res.status}\`)\n` +
+      `  if (!res.ok) {\n` +
+      `    // 프레임워크는 실패에 \`{ error: message }\` 를 싣는다(스킬 계약표). 본문이\n` +
+      `    // 비어 있거나 JSON 이 아닐 수 있으므로 읽기 실패는 상태 코드로 덮는다.\n` +
+      `    const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>\n` +
+      `    throw new ServerFnCallError(\n` +
+      `      typeof payload.error === 'string' ? payload.error : \`\${path} 실패: \${res.status}\`,\n` +
+      `      res.status,\n` +
+      `      payload.data && typeof payload.data === 'object'\n` +
+      `        ? (payload.data as Record<string, unknown>)\n` +
+      `        : undefined,\n` +
+      `    )\n` +
+      `  }\n` +
       `  return res.json()\n` +
       `}\n\n` +
       `${body}\n`,
