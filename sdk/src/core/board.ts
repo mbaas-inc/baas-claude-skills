@@ -35,6 +35,14 @@ export interface BoardPost {
   created_at?: string;
   /** 선택된 분류. 게시판에 분류가 없거나 글이 선택하지 않았으면 null. */
   categories?: PostCategories | null;
+  /**
+   * 별점 1~5. **REVIEW 게시판에서만** 값이 오고 그 밖의 종류는 null 이다.
+   *
+   * 인덱스 시그니처 때문에 이 필드가 없어도 값은 통과했다. 그런데 **이름이 없으면 없는
+   * 기능이다** — 실측(2026-09-17): 네이티브 후기 게시판이 있는데 에이전트가 "별점을
+   * 지원하지 않는다" 고 판단해 후기를 커스텀 백엔드로 새로 구현했다.
+   */
+  rating?: number | null;
   [key: string]: unknown;
 }
 
@@ -61,7 +69,8 @@ export interface PostCreateInput {
   file_ids?: string[];
   /** 선택할 분류 — 게시판 정의(board_settings.categories)의 부분집합이어야 한다. */
   categories?: PostCategories | null;
-  [key: string]: unknown;
+  /** 별점 1~5. REVIEW 게시판에만 보낸다 — 그 밖의 종류에 보내면 서버가 무시한다. */
+  rating?: number | null;
 }
 
 /** 목록 쿼리스트링 조립 — 동적 게시판과 공지/FAQ 가 공유한다. */
