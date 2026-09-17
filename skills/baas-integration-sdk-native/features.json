@@ -273,6 +273,21 @@
           ]
         },
         {
+          "id": "board_review",
+          "label": "후기 게시판(별점 1~5)",
+          "auth": "mixed",
+          "keywords": [
+            "후기",
+            "리뷰",
+            "이용후기",
+            "별점",
+            "평점",
+            "rating",
+            "review",
+            "만족도"
+          ]
+        },
+        {
           "id": "board_category",
           "label": "게시판 카테고리(분류 그룹) 필터",
           "auth": false,
