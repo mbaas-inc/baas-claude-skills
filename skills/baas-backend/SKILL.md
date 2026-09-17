@@ -598,7 +598,10 @@ async function requireOperator(sdk: Sdk, ctx: ServerCtx): Promise<Role> {
 
 ```tsx
 // 관리자 화면에서 ctx.isProjectOwner === false 일 때
-const slug = document.querySelector('meta[name="baas-project-id"]')?.getAttribute('content')
+//
+// 이 값은 **UUID** 다 — AI Studio 가 `index.html` 에 프로젝트 UUID 를 심는다. 서버는 UUID 와
+// 슬러그를 모두 받으므로 읽은 값을 **그대로** 넘긴다(슬러그로 바꾸려 들지 마라).
+const projectRef = document.querySelector('meta[name="baas-project-id"]')?.getAttribute('content')
 const consoleHost = location.hostname.endsWith('.aiapp.help') ? 'baas.aiapp.help' : 'baas.jjunmo.link'
 
 // 라벨은 **지금 로그인 상태에 따라 갈린다.** 회원으로 로그인한 사람에게 "로그인" 이라고
@@ -609,15 +612,44 @@ const consoleHost = location.hostname.endsWith('.aiapp.help') ? 'baas.aiapp.help
 const { isLoggedIn } = BaasSDK.useAuth()
 const label = isLoggedIn ? '사장님 계정으로 전환' : '사장님 계정으로 로그인'
 
-<a href={`https://${consoleHost}/login?next=/account/enter-app/${slug}?to=/admin`}>
+// `next` 는 **통째로 인코딩한다.** 안 하면 `?to=` 의 `?` 가 `next` 를 끊어 `/login` 의 별개
+// 파라미터가 되고 돌아올 경로가 조용히 사라진다 — 기본값이 `/admin` 이라 겉으로는 동작해
+// 보이므로 `?to=/admin/orders` 로 바꾸는 순간에야 드러난다.
+const next = encodeURIComponent(`/account/enter-app/${projectRef}?to=/admin`)
+
+<a href={`https://${consoleHost}/login?next=${next}`}>
   {label}
 </a>
 // 로그인 → 플랫폼이 소유권을 확인하고 **이 화면으로 되돌려보낸다**(커스텀 도메인 포함)
 ```
 
-`RequireAuth` 로 감싸는 화면이 아니다 — 그 가드는 「로그인 안 했으면 못 들어감」이고,
-여기는 **로그인한 회원도 소유자가 아니면 못 보는** 화면이라 축이 다르다. 관리자 화면은
-누구나 열 수 있게 두고 **내용을 소유자에게만** 보인다(서버가 403 으로 강제한다).
+##### 라우터를 함께 고쳐라 — `RequireAuth` 로 감싸면 위 링크가 전부 무의미하다
+
+링크를 관리자 화면 **안에** 두는 것만으로는 부족하다. **라우트 정의는 다른 파일에 있고 보통
+이전 턴에 이미 작성돼 있다.** 관리자 화면을 손볼 때 라우터를 함께 열지 않으면 이게 남는다:
+
+```tsx
+// ❌ 실측된 실패(2026-09-17 출시본). 소유자는 진입 화면을 **한 번도 보지 못했다**
+<Route path="/admin" element={
+  <RequireAuth fallback={<Navigate to="/login" replace />}><AdminPage/></RequireAuth>
+}/>
+
+// ✅ 누구나 열 수 있게 두고, 내용은 서버가 403 으로 가린다
+<Route path="/admin" element={<AdminPage/>}/>
+```
+
+소유자는 통합회원이라 `useAuth()` 의 `isLoggedIn` 이 **항상 false** 다. `RequireAuth` 는
+페이지가 마운트되기도 전에 앱 자체 `/login`(회원 폼)으로 보내고, 그 폼으로는 통합회원이
+원리상 로그인되지 않는다 — 진입 화면에 **도달할 방법 자체가 사라진다.** 페이지를 아무리 잘
+만들어도 실행되지 않으므로, 이 결함은 화면을 보고는 못 찾고 라우터를 열어야 보인다.
+
+축이 다르다: `RequireAuth` 는 「로그인 안 했으면 못 들어감」이고, 관리자 화면은 **로그인한
+회원도 소유자가 아니면 못 보는** 화면이다. 인가는 클라이언트가 아니라 서버가 한다.
+
+> 이 규칙은 **`baas-integration-sdk` 스킬에도 같은 내용이 있다**(「로그인 필수 화면은
+> `RequireAuth` 로 감싼다」의 예외 항목). 라우트를 실제로 쓰는 것은 그쪽 스킬이므로, 한쪽만
+> 고치면 두 지침이 어긋나 에이전트가 라우트를 쓰는 순간의 지침을 따른다 — 실제로 그렇게
+> 어긋나 있었다(2026-09-17). 고칠 때는 **둘 다** 고쳐라.
 
 **「관리자 콘솔로 이동」 같은 문구는 쓰지 마라.** 목적지가 다른 콘솔이 아니라 **지금 보고 있는
 이 화면**이다 — 인증만 하고 제자리로 돌아온다. 떠나는 것처럼 적으면 사용자가 하던 일을
@@ -627,8 +659,8 @@ const label = isLoggedIn ? '사장님 계정으로 전환' : '사장님 계정�
   소유하므로, 앱 도메인이 그 자격을 쥐면 **다른 프로젝트까지 권한이 번진다.** 앱은 보내기만 한다
 - `next` 는 상대 경로다. 목적지 주소는 플랫폼이 DB 에서 만든다 — 앱이 정하면 오픈 리다이렉터가 된다
 - 돌아올 경로는 `?to=/admin/orders` 처럼 **앱 안의 상대 경로**다(기본 `/admin`)
-- 식별자는 **슬러그**(`p-cb604a27`)를 쓴다. UUID 는 브라우저에 없다 — 앱이 아는 것은
-  `<meta name="baas-project-id">` 뿐이고, 서버가 슬러그·UUID 를 모두 받는다
+- 식별자는 `<meta name="baas-project-id">` 값을 **그대로** 넘긴다. 서버가 UUID·슬러그를 모두
+  받으므로 앱이 형식을 판단할 필요가 없다
 
 #### 이름·연락처는 `sdk.account` 로 조회한다
 
