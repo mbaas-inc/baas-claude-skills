@@ -337,6 +337,32 @@ export async function requireOperator(sdk: OperatorSdk, ctx: ServerCtx) {
 상태코드는 **클래스가 아니라 `status` 필드로** 판정한다 — 그래서 앱 트리가 만든
 `ServerFnError` 도 백엔드의 `SdkError` 와 똑같이 보존된다.
 
+#### 프론트는 그 상태를 **속성으로** 받는다
+
+계약의 나머지 절반이다. 추출기가 만드는 클라이언트 스텁(`src/services/*.client.ts`)은
+실패를 `ServerFnCallError` 로 던지고, 거기에 `status` 와 `detail` 이 실려 있다.
+
+```ts
+import { ServerFnCallError } from './services/experience.client'
+
+try {
+  const overview = await getAdminExperienceOverview({})
+} catch (e) {
+  if (e instanceof ServerFnCallError && (e.status === 403 || e.status === 401)) {
+    return <OwnerEntry />        // 소유자 진입 안내 (위 「소유자가 들어오는 길」)
+  }
+  throw e                        // 그 밖은 일반 오류
+}
+```
+
+- **메시지 문자열을 파싱하지 마라.** `e.message` 끝의 숫자를 정규식으로 긁는 코드는
+  문구가 바뀌는 순간 조용히 깨지고 타입체크가 그것을 보지 못한다. 실측(2026-09-17):
+  스텁이 상태를 문자열에만 담던 동안 관리자 화면의 403 분기가 **한 번도 참이 되지 않아**
+  소유자 진입 버튼이 도달 불가였다
+- 이 구분이 없으면 403(소유자 아님)·401(비로그인)·409(중복·정원)가 전부 「알 수 없는
+  오류」로 뭉개진다 — **선착순 마감이 서버 장애와 같은 화면이 된다**
+- `*.client.ts` 는 생성물이다. 고치지 말고 위 계약대로 **쓰기만** 하라
+
 그래서 **`try/catch` 로 409 를 500 으로 바꾸지 마라.** 경합은 결과이지 장애가 아니고,
 그대로 통과시키면 프론트가 "이미 처리됨"과 "서버 장애"를 구분할 수 있다.
 사용자에게 보일 실패 사유는 예외가 아니라 **정상 응답의 필드**로 돌려주는 편이 낫다
