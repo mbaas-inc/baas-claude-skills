@@ -119,7 +119,16 @@ export type GuardBound = number | { field: string }
 export type GuardCondition =
   | { gte: GuardBound } | { lte: GuardBound } | { gt: GuardBound } | { lt: GuardBound }
 
-/** 트랜잭션 한 단계. `collection` 이 항목마다 있어 복수 컬렉션에 걸칠 수 있다. */
+/** 트랜잭션 한 단계. `collection` 이 항목마다 있어 복수 컬렉션에 걸칠 수 있다.
+ *
+ * **`update`·`delete` 는 최상위 `id` 로만 대상을 정한다.** 서버의 트랜잭션 경로는 이 둘에서
+ * `target` 을 해석하지 않고 `id` 만 읽는다(없으면 400 `update 는 id 가 필요합니다`). 필터 대상은
+ * `increment` 만 된다.
+ *
+ * **트랜잭션 안 `update` 에는 전제조건(`if`)이 없다.** 서버가 적용하지 않으므로 타입에서 뺐다.
+ * 전제조건이 필요한 상태 전이(취소·승인처럼 한 번만 일어나야 하는 것)는 단건
+ * `dyncol.update(…, { if })` 로 먼저 확정하고, 그 승자만 뒤따르는 변경을 한다.
+ */
 export type TxnOperation =
   | {
       op: 'create'
@@ -132,13 +141,18 @@ export type TxnOperation =
   | {
       op: 'update'
       collection: string
-      target: RecordTarget
+      /** 대상 레코드 id. 필터 대상(`target`)은 트랜잭션 안 `update` 에서 쓸 수 없다. */
+      id: string
       data: Record<string, unknown>
-      /** 전제조건 — 내가 읽은 그 상태가 아직 그대로인가. */
-      if?: Record<string, unknown>
       label?: string
     }
-  | { op: 'delete'; collection: string; target: RecordTarget; label?: string }
+  | {
+      op: 'delete'
+      collection: string
+      /** 대상 레코드 id. 필터 대상(`target`)은 트랜잭션 안 `delete` 에서 쓸 수 없다. */
+      id: string
+      label?: string
+    }
   | {
       op: 'increment'
       collection: string
@@ -427,6 +441,9 @@ function buildSdk(ctx: RequestContext) {
      *
      * 잠금은 서버가 정규 순서로 걸고 **실행은 보낸 순서 그대로**다 — 앞에서 만든 레코드를
      * 뒤 작업의 reference 로 쓸 수 있다(`create` 에 id 를 미리 정하는 이유).
+     *
+     * `update`·`delete` 는 최상위 `id` 로만 대상을 정하고, 트랜잭션 안 `update` 에는 `if` 가
+     * 없다(`TxnOperation` 참고). 한 번만 일어나야 하는 상태 전이는 단건 `update(…, { if })` 다.
      */
     transaction: (operations: TxnOperation[]) =>
       call<{
