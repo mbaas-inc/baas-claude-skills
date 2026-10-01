@@ -1,0 +1,7 @@
+{
+  "extends": "../boilerplate/tsconfig.json",
+  "compilerOptions": {
+    "typeRoots": ["../boilerplate/node_modules/@types"]
+  },
+  "include": ["txn-shape.ts"]
+}

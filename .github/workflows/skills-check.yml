@@ -61,6 +61,10 @@ jobs:
       # 그 API 가 있다고 믿고 쓰다가 조용히 포기한다(2026-09-16 `sdk.baas.sendSms`).
       - name: 참조 구현 타입체크
         run: npx tsc -p ../examples/tsconfig.json
+      # 플랫폼 SDK 타입이 서버가 해석하지 않는 모양(트랜잭션 update·delete 의 target, update 의 if)을
+      # 받아 주면 생성 코드가 타입은 통과하고 실행에서 400 으로 깨진다. 골격 타입(node 포함)으로 본다.
+      - name: 플랫폼 SDK 모양 검사
+        run: npx tsc -p ../checks/tsconfig.platform.json
       # 골격 갱신은 남의 프로젝트 파일을 덮어쓴다. 애매할 때 덮는 쪽으로 기울면 사용자 코드가
       # 조용히 사라지므로, 충돌·계약 게이트가 정말 멈추는지를 종료 코드로 고정한다.
       # 검사들은 한 번에 돌린다 — 파일을 하나 더할 때마다 워크플로를 고치게 하면, 언젠가

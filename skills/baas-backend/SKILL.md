@@ -456,6 +456,8 @@ await sdk.dyncol.update('po', id, { status: 'approved' },
                         { if: { status: 'pending', amount: seenAmount } })
 ```
 
+`if` 는 **이 단건 경로에서만** 적용된다. 트랜잭션 안 `update` 에는 없다(아래 트랜잭션 절).
+
 **상태 전이·순번 진행은 예외 없이 `if` 를 붙인다.** unique 로는 막을 수 없다 — 잠글 값이
 없기 때문이다. 실측 (동시 20명 승인 시도):
 
@@ -519,10 +521,40 @@ catch (e) {
 
 **index 로 분기하지 마라** — 항목 수가 바뀌는 순간 조용히 어긋난다.
 
-#### 대상은 `target` 으로 — id 를 먼저 찾지 마라
+#### `increment` 대상은 `target` 으로 — id 를 먼저 찾지 마라
 
 `{ id }` 또는 `{ filter: { … } }` 다. 밖에서 조회해 id 를 구하면 그 사이 대상이 바뀔 수 있고,
 트랜잭션이 낡은 id 로 시작한다. 필터는 **정확히 1건**에 맞아야 하고, 아니면 실패한다.
+
+#### `update`·`delete` 는 최상위 `id` 로만 — 그리고 `if` 가 없다
+
+서버의 트랜잭션 경로는 `update`·`delete` 에서 `target` 을 읽지 않고 최상위 `id` 만 본다
+(없으면 400 `update 는 id 가 필요합니다`). 필터로 대상을 정할 수 있는 것은 `increment` 뿐이다.
+
+```ts
+{ op: 'update', collection: 'reservations', id: reservationId, data: { memo }, label: 'reservation' }
+{ op: 'delete', collection: 'holds', id: holdId, label: 'hold' }
+```
+
+**트랜잭션 안 `update` 는 전제조건(`if`)을 적용하지 않는다.** 그래서 한 번만 일어나야 하는
+상태 전이를 트랜잭션 안 `update` 로 하면 경합에 뚫린다 — 같은 예약을 두 사람이 동시에
+취소하면 둘 다 통과하고 자리가 두 번 돌아온다. 그런 전이는 **단건 `update(…, { if })` 로 먼저
+확정하고, 그 승자만** 뒤따르는 변경을 한다:
+
+```ts
+// 예약 취소 — 확정 상태일 때 한 번만, 그 승자만 자리를 되돌린다
+try {
+  await sdk.dyncol.update('reservations', reservationId, { status: 'cancelled' },
+                          { if: { status: 'confirmed' } })
+} catch (e) {
+  if (errorStatus(e) === 409) return { status: 'already_cancelled' }   // 경합에서 졌다
+  throw e
+}
+await sdk.dyncol.increment('slots', { id: slotId }, 'booked', -1)
+```
+
+두 단계 사이에서 멈추면 예약은 취소됐는데 자리는 돌아오지 않은 채 남는다. 그쪽은 정원을
+넘기지 않는 방향이라 안전하다(반대 순서로 하면 정원을 넘길 수 있다).
 
 `create` 는 id 를 미리 정할 수 있다 — 같은 요청에서 자식의 `reference` 값으로 쓰려면 필요하다.
 잠금은 서버가 정규 순서로 걸고 **실행은 보낸 순서 그대로**라, 이 의존이 지켜진다.
@@ -886,6 +918,7 @@ try { ... } catch (e) {
 
 - [ ] `fetch` 를 직접 쓴 곳이 없다 (전부 `sdk` 경유)
 - [ ] 상태 전이·순번 진행에 `if` 를 붙였다
+- [ ] 트랜잭션 안 `update`·`delete` 는 최상위 `id` 로 지정했고, 전제조건이 필요한 전이는 트랜잭션 밖 단건 `update(…, { if })` 로 했다
 - [ ] 집계 판정을 조회 결과로 하지 않았다 (원자 반환값 또는 `if`)
 - [ ] 보상이 필요한 경로에서 **되돌리는 순서**를 정했다 (카운터 먼저, 선점 레코드 나중)
 - [ ] 목록 조회에 커서·상한이 있다
