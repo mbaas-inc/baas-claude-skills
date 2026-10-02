@@ -40,6 +40,17 @@ test("requestSmsLoginCode — 60초 쿨다운 429 는 BaasError", async () => {
   );
 });
 
+test("requestSmsLoginCode — 문자 발송 실패는 502 BaasError (바로 재시도 가능)", async () => {
+  init({ projectId: PROJECT });
+  mockFetch({
+    "/account/sms-login/request": [502, { result: "FAIL", errorCode: "EXTERNAL_SERVER_ERROR", message: "문자를 보내지 못했습니다. 잠시 후 다시 시도해주세요." }],
+  });
+  await assert.rejects(
+    () => requestSmsLoginCode("010-1234-5678"),
+    (e) => e instanceof BaasError && e.status === 502 && e.errorCode === "EXTERNAL_SERVER_ERROR"
+  );
+});
+
 test("loginWithSms — 가입된 번호면 registered=true, 인증 캐시를 비운다", async () => {
   init({ projectId: PROJECT });
   clearAuthCache();

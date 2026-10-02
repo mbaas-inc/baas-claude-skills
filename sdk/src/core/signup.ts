@@ -9,10 +9,10 @@ import { getProjectId } from "./config";
 
 export interface AuthConfig {
   /**
-   * "NONE" = 인증 없이 가입 / "EMAIL" = 이메일 인증 코드 필수 /
-   * "SMS" = 휴대폰 인증 — 문자 인증 로그인(requestSmsLoginCode → loginWithSms → signupWithSms)
+   * "NONE" = 인증 없이 가입 / "EMAIL" = 이메일 인증 코드 필수.
+   * 문자(휴대폰) 인증 로그인은 이 설정과 무관하다 — 설정 없이 늘 제공된다(smsLogin.ts).
    */
-  signup_verification: "NONE" | "EMAIL" | "SMS" | string;
+  signup_verification: "NONE" | "EMAIL" | string;
   /** true 면 가입 후 관리자 승인 전까지 PENDING */
   require_signup_approval: boolean;
   [key: string]: unknown;
