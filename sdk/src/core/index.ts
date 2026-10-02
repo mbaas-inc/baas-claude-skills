@@ -18,6 +18,7 @@ export {
   getSnsProviders,
   completeProfile,
 } from "./signup";
+export { requestSmsLoginCode, loginWithSms, signupWithSms } from "./smsLogin";
 export {
   listPosts,
   getPost,
@@ -113,6 +114,7 @@ export type {
   VerifyCodeResult,
   CompleteProfileInput,
 } from "./signup";
+export type { SmsCodeSent, SmsLoginResult, SmsSignupInput, SmsSignupResult } from "./smsLogin";
 export type { Comment } from "./notice";
 export type {
   DynRecord,

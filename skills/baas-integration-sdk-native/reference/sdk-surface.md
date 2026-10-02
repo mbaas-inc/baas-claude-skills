@@ -100,7 +100,7 @@ const { isLoggedIn, user, loading, error, refetch, clear } = BaasSDK.useAuth();
 - **일관성 체크**: 한 그룹에서 일부 라우트를 가드했으면 그 그룹의 공용/목록 화면도 같은 기준으로 가드해야 한다
   (일부만 가드하고 레이아웃/형제를 빼먹으면 결함). 미인증 fallback 은 `<Navigate to="/login" replace/>` 로 로그인 유도.
 
-### `useLogin()` / `useSignup()` / `useLogout()`
+### `useLogin()` / `useSignup()` / `useLogout()` (문자 인증 로그인은 `useSmsLogin()` — 아래 절)
 ```tsx
 const { login, loading, error } = BaasSDK.useLogin();
 await login(userId, userPw);      // 성공 시 전역 인증 상태 자동 갱신(refetch). boolean 반환
@@ -133,13 +133,14 @@ UX 규약:
 ```tsx
 const { config, fetchConfig } = BaasSDK.useSignup();
 useEffect(() => { fetchConfig(); }, []);
-// config = { signup_verification: "NONE" | "EMAIL", require_signup_approval: boolean }
+// config = { signup_verification: "NONE" | "EMAIL" | "SMS", require_signup_approval: boolean }
 ```
 
 | `signup_verification` | 가입 화면이 할 일 |
 |---|---|
 | `"NONE"` | 코드 입력 UI 없음. 폼 작성 → 바로 `signup()` |
 | `"EMAIL"` | ① 이메일 입력 → `sendCode(email)` ② 코드 입력 → `verifyCode(email, code)` ③ `verified === true` 가 되어야 가입 버튼 활성화 ④ `signup(email, pw, name, phone, {...})` — **`userId` 는 인증한 이메일과 같아야 한다** |
+| `"SMS"` | 가입·로그인을 한 화면에서 `useSmsLogin()` 으로 처리한다 — 아래 「문자 인증 로그인」 절. `useSignup().signup()` 을 인증 없이 부르면 401 |
 
 | `require_signup_approval` | 가입 성공 직후 |
 |---|---|
@@ -150,6 +151,45 @@ useEffect(() => { fetchConfig(); }, []);
 - `401 이메일 인증이 필요합니다. 먼저 인증을 완료해주세요.` — 인증 없이 `signup()` 호출
 - `400 이메일 인증을 사용하는 프로젝트는 아이디가 이메일 형식이어야 합니다.`
 - `429 인증코드는 60초에 한 번만 요청할 수 있습니다.` — `error` 노출 + 재발송 버튼을 60초간 비활성화
+
+### 문자 인증 로그인 — `useSmsLogin()` (`signup_verification === "SMS"`)
+
+휴대폰 번호 소유가 곧 로그인 수단인 앱용이다. **로그인과 가입이 한 흐름**이다 — 번호를 인증하면
+가입된 번호는 그 자리에서 로그인되고, 처음인 번호는 추가 정보를 받아 가입과 동시에 로그인된다.
+`fetchConfig()` 결과가 `"SMS"` 일 때만 이 화면을 쓴다(서버가 다른 프로젝트엔 문자를 보내지 않는다).
+
+```tsx
+const { step, phone, remainingAttempts, sendCode, verify, signup, reset, loading, error } = BaasSDK.useSmsLogin();
+// step: "phone" → "code" → ("signup") → "done" | "pending"
+
+await sendCode(phone);            // 인증번호 발송 → step="code". 가입 여부와 무관하게 보낸다
+await verify(code);               // 가입된 번호 → 로그인 완료, step="done"
+                                  // 처음인 번호 → step="signup" (인증 완료 상태가 서버에 남는다)
+await signup({ name, termsAgreed: true, privacyAgreed: true });   // step="done" (승인제면 "pending")
+// 아이디·비밀번호를 받는 앱이면 signup({ ..., userId, userPw }) — 받지 않으면 생략(번호가 아이디가 된다)
+```
+
+| `step` | 화면 |
+|---|---|
+| `"phone"` | 번호 입력(`formatPhone`) + 「인증번호 받기」 → `sendCode(phone)` |
+| `"code"` | 6자리 입력 + 「확인」 → `verify(code)`. 틀리면 `remainingAttempts` 로 "N회 남음" 안내. 「재발송」은 `sendCode(phone)` |
+| `"signup"` | **이 번호로 처음 오신 분** — 이름·약관 동의(필요하면 앱이 정한 추가 항목) → `signup({...})` |
+| `"done"` | 로그인됨 — 전역 인증 상태는 훅이 갱신했다. 화면 전환만 |
+| `"pending"` | 승인제 프로젝트 — "관리자 승인 후 이용 가능합니다" 안내 (로그인 안 됨) |
+
+- 로그인 화면과 가입 화면을 **따로 만들지 않는다.** 사용자는 자기가 가입했는지 모르고 번호부터 넣는다.
+- **가입 여부를 미리 묻지 않는다** — 서버는 인증번호를 확인한 뒤에만 알려 준다.
+- 약관 전문은 `useSignup().fetchTerms()` 로 받아 `"signup"` 단계 화면 안에서 동의받는다(아래 약관 절).
+- 인증번호 유효 시간은 5분이다. `"signup"` 단계에서 오래 머물면 가입이 만료로 실패하니 처음부터(`reset()`) 다시 받게 한다.
+- core 함수가 필요하면: `BaasSDK.requestSmsLoginCode(phone)` · `loginWithSms(phone, code)` → `{ verified, registered, remaining_attempts }` · `signupWithSms({ phone, name, termsAgreed, privacyAgreed, userId?, userPw? })`.
+
+서버가 거부하는 경우(모두 `error.message` 그대로 노출):
+- `403 문자 인증 로그인을 사용하지 않는 프로젝트입니다.` — 프로젝트 설정이 `"SMS"` 가 아님
+- `429 인증코드는 60초에 한 번만 요청할 수 있습니다.` — 재발송 버튼을 60초간 비활성화
+- `400 MAX_ATTEMPTS_EXCEEDED` · `400 EXPIRED` — 인증번호를 다시 받게 한다(`sendCode`)
+- `403 탈퇴 처리된 계정입니다.` · `403 가입 승인 대기 중입니다…` — 로그인 불가 안내
+- `409 이 번호로 가입된 계정이 여러 개입니다…` — 아이디·비밀번호 로그인(`useLogin`)으로 안내
+- `400 이미 가입된 전화번호입니다.` — 가입 단계에서 같은 번호 회원이 이미 있음(다시 `verify` 하면 로그인된다)
 
 ### 약관 (가입 화면 안에서 동의를 받는다)
 

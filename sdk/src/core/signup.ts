@@ -8,8 +8,11 @@ import { request } from "./http";
 import { getProjectId } from "./config";
 
 export interface AuthConfig {
-  /** "NONE" = 인증 없이 가입 / "EMAIL" = 이메일 인증 코드 필수 */
-  signup_verification: "NONE" | "EMAIL" | string;
+  /**
+   * "NONE" = 인증 없이 가입 / "EMAIL" = 이메일 인증 코드 필수 /
+   * "SMS" = 휴대폰 인증 — 문자 인증 로그인(requestSmsLoginCode → loginWithSms → signupWithSms)
+   */
+  signup_verification: "NONE" | "EMAIL" | "SMS" | string;
   /** true 면 가입 후 관리자 승인 전까지 PENDING */
   require_signup_approval: boolean;
   [key: string]: unknown;
