@@ -75,6 +75,22 @@ slots}` 봉투이고 `fetchTarget` 은 `reservation_settings` 가 중첩된 객�
 
 ## 인증 (account)
 
+### 로그인 방식 고르기 (사용자 요구사항 기준)
+
+로그인 방식은 **사이트를 만드는 사용자가 요구한 대로** 고른다. 서버 쪽 설정은 없다 — 아래 방식은 모두 늘 쓸 수 있다.
+
+| 사용자가 이렇게 말하면 | 방식 | 화면 |
+|---|---|---|
+| "아이디·비밀번호로 로그인", 별말 없음 | 아이디·비밀번호 | `useLogin()` + `useSignup()` |
+| "휴대폰(전화번호·핸드폰)으로 로그인/가입", "문자로 인증", "번호 인증" | 문자 인증 로그인 | `useSmsLogin()` 한 화면 — 아래 「문자 인증 로그인」 절 |
+| "카카오·네이버·구글·애플 로그인", "간편 로그인" | SNS | SNS 버튼 — 아래 「SNS 가입 버튼」 절 |
+| "이메일 인증 후 가입" | 아이디·비밀번호 + 이메일 인증 | `useSignup()` (프로젝트 설정 EMAIL 필요 — 가입 절차 절) |
+
+- **"본인인증", "인증번호"만 말하고 수단이 없으면 묻는다** — "휴대폰 문자로 할까요, 이메일로 할까요?". 국내 서비스에서
+  본인인증은 대개 휴대폰을 뜻하지만, 짐작으로 고르면 화면 전체를 다시 만들어야 한다.
+- **여러 방식을 함께 요구하면 한 로그인 화면에 함께 둔다** (예: 휴대폰 로그인 + 카카오 버튼). 방식마다 화면을 따로 만들지 않는다.
+- 휴대폰 로그인만 쓰는 사이트는 아이디·비밀번호 입력란을 두지 않는다 — 가입 때 아이디·비밀번호를 생략할 수 있다.
+
 ### `AuthProvider` / `useAuth()` — 전역 인증 상태 (앱 루트 1회)
 ```tsx
 // 앱 루트를 감싼다
@@ -141,30 +157,32 @@ UX 규약:
 ```tsx
 const { config, fetchConfig } = BaasSDK.useSignup();
 useEffect(() => { fetchConfig(); }, []);
-// config = { signup_verification: "NONE" | "EMAIL" | "SMS", require_signup_approval: boolean }
+// config = { signup_verification: "NONE" | "EMAIL", require_signup_approval: boolean }
 ```
 
 | `signup_verification` | 가입 화면이 할 일 |
 |---|---|
 | `"NONE"` | 코드 입력 UI 없음. 폼 작성 → 바로 `signup()` |
 | `"EMAIL"` | ① 이메일 입력 → `sendCode(email)` ② 코드 입력 → `verifyCode(email, code)` ③ `verified === true` 가 되어야 가입 버튼 활성화 ④ `signup(email, pw, name, phone, {...})` — **`userId` 는 인증한 이메일과 같아야 한다** |
-| `"SMS"` | 가입·로그인을 한 화면에서 `useSmsLogin()` 으로 처리한다 — 아래 「문자 인증 로그인」 절. `useSignup().signup()` 을 인증 없이 부르면 401 |
 
 | `require_signup_approval` | 가입 성공 직후 |
 |---|---|
 | `false` | 바로 로그인 안내 |
 | `true` | "관리자 승인 후 이용 가능합니다" 안내 (계정은 PENDING 상태) |
 
+> 휴대폰 번호로 로그인·가입하는 앱은 이 설정과 무관하다 — 아래 「문자 인증 로그인」 절(`useSmsLogin()`).
+
 서버가 거부하는 경우(모두 `error.message` 그대로 노출):
 - `401 이메일 인증이 필요합니다. 먼저 인증을 완료해주세요.` — 인증 없이 `signup()` 호출
 - `400 이메일 인증을 사용하는 프로젝트는 아이디가 이메일 형식이어야 합니다.`
 - `429 인증코드는 60초에 한 번만 요청할 수 있습니다.` — `error` 노출 + 재발송 버튼을 60초간 비활성화
 
-### 문자 인증 로그인 — `useSmsLogin()` (`signup_verification === "SMS"`)
+### 문자 인증 로그인 — `useSmsLogin()` (기획에 휴대폰 로그인이 있을 때)
 
 휴대폰 번호 소유가 곧 로그인 수단인 앱용이다. **로그인과 가입이 한 흐름**이다 — 번호를 인증하면
 가입된 번호는 그 자리에서 로그인되고, 처음인 번호는 추가 정보를 받아 가입과 동시에 로그인된다.
-`fetchConfig()` 결과가 `"SMS"` 일 때만 이 화면을 쓴다(서버가 다른 프로젝트엔 문자를 보내지 않는다).
+**프로젝트 설정이 필요 없다**(SNS 로그인처럼 늘 제공된다). 기획에 "휴대폰(문자) 인증으로 로그인/가입"이 있으면
+이 화면을 쓰고, 아이디·비밀번호 로그인(`useLogin`)과 함께 둘지는 기획이 정한다. `fetchConfig()` 로 분기하지 않는다.
 
 ```tsx
 const { step, phone, remainingAttempts, sendCode, verify, signup, reset, loading, error } = BaasSDK.useSmsLogin();
@@ -192,12 +210,16 @@ await signup({ name, termsAgreed: true, privacyAgreed: true });   // step="done"
 - core 함수가 필요하면: `BaasSDK.requestSmsLoginCode(phone)` · `loginWithSms(phone, code)` → `{ verified, registered, remaining_attempts }` · `signupWithSms({ phone, name, termsAgreed, privacyAgreed, userId?, userPw? })`.
 
 서버가 거부하는 경우(모두 `error.message` 그대로 노출):
-- `403 문자 인증 로그인을 사용하지 않는 프로젝트입니다.` — 프로젝트 설정이 `"SMS"` 가 아님
+- `502 문자를 보내지 못했습니다. 잠시 후 다시 시도해주세요.` — 발송 실패. 인증번호가 남지 않아 **바로 재시도할 수 있다**(쿨다운 없음)
 - `429 인증코드는 60초에 한 번만 요청할 수 있습니다.` — 재발송 버튼을 60초간 비활성화
 - `400 MAX_ATTEMPTS_EXCEEDED` · `400 EXPIRED` — 인증번호를 다시 받게 한다(`sendCode`)
 - `403 탈퇴 처리된 계정입니다.` · `403 가입 승인 대기 중입니다…` — 로그인 불가 안내
 - `409 이 번호로 가입된 계정이 여러 개입니다…` — 아이디·비밀번호 로그인(`useLogin`)으로 안내
 - `400 이미 가입된 전화번호입니다.` — 가입 단계에서 같은 번호 회원이 이미 있음(다시 `verify` 하면 로그인된다)
+
+- 인증번호가 틀리면 예외가 아니라 `verify()` 결과가 `verified=false` 다(남은 횟수 `remainingAttempts`). `error` 만 보고 분기하지 않는다.
+- 아이디를 생략하고 가입한 회원은 `useAuth().user.email` 에 번호가 들어 있다 — **이메일로 표시하지 않는다**(마이페이지 등).
+- 로그인 쿠키는 프로젝트 쿠키다 — API 는 프로젝트 도메인의 `/aiapp-baas/...` 로만 인증된다(SDK 기본 경로 그대로 쓰면 된다).
 
 ### 약관 (가입 화면 안에서 동의를 받는다)
 

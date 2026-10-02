@@ -5,8 +5,9 @@
  *   - registered=true  → 이미 로그인됨(쿠키 설정)
  *   - registered=false → 추가 정보를 받아 signupWithSms(...) → 가입과 동시에 로그인
  *
- * 프로젝트의 가입 인증 설정(getAuthConfig().signup_verification)이 "SMS" 일 때만 서버가 발송한다.
+ * 프로젝트 설정 없이 늘 쓸 수 있다(SNS 로그인처럼) — 기획에 휴대폰 로그인이 있을 때 쓴다.
  * 가입 여부는 인증번호를 확인한 뒤에만 알려 준다 — 발송 단계에서 묻지 않는다.
+ * 발송 실패는 502 BaasError(EXTERNAL_SERVER_ERROR) — 인증번호가 남지 않아 바로 재시도할 수 있다.
  */
 import { request } from "./http";
 import { getProjectId } from "./config";
@@ -51,7 +52,10 @@ export interface SmsSignupResult {
   [key: string]: unknown;
 }
 
-/** 인증번호 발송. 가입 여부와 무관하게 보낸다. 60초 쿨다운(429, data.retry_after). */
+/**
+ * 인증번호 발송. 가입 여부와 무관하게 보낸다. 60초 쿨다운(429, data.retry_after).
+ * 문자 발송 실패는 502 — 쿨다운에 걸리지 않으니 바로 다시 요청할 수 있다.
+ */
 export function requestSmsLoginCode(phone: string): Promise<SmsCodeSent> {
   return request<SmsCodeSent>("/account/sms-login/request", {
     method: "POST",
