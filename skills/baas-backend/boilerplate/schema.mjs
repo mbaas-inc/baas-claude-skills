@@ -21,6 +21,15 @@
  * 스키마는 다르다. `remaining` 이 `required` 인지, `menu_item_id` 가 `unique` 인지, 접근이
  * `service` 인지는 **코드를 봐서 알 수 없는 설계 결정**이고 TS 타입으로도 표현되지 않는다.
  * 그래서 선언이 정본이고 타입이 그 결과다 — 방향이 반대면 표현할 수 없는 것들이 생긴다.
+ *
+ * ## 관리자 알림(`notifications`)도 같은 파일이다
+ *
+ * 「예약이 생기면 알려 줘」의 키·제목·값 이름도 코드를 봐서 알 수 없는 설계 결정이다. 그래서
+ * 컬렉션과 같은 자리에 선언하고, 같은 수렴으로 서버에 올리고, 같은 방식으로 타입을 만든다 —
+ * `notify.owner('오타')` 가 런타임 404 가 아니라 컴파일 에러가 되게 하려는 것이다.
+ *
+ * 검증은 서버 규칙을 **미리** 본다. 서버도 같은 규칙으로 거절하지만, 그때는 수렴 단계에서야
+ * 드러나고 타입은 이미 틀린 선언으로 만들어진 뒤다.
  */
 
 import { spawnSync } from 'node:child_process'
@@ -75,7 +84,7 @@ export function renderTypes(doc) {
     '// **직접 고치지 마라.** 다음 추출에서 덮인다. 필드를 바꾸려면 schema.json 을 고친다.',
     '',
   ]
-  for (const coll of doc.collections) {
+  for (const coll of doc.collections ?? []) {
     const label = coll.label ? ` — ${coll.label}` : ''
     lines.push(`/** \`${coll.name}\`${label} */`)
     lines.push(`export interface ${pascal(coll.name)} {`)
@@ -99,7 +108,15 @@ export function readSchema(root) {
   } catch (error) {
     throw new Error(`backend/schema.json 을 읽을 수 없다: ${error.message}`)
   }
-  if (!Array.isArray(doc.collections) || doc.collections.length === 0) {
+  if (doc.collections !== undefined && !Array.isArray(doc.collections)) {
+    throw new Error('backend/schema.json 의 collections 는 배열이어야 한다')
+  }
+  if (doc.notifications !== undefined && !Array.isArray(doc.notifications)) {
+    throw new Error('backend/schema.json 의 notifications 는 배열이어야 한다')
+  }
+  doc.collections = doc.collections ?? []
+  // 알림만 선언한 프로젝트도 있다(네이티브 예약 + 커스텀 백엔드의 알림). 둘 다 비었을 때만 거절한다.
+  if (doc.collections.length === 0 && (doc.notifications ?? []).length === 0) {
     throw new Error('backend/schema.json 의 collections 가 비어 있다')
   }
   for (const coll of doc.collections) {
@@ -108,7 +125,152 @@ export function readSchema(root) {
       throw new Error(`backend/schema.json: '${coll.name}' 에 fields 가 없다`)
     }
   }
+  if (doc.notifications !== undefined) validateNotifications(doc.notifications)
   return doc
+}
+
+// ── 관리자 알림 선언 ────────────────────────────────────────────────────────
+// 서버(aiapp-service `PUT /back/notifications/declarations`)와 같은 규칙이다. 한쪽만 고치면
+// 로컬은 통과하고 수렴에서 거절되거나, 그 반대로 서버가 받는 선언을 여기서 막는다.
+
+/** `reservation.created` 처럼 점·하이픈·밑줄로 나눈 소문자. 64자까지. */
+const NOTIFY_KEY = /^[a-z0-9][a-z0-9_.-]{0,63}$/
+/** 값 이름 — 코드에서 객체 키로 쓰므로 식별자에 가까운 문자만. */
+const NOTIFY_FIELD = /^[A-Za-z0-9_]{1,64}$/
+/** 제목에 주소를 넣지 못하게 한다. 제목은 알림톡 메시지 제목이 되고, 그 자리의 링크는 심사에서 막힌다. */
+const URL_LIKE = /https?:\/\/|www\./i
+const NOTIFY_LABEL_MAX = 20
+const NOTIFY_FIELD_LABEL_MAX = 30
+const NOTIFY_FIELDS_MAX = 20
+
+/** 값 하나를 `{ name, label }` 로 맞춘다. 문자열만 쓰면 이름이 곧 표시 이름이다. */
+function normalizeNotifyField(field) {
+  if (typeof field === 'string') return { name: field, label: undefined }
+  if (field && typeof field === 'object') return { name: field.name, label: field.label }
+  return { name: undefined, label: undefined }
+}
+
+/**
+ * 알림 선언 검증. 첫 위반에서 멈추지 않고 **전부 모아** 한 번에 알린다 — 하나 고치고 다시
+ * 돌리기를 반복하게 하면 에이전트가 규칙 대신 오류 문구를 따라 고치게 된다.
+ */
+export function validateNotifications(list) {
+  const errors = []
+  const keys = new Set()
+  list.forEach((n, i) => {
+    const where = n && typeof n.key === 'string' ? `'${n.key}'` : `${i + 1}번째 알림`
+    if (!n || typeof n !== 'object') {
+      errors.push(`${where}: 객체여야 한다`)
+      return
+    }
+    if (typeof n.key !== 'string' || !NOTIFY_KEY.test(n.key)) {
+      errors.push(`${where}: key 는 소문자·숫자로 시작하고 소문자·숫자·. _ - 만 쓴다(64자 이내, 예: reservation.created)`)
+    } else if (keys.has(n.key)) {
+      errors.push(`${where}: key 가 중복이다`)
+    } else {
+      keys.add(n.key)
+    }
+    if (typeof n.label !== 'string' || n.label.trim() === '') {
+      errors.push(`${where}: label 이 없다 — 소유자가 보는 알림 제목이다`)
+    } else {
+      if ([...n.label].length > NOTIFY_LABEL_MAX) {
+        errors.push(`${where}: label 은 ${NOTIFY_LABEL_MAX}자 이내다(알림톡 제목이 된다)`)
+      }
+      if (URL_LIKE.test(n.label)) errors.push(`${where}: label 에 주소(URL)를 넣을 수 없다`)
+    }
+    if (n.feature !== undefined && typeof n.feature !== 'string') {
+      errors.push(`${where}: feature 는 문자열이다`)
+    }
+    const fields = n.fields ?? []
+    if (!Array.isArray(fields)) {
+      errors.push(`${where}: fields 는 배열이다`)
+      return
+    }
+    if (fields.length > NOTIFY_FIELDS_MAX) {
+      errors.push(`${where}: fields 는 ${NOTIFY_FIELDS_MAX}개까지다`)
+    }
+    const names = new Set()
+    for (const raw of fields) {
+      const { name, label } = normalizeNotifyField(raw)
+      if (typeof name !== 'string' || !NOTIFY_FIELD.test(name)) {
+        errors.push(`${where}: 값 이름 '${name ?? ''}' 은 영문·숫자·밑줄만 쓴다(64자 이내)`)
+        continue
+      }
+      if (names.has(name)) errors.push(`${where}: 값 이름 '${name}' 이 중복이다`)
+      names.add(name)
+      if (label !== undefined) {
+        if (typeof label !== 'string') errors.push(`${where}: '${name}' 의 label 은 문자열이다`)
+        else if ([...label].length > NOTIFY_FIELD_LABEL_MAX) {
+          errors.push(`${where}: '${name}' 의 label 은 ${NOTIFY_FIELD_LABEL_MAX}자 이내다`)
+        }
+      }
+    }
+  })
+  if (errors.length > 0) {
+    throw new Error(`backend/schema.json 의 notifications 가 잘못됐다:\n  - ${errors.join('\n  - ')}`)
+  }
+}
+
+/**
+ * 알림 선언에서 TS 타입을 만든다. 선언이 없으면 `null` — 파일을 만들지 않는다.
+ *
+ * 앱 트리(`src/services/`)는 백엔드 SDK 타입을 임포트할 수 없어 `ctx.sdk` 를 좁혀 쓴다. 그 좁힐
+ * 모양을 **선언에서** 만들어 두면 키 오타와 값 이름 오타가 둘 다 컴파일 에러가 된다. 결과 타입은
+ * `platform/sdk.ts` 의 `OwnerNotifyResult` 와 같은 모양이다(같은 이유로 복제한다).
+ *
+ * 값은 전부 **필수**로 낸다. 선언한 값을 빠뜨리면 소유자가 빈칸이 있는 알림을 받는데, 그건
+ * 실패로 보이지 않아 아무도 고치지 않는다. 정말 없으면 `null` 을 명시한다.
+ */
+export function renderNotificationTypes(doc) {
+  const list = doc.notifications ?? []
+  if (list.length === 0) return null
+  const lines = [
+    '// 생성 파일 — `node backend/extract.mjs` 가 `backend/schema.json` 의 notifications 에서 만든다.',
+    '// **직접 고치지 마라.** 다음 추출에서 덮인다. 알림을 바꾸려면 schema.json 을 고친다.',
+    '',
+    "export type OwnerNotifyStatus = 'sent' | 'failed' | 'skipped' | 'disabled' | 'limited'",
+    '/** 사람이 읽을 문자열로 보낸다(`4` 가 아니라 `"4명"`). 서버는 URL 을 지우고 200자로 자른다. */',
+    'export type OwnerNotifyValue = string | number | boolean | null',
+    'export interface OwnerNotifyResult {',
+    '  result: OwnerNotifyStatus',
+    '  log_id?: number',
+    '  error?: { status?: number; message: string }',
+    '}',
+    '',
+    '/** 선언된 알림 키 → 값 이름. */',
+    'export interface OwnerNotifications {',
+  ]
+  for (const n of list) {
+    const feature = n.feature ? ` (${n.feature})` : ''
+    lines.push(`  /** ${n.label}${feature} */`)
+    const fields = (n.fields ?? []).map(normalizeNotifyField)
+    if (fields.length === 0) {
+      lines.push(`  ${JSON.stringify(n.key)}: Record<string, never>`)
+      continue
+    }
+    lines.push(`  ${JSON.stringify(n.key)}: {`)
+    for (const f of fields) {
+      if (f.label) lines.push(`    /** ${f.label} */`)
+      lines.push(`    ${f.name}: OwnerNotifyValue`)
+    }
+    lines.push('  }')
+  }
+  lines.push(
+    '}',
+    '',
+    'export type OwnerNotificationKey = keyof OwnerNotifications',
+    '',
+    '/** `ctx.sdk` 를 좁힐 때 섞어 쓴다: `ctx.sdk as MySdk & OwnerNotifySdk` */',
+    'export interface OwnerNotifySdk {',
+    '  notify: {',
+    '    owner<K extends OwnerNotificationKey>(',
+    '      key: K, values: OwnerNotifications[K],',
+    '    ): Promise<OwnerNotifyResult>',
+    '  }',
+    '}',
+    '',
+  )
+  return lines.join('\n')
 }
 
 /**

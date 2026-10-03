@@ -237,6 +237,29 @@ export interface AccountListOptions {
   keyword?: string
 }
 
+/** 관리자 알림 결과. **실패도 값으로 온다** — `disabled`·`limited` 는 오류가 아니다.
+ *
+ * | 값 | 뜻 |
+ * |---|---|
+ * | `sent` | 소유자에게 보냈다 |
+ * | `failed` | 보내지 못했다(채널 실패·네트워크·미선언 키). 기능 동작은 이미 끝났으므로 그대로 둔다 |
+ * | `skipped` | 보낼 채널이나 수신처가 없다 |
+ * | `disabled` | 소유자가 이 알림을 꺼 두었다 — 새 선언의 기본값이다 |
+ * | `limited` | 발송 한도에 걸렸다 |
+ */
+export type OwnerNotifyStatus = 'sent' | 'failed' | 'skipped' | 'disabled' | 'limited'
+
+/** 알림 값 하나. 서버는 스칼라만 받고 URL 을 지우며 200자로 자른다 — 사람이 읽을 문자열로 보낸다. */
+export type OwnerNotifyValue = string | number | boolean | null
+
+export interface OwnerNotifyResult {
+  result: OwnerNotifyStatus
+  /** 발송 이력 id. 요청이 서버에 닿지 못했으면 없다. */
+  log_id?: number
+  /** `failed` 일 때 원인. 서버 응답(미선언 키 404 등)이나 전송 오류의 메시지다. */
+  error?: { status?: number; message: string }
+}
+
 function buildSdk(ctx: RequestContext) {
   async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
     const res = await fetch(`${BAAS_BASE_URL}${path}`, {
@@ -586,7 +609,40 @@ function buildSdk(ctx: RequestContext) {
       call<Record<string, unknown>>('PUT', `/service/boards/posts/${postId}`, post),
   }
 
-  return { dyncol, account, secrets, reservation, board, ctx }
+  // 관리자 알림(aiapp-service#884). 기능 동작이 **성공한 뒤** 프로젝트 소유자에게 알린다.
+  //
+  // **수신자를 받지 않는다.** 서버가 프로젝트 소유자로 고정한다 — 받는 사람을 caller 가 정하면
+  // 이 경로가 방문자·회원에게 아무 내용이나 보내는 발송 API 가 된다.
+  //
+  // **던지지 않는다.** 알림은 부수 효과다. 예약은 이미 저장됐는데 알림 실패로 예외가 올라가면
+  // 손님은 실패 화면을 보고 다시 시도해 예약이 두 건이 된다. 그래서 어떤 실패도 결과 값으로
+  // 돌려주고 로그만 남긴다. 미선언 키(404)도 마찬가지다 — 로그의 메시지가 schema.json 선언과
+  // 수렴을 가리킨다.
+  const notify = {
+    /** 소유자에게 알린다. `key` 는 `backend/schema.json` 의 `notifications` 에 선언된 것이어야 한다. */
+    owner: async (
+      key: string,
+      values: Record<string, OwnerNotifyValue> = {},
+    ): Promise<OwnerNotifyResult> => {
+      try {
+        const data = await call<{ result: OwnerNotifyStatus; log_id?: number }>(
+          'POST', '/service/notifications/owner', { key, values },
+        )
+        return { result: data.result, log_id: data.log_id }
+      } catch (e) {
+        const status = e instanceof SdkError ? e.status : undefined
+        const message = e instanceof Error ? e.message : String(e)
+        // 토큰은 call 밖으로 나오지 않는다 — 여기 남는 것은 키·상태·서버 메시지뿐이다.
+        console.error(
+          `[notify.owner] ${key} 알림 실패${status ? ` (${status})` : ''}: ${message}`,
+          { requestId: ctx.requestId },
+        )
+        return { result: 'failed', error: { status, message } }
+      }
+    },
+  }
+
+  return { dyncol, account, secrets, reservation, board, notify, ctx }
 }
 
 export type Sdk = ReturnType<typeof buildSdk>
