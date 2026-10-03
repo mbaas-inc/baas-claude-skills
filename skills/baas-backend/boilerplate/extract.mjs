@@ -20,7 +20,7 @@ import ts from 'typescript'
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { convergeSchema, readSchema, renderTypes } from './schema.mjs'
+import { convergeSchema, readSchema, renderNotificationTypes, renderTypes } from './schema.mjs'
 
 // 프로젝트 루트에서 실행한다: `node backend/extract.mjs`
 // 추출기가 backend/ 안에 살아도 대상은 **앱의** src/services 다.
@@ -33,6 +33,8 @@ const GRANTS_OUT = path.join(ROOT, 'backend', 'service-grants.json')
 const SECRETS_OUT = path.join(ROOT, 'backend', 'secret-names.json')
 // 선언에서 만든 레코드 타입. 손으로 쓰던 두 번째 출처를 없앤다.
 const TYPES_OUT = path.join(ROOT, 'src', 'types', 'collections.ts')
+// 관리자 알림 키·값 타입. `notify.owner` 의 키 오타를 컴파일 에러로 만든다.
+const NOTIFY_TYPES_OUT = path.join(ROOT, 'src', 'types', 'notifications.ts')
 // 함수별 접근 선언. 공개 표면을 한 파일로 검토할 수 있게 한다.
 const ACCESS_OUT = path.join(ROOT, 'backend', 'serverfn-access.json')
 
@@ -491,6 +493,14 @@ try {
     fs.mkdirSync(path.dirname(TYPES_OUT), { recursive: true })
     fs.writeFileSync(TYPES_OUT, renderTypes(schema))
     console.log(`레코드 타입 생성 ${schema.collections.length}개 → src/types/collections.ts`)
+    const notifyTypes = renderNotificationTypes(schema)
+    if (notifyTypes) {
+      fs.writeFileSync(NOTIFY_TYPES_OUT, notifyTypes)
+      console.log(`알림 타입 생성 ${schema.notifications.length}개 → src/types/notifications.ts`)
+    } else if (fs.existsSync(NOTIFY_TYPES_OUT)) {
+      // 선언을 지웠는데 타입이 남으면 코드는 컴파일되고 서버는 404 를 낸다 — 같이 지운다.
+      fs.rmSync(NOTIFY_TYPES_OUT)
+    }
     console.log(convergeSchema(ROOT))
   }
 } catch (error) {
