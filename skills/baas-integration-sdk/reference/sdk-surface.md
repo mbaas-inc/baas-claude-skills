@@ -558,12 +558,32 @@ const terms = await pay.fetchTerms();   // { title, content, version }
   ```
 
 ### 커스텀 화면에 결제를 붙일 때
-현재 SDK 는 결제 금액을 안전하게 다루는 prepare/confirm 을 **store·reservation 에만** 제공한다. 따라서
-"돈이 실제로 움직이는" 결제는 **store 또는 reservation 을 경유**한다. 결제 화면엔 위 ①②를 동일 적용.
+"돈이 실제로 움직이는" 결제의 금액은 **브라우저가 정하지 않는다.** 네이티브 스토어 · 예약은 그쪽
+`beginWidgetCheckout` 을 쓴다. 결제 화면엔 위 ①② 와 위젯 규칙을 동일 적용.
 <!--collection:start-->
-커스텀 컬렉션은 그 결과(주문/예약 id 등)를 **reference 로 연결**해 도메인 데이터를 관리한다.
-**커스텀 컬렉션 필드에 금액·결제상태를 두고 클라이언트가 직접 쓰는 방식은 위·변조 가능하므로 금지**
-(결제 확정은 반드시 서버 소유).
+커스텀 원장(예약금 · 이용권 등 컬렉션으로 만든 도메인)에 붙는 결제는 **금액을 DB(컬렉션)에 두고, 커스텀
+백엔드(serverFn)가 그 값을 읽어 세션을 만들고 승인한다**(`baas-backend` 의 `sdk.payments`). 앱은 결제 대상
+id 만 보내고 위젯만 띄운다 — 금액을 보내지 않는다.
+
+```tsx
+const pay = BaasSDK.usePayment();
+// 결제 화면 — serverFn 이 금액을 정해 만든 세션을 그대로 넘긴다(앱이 금액을 만들지 않는다)
+const session = await startDeposit({ serviceId, slot });   // id 만 — 금액은 serverFn 이 DB 에서 읽는다
+const handle = await pay.beginWidget(session, { methodsSelector: "#pay-methods", agreementSelector: "#pay-agreement" });
+if (handle.paymentMode === "test") showNotice("테스트 결제예요 — 실제로 청구되지 않아요.");
+// 결제 버튼 onClick — 동기로(앞에 await 금지)
+handle.requestPayment({ successUrl: `${location.origin}/deposit-success`, failUrl: `${location.origin}/deposit-fail` });
+
+// 복귀 페이지(/deposit-success)
+const r = pay.getRedirectResult();          // { ok, orderNo, paymentKey, amount } | { ok:false, code, message } | null
+if (r?.ok) await confirmDeposit({ orderNo: r.orderNo, paymentKey: r.paymentKey, amount: r.amount });
+```
+
+- **승인은 브라우저가 하지 않는다.** `getRedirectResult()` 의 ok 는 「토스에서 돌아왔다」일 뿐이다 —
+  serverFn 이 `payments.confirm` 으로 PAID 를 받아야 결제 완료다.
+- failUrl 의 `code` 가 `PAY_PROCESS_CANCELED`(사용자 취소)면 조용히 결제 화면으로 돌려보낸다.
+- 원장에는 `order_no` 만 두고 상태는 서버(`payments.get`)가 정본이다. **커스텀 컬렉션 필드에 금액·결제상태를
+  두고 클라이언트가 직접 쓰는 방식은 위·변조 가능하므로 금지.**
 <!--collection:end-->
 
 ---

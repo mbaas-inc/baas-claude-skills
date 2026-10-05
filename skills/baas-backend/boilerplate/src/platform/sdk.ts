@@ -260,6 +260,29 @@ export interface OwnerNotifyResult {
   error?: { status?: number; message: string }
 }
 
+/** 커스텀 결제 상태 — 결제 상태의 정본은 이 값이다. 자기 컬렉션에 복사해 둔 값을 믿지 않는다. */
+export type PaymentStatus = 'CREATED' | 'PAID' | 'CANCELLED'
+
+/** 커스텀 결제 1건 (aiapp-service#900). `order_no` 를 자기 원장(예약 레코드 등)에 보관한다. */
+export interface ServicePayment {
+  /** 주문번호(토스 orderId). 승인 · 취소 · 조회에 쓴다. */
+  order_no: string
+  account_id: string
+  /** 서버가 세션에 박은 금액(원). 승인 때 토스 금액과 이 값이 다르면 거절된다. */
+  amount: number
+  item_name: string | null
+  status: PaymentStatus
+  /** `test` 면 테스트 결제(실제 청구 없음), `live` 면 실결제. 판매자 승인 상태로 서버가 정한다. */
+  payment_mode: 'test' | 'live'
+  /** 결제위젯 클라이언트 키 — 브라우저에 그대로 넘긴다(공개 키). */
+  client_key: string
+  pay_method: string | null
+  receipt_url: string | null
+  paid_at: string | null
+  cancelled_at: string | null
+  created_at: string
+}
+
 function buildSdk(ctx: RequestContext) {
   async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
     const res = await fetch(`${BAAS_BASE_URL}${path}`, {
@@ -642,7 +665,53 @@ function buildSdk(ctx: RequestContext) {
     },
   }
 
-  return { dyncol, account, secrets, reservation, board, notify, ctx }
+  // 커스텀 결제(aiapp-service#900). **금액은 serverFn 이 정한다** — 자기 원장에서 계산한 값을
+  // 넘기고, 브라우저가 보낸 금액은 절대 쓰지 않는다. 세션 금액이 서버에 박히므로 위젯에서 금액을
+  // 바꿔도 승인 때 거절된다.
+  //
+  // **승인도 serverFn 이 한다.** 토스 successUrl 로 돌아온 paymentKey 를 받아 `confirm` 하고,
+  // `status === 'PAID'` 일 때만 같은 요청 안에서 자기 원장(예약 확정 등)을 갱신한다. 결제 상태를
+  // 컬렉션 필드에 두고 브라우저가 쓰게 하면 위변조된다 — 상태는 `get` 이 정본이다.
+  //
+  // 결제자는 **이 요청의 로그인 회원**으로 고정한다. 결제자를 인자로 받으면 다른 회원 이름으로
+  // 결제가 만들어진다. 비로그인이면 만들 수 없다.
+  //
+  // 알림과 달리 **던진다.** 결제 실패를 값으로 삼키면 예약이 결제 없이 확정된다.
+  const payments = {
+    /** 결제 세션 만들기. 응답의 order_no · amount · client_key 를 브라우저에 넘겨 위젯을 띄운다. */
+    create: async (opts: { amount: number; itemName: string }) => {
+      if (!ctx.accountId) {
+        throw new SdkError('로그인한 회원만 결제할 수 있습니다.', 401, 'LOGIN_REQUIRED')
+      }
+      return call<ServicePayment>('POST', '/service/payments/sessions', {
+        account_id: ctx.accountId,
+        amount: opts.amount,
+        item_name: opts.itemName,
+      })
+    },
+
+    /** 결제 1건 — 상태의 정본. 다른 프로젝트 결제이거나 없으면 404. */
+    get: (orderNo: string) =>
+      call<ServicePayment>('GET', `/service/payments/sessions/${encodeURIComponent(orderNo)}`),
+
+    /**
+     * 승인. `paymentKey` · `amount` 는 토스 successUrl 쿼리 값이다. 금액이 세션과 다르면 400.
+     * `status === 'PAID'` 를 확인한 뒤에 자기 원장을 확정한다(가상계좌 입금 대기는 `CREATED`).
+     */
+    confirm: (orderNo: string, payment: { paymentKey: string; amount: number }) =>
+      call<ServicePayment>('POST', `/service/payments/sessions/${encodeURIComponent(orderNo)}/confirm`, {
+        payment_key: payment.paymentKey,
+        amount: payment.amount,
+      }),
+
+    /** 취소. 결제 완료면 전액 환불, 결제 전이면 세션만 닫는다. 이미 취소됐으면 그대로 돌려준다. */
+    cancel: (orderNo: string, reason: string) =>
+      call<ServicePayment>('POST', `/service/payments/sessions/${encodeURIComponent(orderNo)}/cancel`, {
+        reason,
+      }),
+  }
+
+  return { dyncol, account, secrets, reservation, board, notify, payments, ctx }
 }
 
 export type Sdk = ReturnType<typeof buildSdk>

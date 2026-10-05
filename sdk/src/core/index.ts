@@ -51,7 +51,7 @@ export {
   getPublicRecord,
 } from "./collection";
 export { uploadFile } from "./storage";
-export { getPurchaseTerms } from "./payment";
+export { getPurchaseTerms, beginPaymentWidget, getPaymentRedirectResult } from "./payment";
 export { registerRecipient } from "./recipient";
 export { getInquiryConfig, submitInquiry } from "./inquiry";
 export { normalizePhone, formatPhone } from "./phone";
@@ -138,7 +138,13 @@ export type {
   UploadOptions,
   UploadResult,
 } from "./storage";
-export type { PurchaseTerms } from "./payment";
+export type {
+  PurchaseTerms,
+  CustomPaymentSession,
+  PaymentWidgetParams,
+  CustomPaymentWidgetHandle,
+  PaymentRedirectResult,
+} from "./payment";
 export type { RecipientInput } from "./recipient";
 export type { InquiryConfig, InquiryInput, InquiryResult } from "./inquiry";
 export type { Survey } from "./survey";
