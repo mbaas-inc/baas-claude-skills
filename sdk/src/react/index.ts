@@ -91,8 +91,10 @@ export const BaasSDK = {
   getBooking: core.getBooking,
   updateBooking: core.updateBooking,
   cancelBooking: core.cancelBooking,
-  // payment (결제 공통 — 약관 조회. 금액 실행은 store/reservation 소유)
+  // payment (결제 공통 — 약관 조회 · 커스텀 결제 위젯. 금액은 store/reservation/커스텀 백엔드 소유)
   getPurchaseTerms: core.getPurchaseTerms,
+  beginPaymentWidget: core.beginPaymentWidget,
+  getPaymentRedirectResult: core.getPaymentRedirectResult,
   getStoreConfig: core.getStoreConfig,
   listProducts: core.listProducts,
   listCategories: core.listCategories,

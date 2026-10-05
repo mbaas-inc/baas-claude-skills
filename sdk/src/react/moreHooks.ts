@@ -24,12 +24,19 @@ function useAsync() {
   return { loading, error, run };
 }
 
-/** 결제 공통 훅 — fetchTerms()로 표준 구매약관을 받아 결제 전 표시+동의. 결제 실행은 store/reservation 소유. */
+/** 결제 공통 훅 — fetchTerms()로 표준 구매약관을 받아 결제 전 표시+동의.
+ *  커스텀 결제(#900): serverFn 이 만든 세션으로 beginWidget → 복귀 페이지에서 getRedirectResult → serverFn 이 승인. */
 export function usePayment() {
   const React = getReact();
   const { loading, error, run } = useAsync();
   const fetchTerms = React.useCallback(() => run(() => core.getPurchaseTerms()), []);
-  return { fetchTerms, loading, error };
+  // store/reservation 의 beginWidgetCheckout 과 같이 run 으로 감싸지 않는다 — 실패를 throw 로 받아 앱이 처리한다.
+  const beginWidget = React.useCallback(
+    (session: core.CustomPaymentSession, params: core.PaymentWidgetParams) =>
+      core.beginPaymentWidget(session, params),
+    []
+  );
+  return { fetchTerms, beginWidget, getRedirectResult: core.getPaymentRedirectResult, loading, error };
 }
 
 export function useRecipient() {
