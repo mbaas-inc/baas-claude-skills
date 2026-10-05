@@ -98,3 +98,16 @@ test("checkAuth — 네트워크/500 오류는 삼키지 않고 throw", async ()
   mockFetch(() => envelope(500, { result: "FAIL", message: "서버 오류" }));
   await assert.rejects(() => checkAuth(), (e) => e instanceof BaasError && e.status === 500);
 });
+
+test("서버에 닿지 못하면 브라우저 영문 대신 한국어 NETWORK_ERROR 를 던진다", async () => {
+  init({ projectId: PROJECT });
+  clearAuthCache();
+  mockFetch(() => {
+    throw new TypeError("Failed to fetch");
+  });
+  await assert.rejects(
+    () => checkAuth(),
+    (e) => e instanceof BaasError && e.errorCode === "NETWORK_ERROR" && e.status === 0
+      && /연결하지 못했어요/.test(e.message) && !/Failed to fetch/.test(e.message),
+  );
+});

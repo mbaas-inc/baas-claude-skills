@@ -5,7 +5,7 @@
  * (서버 경유 업로드의 413/403·지연 해소). 반환된 cdn_url 을 콘텐츠(동적 컬렉션 필드·
  * 게시글 등)에 저장해 영구 조회한다. category 는 저장 분류 화이트리스트다.
  */
-import { request } from "./http";
+import { BaasError, fetchOrNetworkError, request } from "./http";
 import { getProjectId } from "./config";
 
 /** 업로드 후 읽기 URL + 서명된 PUT 대상 */
@@ -75,13 +75,13 @@ export async function uploadFile(
 
   // ② S3 직접 PUT — presign URL 자체가 서명돼 있어 credentials 를 붙이지 않는다.
   //    Content-Type 은 ①에서 서명한 값과 반드시 일치해야 한다(불일치 시 S3 가 403).
-  const put = await fetch(res.original.presign_url, {
+  const put = await fetchOrNetworkError(res.original.presign_url, {
     method: "PUT",
     body: file,
     headers: { "Content-Type": contentType },
   });
   if (!put.ok) {
-    throw new Error(`파일 업로드(S3 PUT) 실패: HTTP ${put.status}`);
+    throw new BaasError(`파일을 올리지 못했어요. 잠시 후 다시 시도해 주세요. (HTTP ${put.status})`, "UPLOAD_FAILED", put.status);
   }
 
   return { ...res.original, file_id: res.file_id ?? undefined };

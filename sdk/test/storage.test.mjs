@@ -1,7 +1,7 @@
 /** 파일 업로드 transport 계약 — presign 발급(POST) + S3 직접 PUT(Content-Type 일치) 검증. */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { init, uploadFile } from "../dist/baas-core.esm.js";
+import { init, uploadFile, BaasError } from "../dist/baas-core.esm.js";
 
 const PROJECT = "b59f841d-bfa3-4d63-8969-70420a4298f6";
 
@@ -76,5 +76,21 @@ test("uploadFile — S3 PUT 실패 시 throw", async () => {
     return { status: 403, ok: false }; // S3 거부
   };
   const blob = new Blob([new Uint8Array([1])], { type: "image/png" });
-  await assert.rejects(() => uploadFile(blob, { filename: "x.png" }), /S3 PUT/);
+  await assert.rejects(
+    () => uploadFile(blob, { filename: "x.png" }),
+    (e) => e instanceof BaasError && e.errorCode === "UPLOAD_FAILED" && e.status === 403 && /올리지 못했어요/.test(e.message),
+  );
+});
+
+test("uploadFile — S3 연결 실패는 한국어 NETWORK_ERROR 로 바뀐다", async () => {
+  init({ projectId: PROJECT });
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/upload/presign")) return presignOk();
+    throw new TypeError("Failed to fetch");
+  };
+  const blob = new Blob([new Uint8Array([1])], { type: "image/png" });
+  await assert.rejects(
+    () => uploadFile(blob, { filename: "x.png" }),
+    (e) => e instanceof BaasError && e.errorCode === "NETWORK_ERROR" && e.status === 0 && !/Failed to fetch/.test(e.message),
+  );
 });

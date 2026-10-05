@@ -615,12 +615,21 @@ for (const { module, fns } of extracted) {
       `    this.detail = detail\n` +
       `  }\n` +
       `}\n\n` +
+      `// 서버에 닿지 못하면 브라우저는 영문 TypeError("Failed to fetch") 를 던진다. 그대로 두면\n` +
+      `// 그 문구가 화면에 나온다 — status 0 의 한국어 실패로 바꿔 화면이 다른 실패와 같이 다루게 한다.\n` +
+      `export const NETWORK_ERROR_MESSAGE =\n` +
+      `  '서버에 연결하지 못했어요. 인터넷 연결을 확인하고 잠시 후 다시 시도해 주세요.'\n\n` +
       `async function call(path: string, input: unknown) {\n` +
-      `  const res = await fetch(\`\${API_BASE}\${path}\`, {\n` +
-      `    method: 'POST',\n` +
-      `    headers: { 'content-type': 'application/json' },\n` +
-      `    body: JSON.stringify(input ?? {}),\n` +
-      `  })\n` +
+      `  let res: Response\n` +
+      `  try {\n` +
+      `    res = await fetch(\`\${API_BASE}\${path}\`, {\n` +
+      `      method: 'POST',\n` +
+      `      headers: { 'content-type': 'application/json' },\n` +
+      `      body: JSON.stringify(input ?? {}),\n` +
+      `    })\n` +
+      `  } catch {\n` +
+      `    throw new ServerFnCallError(NETWORK_ERROR_MESSAGE, 0)\n` +
+      `  }\n` +
       `  if (!res.ok) {\n` +
       `    // 프레임워크는 실패에 \`{ error: message }\` 를 싣는다(스킬 계약표). 본문이\n` +
       `    // 비어 있거나 JSON 이 아닐 수 있으므로 읽기 실패는 상태 코드로 덮는다.\n` +
