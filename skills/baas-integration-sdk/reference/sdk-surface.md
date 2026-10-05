@@ -797,6 +797,20 @@ await transaction([
   아니면 `submitRecord`/`editRecord`가 400. self-reference(같은 컬렉션) 허용 — 트리는 root anchor
   (`post_id`)+parent(`parent_id`) 이중 참조로 설계하고 anchor 평면 조회 후 클라에서 조립한다.
 - **필터 DSL**: `filter: { field: { op: value } }`, op ∈ `eq|ne|gt|gte|lt|lte|like|in|has`(array 요소 포함).
+  **필드 타입마다 쓸 수 있는 연산자가 다르다** — 맞지 않으면 400 `op_not_allowed_for_<타입>:<op>`:
+
+  | 타입 | 연산자 |
+  |---|---|
+  | `string` | `eq` `ne` `like` `in` — **범위 비교(`gt`·`gte`·`lt`·`lte`)는 안 된다** |
+  | `number` | `eq` `ne` `gt` `gte` `lt` `lte` `in` |
+  | `date` | `eq` `ne` `gt` `gte` `lt` `lte` |
+  | `enum` · `reference` | `eq` `ne` `in` |
+  | `boolean` | `eq` `ne` |
+  | `array` | `has` |
+
+  날짜·시각을 범위로 찾을 필드(「이번 달 예약」)는 **처음부터 `date` 타입**으로 선언한다. `string` 으로
+  만든 뒤에는 타입을 바꿀 수 없어(스키마는 더하기만 된다) 숫자 필드를 하나 더 두게 된다.
+  `like` 는 **값 그대로 부분 일치**다(서버가 앞뒤에 `%` 를 붙인다, 대소문자 무시) — `%` 를 직접 넣지 않는다.
   sort는 `field`/`-field`. `or: {...}` 는 서로 OR 이고 그 묶음이 `filter` 와 AND 로 결합된다(한 겹만 — 중첩 없음).
   **성능**: 등호(`eq`)·`has` 만 인덱스를 탄다. `like`·범위 비교·커스텀 필드 정렬은 전체 스캔이므로
   큰 컬렉션에서 목록 UX 를 설계할 때 감안한다. `limit` 상한은 100.
@@ -865,6 +879,9 @@ await BaasSDK.useCollection().submitRecord("products", { name, image_url: res.cd
 - 훅은 `isUploading`(로딩)·`error`(실패 시 `BaasError`)를 노출하고 실패 시 `null` 반환(에러 표시 방식은 앱 UX 소관).
 - 훅 없이 직접 호출: `await BaasSDK.uploadFile(file, { category })` (성공 시 결과 resolve, 실패 시 throw).
 - 업로드는 **로그인 필요**(프로젝트 소속). `<input accept="image/*">` 로 클라 사전 필터 권장.
+- **사장님(프로젝트 소유자)도 앱 안에서는 회원으로 올린다.** 소유자의 플랫폼 로그인은 앱 주소에서 업로드
+  자격으로 읽히지 않는다(관리 화면이 열리는 것과 별개다). 관리 화면의 사진 올리기에서 401 이면 「이 앱에
+  회원으로 로그인하면 올릴 수 있어요」를 보여 주고 로그인으로 보낸다. 대량 관리는 BaaS 콘솔의 스토리지에서 한다.
 
 ---
 
@@ -885,3 +902,5 @@ await BaasSDK.useCollection().submitRecord("products", { name, image_url: res.cd
 | `NOT_FOUND` | 404 | 대상 없음 | |
 | `ALREADY_EXISTS` | 409 | 중복·충돌 | 회원가입 아이디 중복 등 |
 | `INTERNAL_SERVER_ERROR` | 500 | 서버 오류 | 재시도 가능 |
+| `NETWORK_ERROR` | 0 | 서버에 닿지 못함(오프라인·연결 끊김) | SDK 가 브라우저 영문(`Failed to fetch`) 대신 한국어 `.message` 를 싣는다 — 그대로 노출하고 다시 시도를 안내 |
+| `UPLOAD_FAILED` | S3 응답 코드 | 파일 본체 업로드(S3) 거절 | `useFileUpload` 의 `error` — 그대로 노출 |

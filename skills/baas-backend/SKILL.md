@@ -243,6 +243,27 @@ dyncol.transaction → 항목마다 그 항목의 collection·op 로 유도된�
 `batch` 의 두 번째 인자와 `transaction` 의 배열은 **리터럴이어야 한다** — 항목을 볼 수
 없으면 어느 컬렉션에 무슨 권한이 필요한지 유도할 수 없어 빌드가 선다.
 
+**그래서 항목 수가 요청마다 달라지는 트랜잭션은 쓸 수 없다**(`items.map(...)`·`push` 로 만든 배열은
+`dynamic-transaction` 으로 선다). 「시술 시간만큼 30분 칸을 전부 잠근다」처럼 개수가 변하는 잠금이
+필요하면 **잠금 단위를 키워 개수를 고정한다** — 날짜마다 장부 레코드 하나(`date` unique)에 그날
+잡힌 칸을 담고, 읽은 버전이 그대로일 때만 쓴다:
+
+```ts
+const ledger = await getOrCreateLedger(sdk, date)              // { id, slots, version }
+if (wanted.some((t) => ledger.slots[t])) return { status: 'taken' }
+try {
+  await sdk.dyncol.update(LEDGER, ledger.id,
+    { slots: JSON.stringify({ ...ledger.slots, ...claim }), version: ledger.version + 1 },
+    { if: { version: ledger.version } })                       // 그 사이 누가 썼으면 409
+} catch (e) {
+  if (errorStatus(e) === 409) return { status: 'taken' }       // 다시 읽고 판단하게 한다
+  throw e
+}
+```
+
+같은 날 예약끼리 순서대로 처리되지만, 한 사람이 운영하는 가게처럼 하루 예약 수가 적으면 문제가
+되지 않는다(실측 2026-10-05: 10명 동시 → 1건).
+
 그래서 컬렉션명을 **문자열 리터럴이나 모듈 스코프 `const`** 로 써야 한다. 이건 스타일
 규칙이 아니라 권한이 유도되는 조건이다.
 
@@ -582,6 +603,7 @@ soft-delete 된 레코드는 `restore` 로 되살린다(인가는 `delete` 권�
 | 응답 | **6MB** | 초과분은 presigned URL |
 | 기본 타임아웃 | **10초** | 대량 순회는 페이지로 나눠 요청마다 조금씩 |
 | 인덱스 | containment(=) 만 GIN | 범위·부분일치·임의 정렬은 순차 스캔 — 대량 컬렉션에서 피한다 |
+| 필터 연산자 | 필드 타입별로 다르다 | `string` 은 범위 비교(`gte` 등) 불가 — 날짜 범위로 찾을 필드는 `date` 로 선언한다. `like` 는 부분 일치(`%` 를 넣지 않는다). 표는 `baas-integration-sdk` 의 `sdk-surface.md` 「필터 DSL」 |
 
 ### 회원 정보 — 인증은 받아 쓰고, 인가는 네 일이다
 
@@ -841,10 +863,12 @@ return { status: 'booked' }
 **새 알림은 꺼진 채(OFF, 채널 `email`)로 시작한다.** 만들고 끝내면 사용자는 알림이 오는 줄
 안다. 반드시 이렇게 마무리한다:
 
-1. `baas notification recipient` 로 **어디로 가는지** 확인해 알려 준다(따로 정하지 않았으면
-   가입 계정 이메일·전화번호를 쓴다)
-2. 사용자에게 말한다 — "알림을 만들었어요. 지금은 꺼져 있어서 켜야 받으실 수 있어요. 켤까요?"
-3. 켜겠다고 하면 `baas notification enable <key>`
+1. 사용자에게 말한다 — "알림을 만들었어요. 프로젝트 관리자 계정 이메일로 받아요. 지금은 꺼져 있어서
+   켜야 받으실 수 있어요. 켤까요?"
+2. 켜겠다고 하면 `baas notification enable <key>`
+
+받는 곳은 늘 프로젝트 관리자(소유자) 계정이라 따로 조회하지 않는다. 이메일·전화번호를 채팅에 옮겨
+적지 마라 — 개인정보가 대화 기록에 남는다.
 
 | 명령 | 쓰임 |
 |---|---|
@@ -854,8 +878,8 @@ return { status: 'booked' }
 | `baas notification recipient` | 받는 이메일·전화번호와 그 출처 |
 | `baas notification logs` | 최근 발송 결과 — 「알림이 안 와요」는 이걸 **실행해서** 본다 |
 
-**알림톡을 켜기 전에는** `recipient` 로 전화번호를 확인하고 **그 번호가 맞는지 사용자에게
-확인받는다.** 번호가 없으면 서버가 거절한다. 알림톡은 아직 열리지 않았을 수 있다 — 거절되면
+**알림톡을 켜기 전에만** `recipient` 로 전화번호가 등록돼 있는지 확인하고, 번호를 그대로 보여 주지
+말고 끝자리만 보여 주며 **그 번호가 맞는지 사용자에게 확인받는다.** 번호가 없으면 서버가 거절한다. 알림톡은 아직 열리지 않았을 수 있다 — 거절되면
 이메일로 받도록 안내한다.
 
 ### 외부 API 자격 증명 — `sdk.secrets` 로 꺼낸다
