@@ -50,7 +50,7 @@ const JSON_CUTS = {
   "data_flow.storage": [" 또는 동적 컬렉션 이미지 필드(string url)"],
   "data_flow.payment": [
     "·커스텀",
-    " — 커스텀 원장 결제(예약금 등)는 serverFn 이 sdk.payments 로 세션 생성·승인하고 앱은 usePayment().beginWidget(serverFn 이 준 세션)+getRedirectResult() 결과를 serverFn 에 넘기기만(앱이 금액을 만들지 않음·승인은 브라우저가 하지 않음·payment_mode=test 면 테스트 결제 안내, 금액·결제상태를 커스텀 필드에 두고 클라가 쓰는 것 금지=위변조)",
+    " — 커스텀 원장 결제(예약금 등)는 금액을 DB(컬렉션)에 두고 serverFn 이 읽어 sdk.payments 로 세션 생성·승인하고 앱은 usePayment().beginWidget(serverFn 이 준 세션)+getRedirectResult() 결과를 serverFn 에 넘기기만(앱은 결제 대상 id 만 보내고 금액을 만들지 않음·승인은 브라우저가 하지 않음·payment_mode=test 면 테스트 결제 안내, 금액·결제상태를 커스텀 필드에 두고 클라가 쓰는 것 금지=위변조)",
   ],
 };
 

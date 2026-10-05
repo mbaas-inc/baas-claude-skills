@@ -882,18 +882,37 @@ return { status: 'booked' }
 말고 끝자리만 보여 주며 **그 번호가 맞는지 사용자에게 확인받는다.** 번호가 없으면 서버가 거절한다. 알림톡은 아직 열리지 않았을 수 있다 — 거절되면
 이메일로 받도록 안내한다.
 
-### 결제 — 금액은 serverFn 이 정하고, 승인도 serverFn 이 한다 (`sdk.payments`)
+### 결제 — 금액은 DB 에서 읽고, 승인은 serverFn 이 한다 (`sdk.payments`)
 
 예약금 · 이용권처럼 **커스텀 원장에 붙는 결제**는 이 표면으로 만든다(aiapp-service#900). 네이티브
 스토어 · 예약 기능을 쓰는 화면은 그쪽 `beginWidgetCheckout` 을 쓴다 — 여기서 다시 만들지 마라.
 
+**금액의 원본은 컬렉션(DB)이다.** 시술 · 상품 · 예약금 금액은 사장님이 관리 화면에서 고치는 데이터이므로
+코드 상수가 아니라 컬렉션에 둔다. 위변조 방어는 세 겹이고, 앞의 둘이 **이 역할의 책임**이다.
+
+| 겹 | 누가 | 막는 것 |
+|---|---|---|
+| ① 금액 컬렉션은 `service` 전용 | 이 역할(`schema.json`) | 회원이 1원짜리 시술 행을 **직접 만들거나 고치는** 것 |
+| ② serverFn 이 DB 에서 금액을 읽는다 | 이 역할(serverFn) | 브라우저가 보낸 금액 · 금액이 든 객체를 믿는 것 |
+| ③ 세션 금액 고정 + 승인 대조 | 플랫폼 | 위젯 · 복귀 주소에서 금액을 바꾸는 것(다르면 400) |
+
+```jsonc
+// backend/schema.json — 금액이 든 컬렉션은 브라우저가 쓰지 못하게(읽기도 serverFn 이 골라 준다)
+{ "name": "services", "label": "시술",
+  "access": {"read":"service","create":"service","update":"service","delete":"service"},
+  "fields": [ {"name":"name","type":"string","required":true},
+              {"name":"price","type":"number","required":true},
+              {"name":"deposit","type":"number","required":true} ] }
+```
+
 ```ts
 // src/services/deposit.ts
-export const startDeposit = serverFn<{ slotId: string }, DepositStart>(async (input, ctx) => {
-  const slot = await findOpenSlot(ctx, input.slotId)            // 자기 원장에서 판정
-  if (!slot) throw new ServerFnError('이미 마감된 시간이에요', 409)
-  const pay = await ctx.sdk.payments.create({ amount: DEPOSIT_WON, itemName: '커트 예약금' })
-  await holdSlot(ctx, slot, pay.order_no)                        // 원장에 order_no 를 보관(PENDING)
+export const startDeposit = serverFn<{ serviceId: string; slot: string }, DepositStart>(async (input, ctx) => {
+  const svc = await ctx.sdk.dyncol.get<Service>('services', input.serviceId)   // 금액은 DB 에서
+  if (!svc) throw new ServerFnError('없는 시술이에요', 404)
+  if (!(await holdSlot(ctx, input.slot))) throw new ServerFnError('이미 마감된 시간이에요', 409)
+  const pay = await ctx.sdk.payments.create({ amount: svc.data.deposit, itemName: `${svc.data.name} 예약금` })
+  await saveBooking(ctx, { slot: input.slot, serviceId: input.serviceId, orderNo: pay.order_no })  // PENDING
   return { order_no: pay.order_no, amount: pay.amount, client_key: pay.client_key,
            item_name: pay.item_name, payment_mode: pay.payment_mode }
 }, { access: 'member' })
@@ -902,13 +921,15 @@ export const confirmDeposit = serverFn<{ orderNo: string; paymentKey: string; am
   async (input, ctx) => {
     const pay = await ctx.sdk.payments.confirm(input.orderNo, { paymentKey: input.paymentKey, amount: input.amount })
     if (pay.status !== 'PAID') return { status: 'waiting' }      // 가상계좌 입금 대기
-    await confirmBooking(ctx, input.orderNo)                       // 같은 요청 안에서 원장 확정
+    await confirmBookingByOrder(ctx, input.orderNo)                // 같은 요청 안에서 원장 확정
     return { status: 'confirmed' }
   }, { access: 'member' })
 ```
 
-- **금액은 서버 상수 · 원장에서 정한다.** `input.amount` 로 `create` 하지 마라 — 브라우저가 금액을
-  정하게 된다. `confirm` 의 `amount` 는 토스가 돌려준 값이고 서버가 세션 금액과 대조한다(다르면 400)
+- **브라우저에서는 id 만 받는다.** `input.amount` · `input.price` 처럼 금액이 든 입력으로 `create` 하지 마라.
+  `confirm` 의 `amount` 는 토스가 돌려준 값이고 서버가 세션 금액과 대조한다(다르면 400)
+- **금액 컬렉션을 기본 접근(선언 없음)으로 두지 마라.** 기본은 「로그인 회원이 행을 만들 수 있다」라서, 회원이
+  1원짜리 시술을 만들고 그 id 로 결제하면 ② 를 지켜도 뚫린다. 금액 수정은 `access: 'owner'` serverFn 으로 연다
 - **결제자는 요청한 회원이다.** `create` 는 인자로 결제자를 받지 않는다 — `access: 'member'` 로 둔다
 - **결제 상태를 컬렉션 필드로 판정하지 마라.** 원장에는 `order_no` 만 두고, 상태는 `payments.get` 이
   정본이다. `paid: true` 같은 필드를 브라우저가 쓰게 하면 결제 없이 확정된다

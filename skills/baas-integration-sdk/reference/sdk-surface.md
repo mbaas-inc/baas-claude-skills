@@ -561,13 +561,14 @@ const terms = await pay.fetchTerms();   // { title, content, version }
 "돈이 실제로 움직이는" 결제의 금액은 **브라우저가 정하지 않는다.** 네이티브 스토어 · 예약은 그쪽
 `beginWidgetCheckout` 을 쓴다. 결제 화면엔 위 ①② 와 위젯 규칙을 동일 적용.
 <!--collection:start-->
-커스텀 원장(예약금 · 이용권 등 컬렉션으로 만든 도메인)에 붙는 결제는 **커스텀 백엔드(serverFn)가 세션을
-만들고 승인한다**(`baas-backend` 의 `sdk.payments`). 앱은 위젯만 띄운다.
+커스텀 원장(예약금 · 이용권 등 컬렉션으로 만든 도메인)에 붙는 결제는 **금액을 DB(컬렉션)에 두고, 커스텀
+백엔드(serverFn)가 그 값을 읽어 세션을 만들고 승인한다**(`baas-backend` 의 `sdk.payments`). 앱은 결제 대상
+id 만 보내고 위젯만 띄운다 — 금액을 보내지 않는다.
 
 ```tsx
 const pay = BaasSDK.usePayment();
 // 결제 화면 — serverFn 이 금액을 정해 만든 세션을 그대로 넘긴다(앱이 금액을 만들지 않는다)
-const session = await startDeposit({ slotId });
+const session = await startDeposit({ serviceId, slot });   // id 만 — 금액은 serverFn 이 DB 에서 읽는다
 const handle = await pay.beginWidget(session, { methodsSelector: "#pay-methods", agreementSelector: "#pay-agreement" });
 if (handle.paymentMode === "test") showNotice("테스트 결제예요 — 실제로 청구되지 않아요.");
 // 결제 버튼 onClick — 동기로(앞에 await 금지)
