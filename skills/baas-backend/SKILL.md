@@ -882,6 +882,45 @@ return { status: 'booked' }
 말고 끝자리만 보여 주며 **그 번호가 맞는지 사용자에게 확인받는다.** 번호가 없으면 서버가 거절한다. 알림톡은 아직 열리지 않았을 수 있다 — 거절되면
 이메일로 받도록 안내한다.
 
+### 결제 — 금액은 serverFn 이 정하고, 승인도 serverFn 이 한다 (`sdk.payments`)
+
+예약금 · 이용권처럼 **커스텀 원장에 붙는 결제**는 이 표면으로 만든다(aiapp-service#900). 네이티브
+스토어 · 예약 기능을 쓰는 화면은 그쪽 `beginWidgetCheckout` 을 쓴다 — 여기서 다시 만들지 마라.
+
+```ts
+// src/services/deposit.ts
+export const startDeposit = serverFn<{ slotId: string }, DepositStart>(async (input, ctx) => {
+  const slot = await findOpenSlot(ctx, input.slotId)            // 자기 원장에서 판정
+  if (!slot) throw new ServerFnError('이미 마감된 시간이에요', 409)
+  const pay = await ctx.sdk.payments.create({ amount: DEPOSIT_WON, itemName: '커트 예약금' })
+  await holdSlot(ctx, slot, pay.order_no)                        // 원장에 order_no 를 보관(PENDING)
+  return { order_no: pay.order_no, amount: pay.amount, client_key: pay.client_key,
+           item_name: pay.item_name, payment_mode: pay.payment_mode }
+}, { access: 'member' })
+
+export const confirmDeposit = serverFn<{ orderNo: string; paymentKey: string; amount: number }, { status: string }>(
+  async (input, ctx) => {
+    const pay = await ctx.sdk.payments.confirm(input.orderNo, { paymentKey: input.paymentKey, amount: input.amount })
+    if (pay.status !== 'PAID') return { status: 'waiting' }      // 가상계좌 입금 대기
+    await confirmBooking(ctx, input.orderNo)                       // 같은 요청 안에서 원장 확정
+    return { status: 'confirmed' }
+  }, { access: 'member' })
+```
+
+- **금액은 서버 상수 · 원장에서 정한다.** `input.amount` 로 `create` 하지 마라 — 브라우저가 금액을
+  정하게 된다. `confirm` 의 `amount` 는 토스가 돌려준 값이고 서버가 세션 금액과 대조한다(다르면 400)
+- **결제자는 요청한 회원이다.** `create` 는 인자로 결제자를 받지 않는다 — `access: 'member'` 로 둔다
+- **결제 상태를 컬렉션 필드로 판정하지 마라.** 원장에는 `order_no` 만 두고, 상태는 `payments.get` 이
+  정본이다. `paid: true` 같은 필드를 브라우저가 쓰게 하면 결제 없이 확정된다
+- **`confirm` 이 `PAID` 일 때만 확정한다.** 실패는 던진다(알림과 반대) — 잡아서 성공으로 바꾸지 마라
+- 취소 · 환불은 `payments.cancel(orderNo, 사유)`. 결제 전이면 세션만 닫힌다. 원장 취소와 같은 요청에서 부른다
+- 결제하지 않고 이탈한 세션은 서버 정리 배치가 닫는다(30분 경과 기준). 원장의 PENDING 은 **스스로 만료**시킨다 —
+  만료 전에 `payments.get` 으로 상태를 확인하고 `CREATED` 면 `payments.cancel` 로 함께 닫는다
+- `payment_mode` 가 `test` 면 **테스트 결제**다 — 실제로 청구되지 않는다. 판매자 승인 전 프로젝트는 모두
+  test 다. 화면에 「테스트 결제」 안내를 띄우고, 사용자에게도 그렇게 알린다
+- 프론트는 `usePayment().beginWidget(startDeposit 의 응답, 셀렉터)` 로 위젯을 띄우고, 복귀 페이지에서
+  `getRedirectResult()` 값을 `confirmDeposit` 에 넘긴다(위젯 규칙은 `baas-integration-sdk` 결제 공통 규약)
+
 ### 외부 API 자격 증명 — `sdk.secrets` 로 꺼낸다
 
 외부 서드파티(사내 ERP·재고 시스템·서드파티 SaaS)를 부르려면 키가 필요하다. **코드에 쓰지

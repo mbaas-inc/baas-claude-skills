@@ -544,8 +544,8 @@ const terms = await pay.fetchTerms();   // { title, content, version }
   ```
 
 ### 커스텀 화면에 결제를 붙일 때
-현재 SDK 는 결제 금액을 안전하게 다루는 prepare/confirm 을 **store·reservation 에만** 제공한다. 따라서
-"돈이 실제로 움직이는" 결제는 **store 또는 reservation 을 경유**한다. 결제 화면엔 위 ①②를 동일 적용.
+"돈이 실제로 움직이는" 결제의 금액은 **브라우저가 정하지 않는다.** 네이티브 스토어 · 예약은 그쪽
+`beginWidgetCheckout` 을 쓴다. 결제 화면엔 위 ①② 와 위젯 규칙을 동일 적용.
 
 ---
 
