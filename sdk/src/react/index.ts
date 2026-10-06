@@ -61,6 +61,7 @@ export const BaasSDK = {
   getPublicRecord: core.getPublicRecord,
   // storage (파일 업로드 — presign→S3 PUT, cdn_url 반환)
   uploadFile: core.uploadFile,
+  uploadToTarget: core.uploadToTarget,
   // notice/faq/comments
   listNoticePosts: core.listNoticePosts,
   getNoticePost: core.getNoticePost,

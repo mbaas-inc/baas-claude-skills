@@ -73,9 +73,16 @@ export async function uploadFile(
     }
   );
 
-  // ② S3 직접 PUT — presign URL 자체가 서명돼 있어 credentials 를 붙이지 않는다.
-  //    Content-Type 은 ①에서 서명한 값과 반드시 일치해야 한다(불일치 시 S3 가 403).
-  const put = await fetchOrNetworkError(res.original.presign_url, {
+  // ② S3 직접 PUT
+  await putToPresignedUrl(res.original.presign_url, file, contentType);
+
+  return { ...res.original, file_id: res.file_id ?? undefined };
+}
+
+/** S3 직접 PUT — presign URL 자체가 서명돼 있어 credentials 를 붙이지 않는다.
+ *  Content-Type 은 발급 때 서명한 값과 반드시 일치해야 한다(불일치 시 S3 가 403). */
+async function putToPresignedUrl(url: string, file: File | Blob, contentType: string): Promise<void> {
+  const put = await fetchOrNetworkError(url, {
     method: "PUT",
     body: file,
     headers: { "Content-Type": contentType },
@@ -83,6 +90,38 @@ export async function uploadFile(
   if (!put.ok) {
     throw new BaasError(`파일을 올리지 못했어요. 잠시 후 다시 시도해 주세요. (HTTP ${put.status})`, "UPLOAD_FAILED", put.status);
   }
+}
 
-  return { ...res.original, file_id: res.file_id ?? undefined };
+/**
+ * serverFn 이 서버 SDK `storage.presign` 으로 받아 넘긴 업로드 대상 — 응답을 그대로 넘긴다(aiapp-service#904).
+ * 누가 올려도 되는지는 그 serverFn 이 판정했다(소유자 전용 · 역할별 등).
+ */
+export interface ServerUploadTarget {
+  /** S3 직접 PUT 용 주소 (단기·1회용) */
+  upload_url: string;
+  /** 발급 때 서명한 Content-Type — PUT 에 그대로 쓴다 */
+  content_type: string;
+  /** 인라인 표시용 영구 CDN URL */
+  cdn_url: string;
+  download_url?: string;
+  key?: string;
+}
+
+/**
+ * serverFn 이 발급한 업로드 대상으로 파일 1건을 올리고 그 대상을 돌려준다(성공 시 cdn_url 을 쓴다).
+ * 앱 회원 로그인이 필요 없다 — 권한은 대상을 발급한 serverFn 이 이미 판정했다(관리자 화면의 사장님 업로드 등).
+ */
+export async function uploadToTarget(
+  target: ServerUploadTarget,
+  file: File | Blob
+): Promise<ServerUploadTarget> {
+  if (!target || !target.upload_url || !target.content_type) {
+    throw new BaasError(
+      "업로드 대상이 올바르지 않습니다(upload_url/content_type 누락) — serverFn 의 storage.presign 응답을 그대로 넘기세요.",
+      "UPLOAD_TARGET_INVALID",
+      400
+    );
+  }
+  await putToPresignedUrl(target.upload_url, file, target.content_type);
+  return target;
 }

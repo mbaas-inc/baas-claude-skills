@@ -283,6 +283,26 @@ export interface ServicePayment {
   created_at: string
 }
 
+/** 업로드 분류 — 커스텀 백엔드가 쓰는 것만. images 는 이미지 확장자·최대 10MB. */
+export type StorageCategory = 'images' | 'store' | 'reservation'
+
+/**
+ * 업로드 대상 (aiapp-service#904). **브라우저에 그대로 넘긴다** — 브라우저는 `useFileUpload().uploadTo(대상, file)`
+ * 로 `upload_url` 에 직접 올리고, 올린 뒤 `cdn_url` 을 원장에 저장한다.
+ */
+export interface StorageUploadTarget {
+  /** 저장소 직접 PUT 주소 (단기·1회용). 저장하지 않는다 */
+  upload_url: string
+  /** 발급 때 서명한 Content-Type — 브라우저 PUT 에 그대로 쓰인다 */
+  content_type: string
+  /** 인라인 표시용 영구 주소 — 원장 · 컬렉션 필드에 저장한다 */
+  cdn_url: string
+  /** 첨부 다운로드용 주소 */
+  download_url: string
+  /** 저장 경로 (프로젝트 접두사 제외) */
+  key: string
+}
+
 function buildSdk(ctx: RequestContext) {
   async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
     const res = await fetch(`${BAAS_BASE_URL}${path}`, {
@@ -711,7 +731,40 @@ function buildSdk(ctx: RequestContext) {
       }),
   }
 
-  return { dyncol, account, secrets, reservation, board, notify, payments, ctx }
+  // 파일 업로드(aiapp-service#904). **누가 올려도 되는지는 이 serverFn 이 판정한다** — `access: 'owner'` 면
+  // 소유자 전용(관리자 화면의 사장님 업로드), 역할 규칙은 코드로. 플랫폼은 프로젝트 경계 · 파일 형식/크기만 본다.
+  //
+  // 브라우저 직접 업로드(`useFileUpload().upload`)는 앱 회원 로그인이 필요하다. 관리자 진입으로 소유자
+  // 인증된 사장님은 회원이 아니므로 그 경로로는 401 이다 — 이 표면으로 대상을 받아 넘긴다.
+  //
+  // 실패는 던진다 — 형식 · 크기 거절(400)을 그대로 화면에 보여 준다.
+  const storage = {
+    /** 업로드 대상 발급. `contentType` · `size` 는 브라우저가 고른 File 의 `type` · `size` 를 넘긴다. */
+    presign: async (file: {
+      filename: string
+      contentType: string
+      size: number
+      category?: StorageCategory
+    }): Promise<StorageUploadTarget> => {
+      const data = await call<{ original: { presign_url: string; cdn_url: string; download_url: string; key: string } }>(
+        'POST', '/service/storage/presign', {
+          category: file.category ?? 'images',
+          filename: file.filename,
+          content_type: file.contentType,
+          size: file.size,
+        },
+      )
+      return {
+        upload_url: data.original.presign_url,
+        content_type: file.contentType,
+        cdn_url: data.original.cdn_url,
+        download_url: data.original.download_url,
+        key: data.original.key,
+      }
+    },
+  }
+
+  return { dyncol, account, secrets, reservation, board, notify, payments, storage, ctx }
 }
 
 export type Sdk = ReturnType<typeof buildSdk>
