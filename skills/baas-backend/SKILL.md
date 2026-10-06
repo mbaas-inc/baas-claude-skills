@@ -942,6 +942,35 @@ export const confirmDeposit = serverFn<{ orderNo: string; paymentKey: string; am
 - 프론트는 `usePayment().beginWidget(startDeposit 의 응답, 셀렉터)` 로 위젯을 띄우고, 복귀 페이지에서
   `getRedirectResult()` 값을 `confirmDeposit` 에 넘긴다(위젯 규칙은 `baas-integration-sdk` 결제 공통 규약)
 
+### 파일 업로드 — 누가 올리나는 serverFn 이 정한다 (`sdk.storage.presign`)
+
+사장님이 관리 화면에서 사진을 올리는 것처럼 **올릴 수 있는 사람이 정해진 업로드**는 serverFn 이 업로드
+주소를 받아 브라우저에 넘긴다(aiapp-service#904). 업로드 모듈은 형식 · 크기 · 저장 경로만 검사하고
+**누가 올리는지는 판정하지 않는다** — 그 판정이 이 serverFn 의 `access` 다.
+
+```ts
+// src/services/gallery.ts — 소유자만 업로드 주소를 받는다
+export const presignGalleryPhoto = serverFn<
+  { filename: string; contentType: string; size: number },
+  StorageUploadTarget
+>(async (input, ctx) => {
+  return ctx.sdk.storage.presign({ ...input, category: 'images' })
+}, { access: 'owner' })
+
+export const addGalleryPhoto = serverFn<{ cdnUrl: string }, { id: string }>(async (input, ctx) => {
+  const row = await ctx.sdk.dyncol.create('gallery', { image_url: input.cdnUrl })
+  return { id: row.id }
+}, { access: 'owner' })
+```
+
+- 프론트는 `useFileUpload().uploadTo(presignGalleryPhoto 의 응답, file)` 로 파일을 올리고, 돌려받은
+  `cdn_url` 을 `addGalleryPhoto` 에 넘긴다. 앱 회원 로그인이 없어도 된다 — 소유자 인증은 serverFn 이 받는다
+- **분류(`category`)는 `images`(기본) · `store` · `reservation`** 만 받는다. 게시판 첨부는 게시판 기능 몫이라
+  여기서 발급하지 않는다. `images` 는 이미지 확장자 · 최대 10MB, 실행 파일은 분류와 상관없이 거절(400 을 던진다)
+- 받은 주소는 **곧 만료되는 일회용**이다. 저장해 두지 말고, 올린 뒤 남길 것은 `cdn_url` 이다
+- 회원이 자기 프로필 사진을 올리는 것처럼 **로그인 회원이면 누구나** 올리는 업로드는 serverFn 없이
+  브라우저 `useFileUpload().upload` 로 충분하다
+
 ### 외부 API 자격 증명 — `sdk.secrets` 로 꺼낸다
 
 외부 서드파티(사내 ERP·재고 시스템·서드파티 SaaS)를 부르려면 키가 필요하다. **코드에 쓰지

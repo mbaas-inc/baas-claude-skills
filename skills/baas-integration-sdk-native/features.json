@@ -1,5 +1,5 @@
 {
-  "version": "1.7.0-native",
+  "version": "1.8.0-native",
   "sdk": "@mbaas/baas-web-sdk",
   "sdk_global": "window.BaasSDK",
   "surface_ref": "reference/sdk-surface.md",
@@ -40,7 +40,8 @@
     "beginPaymentWidget": "payment",
     "getPaymentRedirectResult": "payment",
     "useFileUpload": "storage",
-    "uploadFile": "storage"
+    "uploadFile": "storage",
+    "uploadToTarget": "storage"
   },
   "hook_groups_note": "baas-manifest.json 의 features_used 자동 도출용 — 코드의 BaasSDK.<name> 사용을 스캔해 이 매핑으로 그룹을 산출한다(scripts/sync-manifest.mjs). 새 훅/기능을 추가하면 이 맵도 갱신한다.",
   "data_flow": {
@@ -55,7 +56,7 @@
     "payment": "결제 공통(usePayment) — 결제 있는 모든 화면(store·예약): fetchTerms()로 표준 구매약관(통신판매중개 고지·결제진행 동의·환불정책·개인정보 제공) content 표시+동의(동의 전 결제 진입 금지) · [필수] 모든 페이지 푸터에 통신판매중개업자(엠바스) 고지 · 위젯 인라인 단일방식(gck_ 키, 뒤로가기 유지, USER_CANCEL 무시) · 결제 축=PaymentSession: 위젯 진입(beginWidgetCheckout) 시 start로 세션+도메인레코드(order_no) 생성, handle.requestPayment 는 클릭 시 동기 호출(현대카드 등 팝업 제스처 유지 — 앞에 await 금지), 완료는 카드=동기 confirm/가상계좌=비동기 웹훅 · 금액 서버확정은 store/reservation 소유",
     "reservation": "useReservation().fetchTargets → target_id → fetchTarget/fetchSlots → (로그인) book(무료·현장) 또는 beginWidgetCheckout(위젯 인라인, 결제수단 선택) — 진입 시 start로 예약(PENDING)+세션 생성(슬롯 선점), 결제 버튼은 동기 requestPayment → 복귀 getCheckoutContext+confirm(카드) 또는 입금 웹훅(가상계좌) → myBookings/cancel · 결제 약관/고지·위젯 규칙은 payment 공통 규약",
     "store": "useStore().fetchConfig(store_enabled 확인) → fetchProducts → product_id → fetchProduct → (로그인) beginWidgetCheckout(위젯 인라인) — 진입 시 start로 주문(PENDING)+세션 생성, 결제 버튼은 동기 requestPayment → 복귀 getCheckoutContext(order_no/product_id/quantity)+confirm(카드) 또는 입금 웹훅(가상계좌)으로 완결 → myOrders → confirmPurchase · 결제 약관/고지·위젯 규칙은 payment 공통 규약(fetchTerms 동의 + 모든 페이지 푸터 통신판매중개업자 고지)",
-    "storage": "<input type=file>의 File → useFileUpload().upload(file,{category}) (기본 images) → presign 발급 후 S3 직접 PUT → { cdn_url, download_url, key, file_id? } 반환 → cdn_url을 <img src>에 저장. 업로드는 로그인 필요. category=images는 이미지 확장자·최대 10MB"
+    "storage": "<input type=file>의 File → useFileUpload().upload(file,{category}) (기본 images) → presign 발급 후 S3 직접 PUT → { cdn_url, download_url, key, file_id? } 반환 → cdn_url을 <img src>에 저장. upload 는 로그인 회원으로 올림. category=images는 이미지 확장자·최대 10MB"
   },
   "groups": {
     "account": {

@@ -13,8 +13,8 @@ transport·envelope·project_id 주입은 SDK 내부가 처리한다 — 아래 
 | 호출 형태 | 실패 시 |
 |---|---|
 | **훅의 액션 함수** (`useBoard().submitPost`<!--collection:start-->, `useCollection().fetchRecords`<!--collection:end-->, `useStore().confirm`, `useLogin().login`, `useFileUpload().upload` …) | **throw 하지 않는다.** `null`(또는 `login`/`logout` 은 `false`) 을 resolve 하고 실패는 훅의 `error` state 에 담긴다 |
-| **예외 — `beginWidgetCheckout`** (store·reservation) | 이것만 **throw 한다**(내부 래퍼를 거치지 않음) → `try/catch` 필요 |
-| **훅 없는 top-level 함수** (`BaasSDK.uploadFile`, `changePassword`, `getAccountInfo` …) | `BaasError`(`.message` 한국어, `.errorCode`, `.status`) **throw** |
+| **예외 — `beginWidgetCheckout`** (store·reservation) <!--collection:start-->· `usePayment().beginWidget`<!--collection:end--> | 이것만 **throw 한다**(내부 래퍼를 거치지 않음) → `try/catch` 필요 |
+| **훅 없는 top-level 함수** (`BaasSDK.uploadFile`, `uploadToTarget`, `changePassword`, `getAccountInfo` …) | `BaasError`(`.message` 한국어, `.errorCode`, `.status`) **throw** |
 
 ```tsx
 // ❌ 훅 액션에 try/catch — catch 가 실행되지 않아 실패가 성공처럼 보인다
@@ -898,10 +898,25 @@ await BaasSDK.useCollection().submitRecord("products", { name, image_url: res.cd
   `file_id`(board_attachment 에서만 — 게시글 `file_ids` 연결용).
 - 훅은 `isUploading`(로딩)·`error`(실패 시 `BaasError`)를 노출하고 실패 시 `null` 반환(에러 표시 방식은 앱 UX 소관).
 - 훅 없이 직접 호출: `await BaasSDK.uploadFile(file, { category })` (성공 시 결과 resolve, 실패 시 throw).
-- 업로드는 **로그인 필요**(프로젝트 소속). `<input accept="image/*">` 로 클라 사전 필터 권장.
-- **사장님(프로젝트 소유자)도 앱 안에서는 회원으로 올린다.** 소유자의 플랫폼 로그인은 앱 주소에서 업로드
-  자격으로 읽히지 않는다(관리 화면이 열리는 것과 별개다). 관리 화면의 사진 올리기에서 401 이면 「이 앱에
-  회원으로 로그인하면 올릴 수 있어요」를 보여 주고 로그인으로 보낸다. 대량 관리는 BaaS 콘솔의 스토리지에서 한다.
+- `upload` 는 **로그인 회원**(프로젝트 소속)으로 올린다. `<input accept="image/*">` 로 클라 사전 필터 권장.
+<!--collection:start-->
+### 올릴 수 있는 사람이 정해진 업로드 — `uploadTo`
+
+사장님 관리 화면의 사진처럼 **누가 올리는지 정해진 업로드**는 커스텀 백엔드(serverFn)가 업로드 주소를
+받아 넘기고, 앱은 그 주소로 올리기만 한다(aiapp-service#904). 앱 회원 로그인이 필요 없다 — 소유자 인증 ·
+권한 판정은 serverFn 의 `access` 가 한다(serverFn 쪽은 `baas-backend` 「파일 업로드」 절).
+
+```tsx
+const { uploadTo, isUploading, error } = BaasSDK.useFileUpload();
+
+const target = await presignGalleryPhoto({ filename: file.name, contentType: file.type, size: file.size });
+const res = await uploadTo(target, file);       // → { cdn_url, download_url?, key? } | null
+if (res) await addGalleryPhoto({ cdnUrl: res.cdn_url });
+```
+- 실패 규약은 `upload` 와 같다(throw 없이 `null` + 훅 `error`). 훅 없이는 `BaasSDK.uploadToTarget(target, file)`(throw).
+- serverFn 이 준 `content_type` 그대로 올린다(서명이 그 값에 묶여 있다 — 바꾸면 S3 가 403).
+- 관리 화면 업로드를 `upload` 로 만들고 401 에 「회원으로 로그인」을 안내하지 마라 — 소유자는 회원이 아니다.
+<!--collection:end-->
 
 ---
 
