@@ -50,7 +50,7 @@ export {
   listPublicRecords,
   getPublicRecord,
 } from "./collection";
-export { uploadFile } from "./storage";
+export { uploadFile, uploadToTarget } from "./storage";
 export { getPurchaseTerms, beginPaymentWidget, getPaymentRedirectResult } from "./payment";
 export { registerRecipient } from "./recipient";
 export { getInquiryConfig, submitInquiry } from "./inquiry";
@@ -137,6 +137,7 @@ export type {
   UploadCategory,
   UploadOptions,
   UploadResult,
+  ServerUploadTarget,
 } from "./storage";
 export type {
   PurchaseTerms,
