@@ -581,7 +581,9 @@ if (r?.ok) await confirmDeposit({ orderNo: r.orderNo, paymentKey: r.paymentKey, 
 
 - **승인은 브라우저가 하지 않는다.** `getRedirectResult()` 의 ok 는 「토스에서 돌아왔다」일 뿐이다 —
   serverFn 이 `payments.confirm` 으로 PAID 를 받아야 결제 완료다.
-- failUrl 의 `code` 가 `PAY_PROCESS_CANCELED`(사용자 취소)면 조용히 결제 화면으로 돌려보낸다.
+- 결제창을 닫거나(`USER_CANCEL`) failUrl 로 돌아오면 포기 serverFn(`abandonDeposit({ orderNo })`)을 불러 잡아 둔
+  자리를 바로 푼다. `code` 가 `PAY_PROCESS_CANCELED`(사용자 취소)면 그다음 조용히 결제 화면으로 돌려보낸다.
+- 결제 대기(`CREATED`) 예약 · 주문은 「확인 대기」가 아니라 「결제 대기」로 보인다.
 - 원장에는 `order_no` 만 두고 상태는 서버(`payments.get`)가 정본이다. **커스텀 컬렉션 필드에 금액·결제상태를
   두고 클라이언트가 직접 쓰는 방식은 위·변조 가능하므로 금지.**
 <!--collection:end-->

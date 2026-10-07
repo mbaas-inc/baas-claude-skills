@@ -927,24 +927,44 @@ export const startDeposit = serverFn<{ serviceId: string; slot: string }, Deposi
 
 export const confirmDeposit = serverFn<{ orderNo: string; paymentKey: string; amount: number }, { status: string }>(
   async (input, ctx) => {
+    await ownBookingByOrder(ctx, input.orderNo)                    // 결제자 확인 — 남의 order_no 면 403
     const pay = await ctx.sdk.payments.confirm(input.orderNo, { paymentKey: input.paymentKey, amount: input.amount })
     if (pay.status !== 'PAID') return { status: 'waiting' }      // 가상계좌 입금 대기
     await confirmBookingByOrder(ctx, input.orderNo)                // 같은 요청 안에서 원장 확정
     return { status: 'confirmed' }
   }, { access: 'member' })
+
+// 결제창을 닫거나 실패하면 화면이 부른다 — 잡아 둔 자리를 바로 푼다
+export const abandonDeposit = serverFn<{ orderNo: string }, { status: string }>(async (input, ctx) => {
+  const booking = await ownBookingByOrder(ctx, input.orderNo)    // 결제자 확인 — 남의 order_no 면 403
+  const pay = await ctx.sdk.payments.get(input.orderNo)
+  if (pay.status !== 'CREATED') return { status: pay.status }    // 이미 결제됐거나 닫혔다 — 건드리지 않는다
+  await ctx.sdk.payments.cancel(input.orderNo, '결제창 닫음')
+  await releaseBooking(ctx, booking)                             // 같은 요청 안에서 원장 취소
+  return { status: 'released' }
+}, { access: 'member' })
 ```
 
 - **브라우저에서는 id 만 받는다.** `input.amount` · `input.price` 처럼 금액이 든 입력으로 `create` 하지 마라.
   `confirm` 의 `amount` 는 토스가 돌려준 값이고 서버가 세션 금액과 대조한다(다르면 400)
 - **금액 컬렉션을 기본 접근(선언 없음)으로 두지 마라.** 기본은 「로그인 회원이 행을 만들 수 있다」라서, 회원이
   1원짜리 시술을 만들고 그 id 로 결제하면 ② 를 지켜도 뚫린다. 금액 수정은 `access: 'owner'` serverFn 으로 연다
-- **결제자는 요청한 회원이다.** `create` 는 인자로 결제자를 받지 않는다 — `access: 'member'` 로 둔다
+- **결제자는 요청한 회원이다.** `create` 는 인자로 결제자를 받지 않는다 — `access: 'member'` 로 둔다.
+  플랫폼은 승인 · 취소 때 결제자를 대조하지 않는다 — `confirm` · 포기 serverFn 은 `order_no` 의 원장 행(또는
+  `payments.get` 의 `account_id`)이 요청 회원(`ctx.accountId`)의 것인지 먼저 보고, **아니면 403** 으로 막는다
+- **대기 세션을 다시 쓴다.** 같은 회원이 같은 대상(시간 · 상품)에 만료 전 결제 대기 행을 갖고 있으면 그 행의
+  세션을 돌려준다. `create` 를 다시 부르면 세션과 대기 행이 하나 더 생긴다
 - **결제 상태를 컬렉션 필드로 판정하지 마라.** 원장에는 `order_no` 만 두고, 상태는 `payments.get` 이
   정본이다. `paid: true` 같은 필드를 브라우저가 쓰게 하면 결제 없이 확정된다
 - **`confirm` 이 `PAID` 일 때만 확정한다.** 실패는 던진다(알림과 반대) — 잡아서 성공으로 바꾸지 마라
 - 취소 · 환불은 `payments.cancel(orderNo, 사유)`. 결제 전이면 세션만 닫힌다. 원장 취소와 같은 요청에서 부른다
-- 결제하지 않고 이탈한 세션은 서버 정리 배치가 닫는다(30분 경과 기준). 원장의 PENDING 은 **스스로 만료**시킨다 —
-  만료 전에 `payments.get` 으로 상태를 확인하고 `CREATED` 면 `payments.cancel` 로 함께 닫는다
+- **결제 대기 행은 15분만 자리를 잡고, 읽을 때 만료시킨다.** 정원 · 남은 자리 · 목록을 계산하는 serverFn 이
+  15분이 지난 대기 행을 `payments.get` 으로 확인하고, `CREATED` 면 `payments.cancel` 로 세션과 행을 같은
+  요청에서 닫는다. 스케줄 핸들러로 치우지 마라 — 실행되지 않는다(「스케줄 핸들러」 절). 서버 정리 배치가 세션을
+  닫아도 원장 행은 닫히지 않는다
+- **결제창을 닫으면 바로 푼다.** 포기 serverFn(위 `abandonDeposit`)이 본인 확인 뒤 `payments.cancel` 과 원장
+  취소를 같은 요청에서 한다. 화면은 결제창 닫힘(`USER_CANCEL`) · failUrl 에서 부른다
+- 결제 대기 행은 승인 대기(「확인 대기」)와 다른 상태 값으로 둔다. 새 접수로 세지 않고, 화면은 「결제 대기」로 보인다
 - `payment_mode` 가 `test` 면 **테스트 결제**다 — 실제로 청구되지 않는다. 판매자 승인 전 프로젝트는 모두
   test 다. 화면에 「테스트 결제」 안내를 띄우고, 사용자에게도 그렇게 알린다
 - 프론트는 `usePayment().beginWidget(startDeposit 의 응답, 셀렉터)` 로 위젯을 띄우고, 복귀 페이지에서
