@@ -179,8 +179,15 @@ const DYNCOL_OP_TO_GRANT = {
   remove: 'delete', restore: 'delete',
 }
 
-/** `batch` 의 목록 키와 `transaction` 의 `op` 값이 요구하는 grant. */
+/** `batch` 의 목록 키가 요구하는 grant. */
 const ITEM_OP_TO_GRANT = { create: 'create', update: 'update', delete: 'delete' }
+
+/**
+ * `transaction` 항목 `op` 이 요구하는 grant — `TxnOperation`(src/platform/sdk.ts)의 네 가지다.
+ * `increment` 는 단건 `dyncol.increment` 와 같이 `update` 다. SKILL.md 가 정원 차감을 트랜잭션 안
+ * `increment` 로 권하므로, 여기서 빠지면 권한 대로 쓴 코드가 빌드에서 막힌다.
+ */
+const TXN_OP_TO_GRANT = { ...ITEM_OP_TO_GRANT, increment: 'update' }
 
 /**
  * serverFn 본문의 `sdk.dyncol.<op>(<컬렉션>, …)` 호출부에서 필요한 grant 를 모은다.
@@ -264,9 +271,13 @@ function collectGrants(call, bindings, file, grants) {
               if (prop.name.text === 'op') itemOp = ts.isStringLiteral(prop.initializer) ? prop.initializer.text : undefined
               if (prop.name.text === 'collection') itemColl = resolveName(prop.initializer)
             }
-            const g = itemOp ? ITEM_OP_TO_GRANT[itemOp] : undefined
+            const g = itemOp && Object.hasOwn(TXN_OP_TO_GRANT, itemOp) ? TXN_OP_TO_GRANT[itemOp] : undefined
             if (g && itemColl) addGrant(itemColl, g)
-            else {
+            else if (itemOp && !g) {
+              // 리터럴로 썼는데 모르는 op 다. 리터럴을 탓하면 원인을 찾을 수 없다.
+              report(file, 'dynamic-transaction',
+                `transaction 항목 op '${itemOp}' 은 지원하지 않는다 — ${Object.keys(TXN_OP_TO_GRANT).join('·')} 중 하나를 쓴다`)
+            } else {
               report(file, 'dynamic-transaction',
                 'transaction 항목의 op·collection 을 문자열 리터럴(또는 모듈 스코프 const)로 쓴다')
             }
