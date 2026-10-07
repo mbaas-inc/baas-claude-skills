@@ -283,6 +283,22 @@ export interface ServicePayment {
   created_at: string
 }
 
+/**
+ * 비공개 파일 업로드 대상 (aiapp-service#919). 공개 주소가 없다 — 브라우저는 `uploadTo(대상, file)` 로 올리고,
+ * 앱은 `file_id` 만 원장에 저장한다. 볼 때마다 `storage.private.view` 로 단기 주소를 받는다.
+ */
+export interface PrivateUploadTarget {
+  /** 저장소 직접 PUT 주소 (5분·1회용). 형식과 크기가 서명에 묶여 있다 */
+  upload_url: string
+  /** 발급 때 서명한 Content-Type — 브라우저 PUT 에 그대로 쓰인다 */
+  content_type: string
+  /** 파일 식별자 — 원장에 저장하고 열람 · 삭제 때 넘긴다 */
+  file_id: string
+}
+
+/** 비공개 파일 형식 — 사진(카메라 원본 HEIC 포함)과 PDF. 최대 10MB */
+export type PrivateContentType = 'image/jpeg' | 'image/png' | 'image/webp' | 'image/heic' | 'application/pdf'
+
 /** 업로드 분류 — 커스텀 백엔드가 쓰는 것만. images 는 이미지 확장자·최대 10MB. */
 export type StorageCategory = 'images' | 'store' | 'reservation'
 
@@ -761,6 +777,38 @@ function buildSdk(ctx: RequestContext) {
         download_url: data.original.download_url,
         key: data.original.key,
       }
+    },
+
+    /**
+     * 비공개 파일(aiapp-service#919) — 처방전 사진처럼 **정해진 사람만 보는 파일**. 공개 주소가 없고, 볼 때마다
+     * 단기 주소(5분)를 받는다. 누가 올리고 볼 수 있는지는 이 serverFn 이 판정한다(플랫폼은 프로젝트 경계 ·
+     * 형식 · 크기만 본다). 여러 프로젝트 파일이 섞이지 않게 `file_id` 는 서버가 정한다.
+     */
+    private: {
+      /** 업로드 대상 발급. `size` 는 정확한 바이트 수 — 다른 크기로 올리면 저장소가 거절한다 */
+      presign: async (file: { contentType: PrivateContentType; size: number }): Promise<PrivateUploadTarget> => {
+        const data = await call<{ file_id: string; upload_url: string }>('POST', '/service/storage/private/presign', {
+          content_type: file.contentType,
+          size: file.size,
+        })
+        return { upload_url: data.upload_url, content_type: file.contentType, file_id: data.file_id }
+      },
+
+      /** 열람 주소(5분) 발급 — 한 번에 20개까지. 화면이 바로 `<img src>` 로 쓴다. 저장하지 않는다 */
+      view: async (fileIds: string[]): Promise<{ file_id: string; url: string }[]> => {
+        if (!fileIds.length) return []
+        const data = await call<{ items: { file_id: string; url: string }[] }>('POST', '/service/storage/private/view', {
+          file_ids: fileIds,
+        })
+        return data.items
+      },
+
+      /** 삭제 — 없는 파일도 성공(멱등). 지운 요청 수를 돌려준다 */
+      remove: async (fileIds: string[]): Promise<number> => {
+        if (!fileIds.length) return 0
+        const data = await call<{ deleted: number }>('POST', '/service/storage/private/delete', { file_ids: fileIds })
+        return data.deleted
+      },
     },
   }
 
