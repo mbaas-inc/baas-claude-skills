@@ -732,6 +732,33 @@ await sdk.board.createPost('NOTICE', { title: '점검 안내', content: '...' })
 > 못했다.** 우회로 고려된 「신청 내역을 커스텀 컬렉션에 복사해 쌓기」는 시작 시점 이후만
 > 잡히고 실제 예약과 어긋나므로 **하지 마라.**
 
+### 비공개 파일 — 정해진 사람만 보는 파일 (`sdk.storage.private`)
+
+공개 업로드 주소(CDN)는 **주소를 아는 누구나 로그인 없이 연다.** 처방전 · 진료 사진 · 신분증처럼
+정해진 사람만 봐야 하는 파일은 비공개로 올린다(aiapp-service#919). 공개 주소가 없고, 볼 때마다 serverFn 이
+권한을 확인한 뒤 **5분짜리 열람 주소**를 받아 넘긴다.
+
+```ts
+// src/services/photos.ts — 담당자만 올리고, 보호자 · 담당자만 본다
+export const presignPhoto = serverFn<{ contentType: PrivateContentType; size: number }, PrivateUploadTarget>(
+  async (input, ctx) => {
+    await requireAssignee(ctx)                       // 누가 올리나는 여기서 판정한다
+    return ctx.sdk.storage.private.presign(input)
+  }, { access: 'member', authorizes: true })
+
+export const viewPhotos = serverFn<{ visitId: string }, { file_id: string; url: string }[]>(async (input, ctx) => {
+  const visit = await mine(ctx, input.visitId)       // 볼 수 있는 사람인지 판정
+  return ctx.sdk.storage.private.view(visit.photo_ids)
+}, { access: 'member', authorizes: true })
+```
+
+- 프론트는 받은 대상으로 **저장소에 직접 올린다** — `fetch(t.upload_url, { method: 'PUT', headers: { 'Content-Type': t.content_type }, body: file })`
+  (BaaS API 가 아니라 저장소 서명 주소라 직접 부른다). 올린 뒤 **`file_id` 만** 원장에 저장한다.
+  열람 주소는 곧 만료되므로 저장하지 말고 화면에 보일 때마다 받는다
+- 형식은 `image/jpeg` · `png` · `webp` · `heic` · `application/pdf`, 최대 10MB. `size` 는 실제 바이트 수 —
+  다른 크기로 올리면 저장소가 서명 불일치로 거절한다
+- 원장에서 파일을 빼면 `storage.private.remove(fileIds)` 로 지운다(멱등). 프로젝트를 지우면 함께 보관 이동된다
+
 ### 외부 API 자격 증명 — `sdk.secrets` 로 꺼낸다
 
 외부 서드파티(사내 ERP·재고 시스템·서드파티 SaaS)를 부르려면 키가 필요하다. **코드에 쓰지
