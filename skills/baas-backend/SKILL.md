@@ -516,6 +516,11 @@ await sdk.dyncol.transaction([
 ])
 ```
 
+메뉴 수처럼 항목 수가 정해지지 않으면 위처럼 `...목록.map((x) => ({ … }))` 로 펼친다. 추출기는 콜백이
+돌려주는 객체 리터럴의 `op`·`collection` 으로 권한을 유도하므로 둘은 **문자열 리터럴**로 쓴다(`op` 의
+`as const` 는 괜찮다). 항목을 변수에 모아 `...ops` 로 펼치거나 `collection` 을 변수로 쓰면 추출기가
+항목을 볼 수 없어 빌드가 멈춘다. 전체 코드는 `examples/order-stock.ts` 다.
+
 #### 경계는 `guard` 로 **함께 보낸다**
 
 받아서 TypeScript 로 보면 이미 늦다 — 그때는 「쓴다 → 본다 → 되돌린다」가 되고 그 사이가
@@ -1114,9 +1119,11 @@ try { ... } catch (e) {
 | 파일 | 무엇을 막는가 |
 |---|---|
 | `examples/slot-booking.ts` | 동시 예약이 같은 마지막 자리를 통과하는 것 → 한 트랜잭션에 **정원 `guard` + `slot_account_key` unique** 를 함께 보낸다 (조회로 판정하면 뚫린다) |
+| `examples/order-stock.ts` | 여러 메뉴를 한 번에 주문할 때 재고가 음수가 되거나 정원이 넘치는 것 → 메뉴 수만큼 `...lines.map(…)` 으로 펼친 재고 차감과 정원 `guard`·주문 생성을 한 트랜잭션에 보낸다 |
 
-예제는 **CI 에서 타입체크된다**(`examples/tsconfig.json`). 저작 모델이 바뀌면 여기서 먼저
-깨지므로, 가이드가 실제로 컴파일되지 않는 코드를 보여주는 일이 다시 생기지 않는다 —
+예제는 **CI 에서 타입체크되고 추출기로도 돌려 본다**(`examples/tsconfig.json`,
+`checks/examples-extract.test.mjs`) — 예제가 권하는 형태를 추출기가 막으면 여기서 걸린다.
+저작 모델이 바뀌면 여기서 먼저 깨지므로, 가이드가 실제로 컴파일되지 않는 코드를 보여주는 일이 다시 생기지 않는다 —
 2026-09-16 에 옛 모델(`route.post`)과 없는 API(`sdk.baas.sendSms`)가 그렇게 살아남아 있었다.
 
 임포트 경로만 프로젝트와 다르다(`../boilerplate/src/serverFn`). 프로젝트에서는 `./serverFn` 이다.

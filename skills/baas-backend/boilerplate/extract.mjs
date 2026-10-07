@@ -189,6 +189,50 @@ const ITEM_OP_TO_GRANT = { create: 'create', update: 'update', delete: 'delete' 
  */
 const TXN_OP_TO_GRANT = { ...ITEM_OP_TO_GRANT, increment: 'update' }
 
+/** 괄호·`as`·`satisfies`·`!` 를 벗긴다 — 타입 표기는 값(어느 컬렉션에 무슨 연산)을 바꾸지 않는다. */
+function unwrapExpr(node) {
+  let n = node
+  while (
+    n &&
+    (ts.isParenthesizedExpression(n) || ts.isAsExpression(n) || ts.isSatisfiesExpression(n) ||
+      ts.isNonNullExpression(n) || ts.isTypeAssertionExpression(n))
+  ) {
+    n = n.expression
+  }
+  return n
+}
+
+/**
+ * `transaction([...])` 원소 하나를 객체 리터럴 항목들로 푼다. 볼 수 없으면 null.
+ *
+ * 항목 수가 정해지지 않은 주문(메뉴마다 재고 차감)은 `...lines.map((l) => ({ op: 'increment', … }))` 로
+ * 펼칠 수밖에 없다(SKILL.md 「트랜잭션」 절). 콜백이 돌려주는 객체 리터럴에 op·collection 이 그대로
+ * 적혀 있으면 권한을 정적으로 알 수 있으므로 그것을 항목으로 본다. 블록 본문이면 모든 return 이
+ * 객체 리터럴이어야 한다 — 하나라도 다른 값을 돌려주면 그 항목을 볼 수 없다.
+ */
+function txnItemLiterals(el) {
+  const node = unwrapExpr(el)
+  if (ts.isObjectLiteralExpression(node)) return [node]
+  if (!ts.isSpreadElement(node)) return null
+  const call = unwrapExpr(node.expression)
+  if (!ts.isCallExpression(call) || !ts.isPropertyAccessExpression(call.expression) ||
+      call.expression.name.text !== 'map') return null
+  const callback = call.arguments[0] && unwrapExpr(call.arguments[0])
+  if (!callback || !(ts.isArrowFunction(callback) || ts.isFunctionExpression(callback))) return null
+  if (!ts.isBlock(callback.body)) {
+    const body = unwrapExpr(callback.body)
+    return ts.isObjectLiteralExpression(body) ? [body] : null
+  }
+  const returns = []
+  const visit = (n) => {
+    if (ts.isFunctionLike(n)) return // 안쪽 함수의 return 은 이 콜백이 돌려주는 값이 아니다
+    if (ts.isReturnStatement(n)) returns.push(n.expression && unwrapExpr(n.expression))
+    ts.forEachChild(n, visit)
+  }
+  ts.forEachChild(callback.body, visit)
+  return returns.length > 0 && returns.every((r) => r && ts.isObjectLiteralExpression(r)) ? returns : null
+}
+
 /**
  * serverFn 본문의 `sdk.dyncol.<op>(<컬렉션>, …)` 호출부에서 필요한 grant 를 모은다.
  *
@@ -261,25 +305,30 @@ function collectGrants(call, bindings, file, grants) {
             'dyncol.transaction() 의 operations 를 배열 리터럴로 쓴다 — 항목을 볼 수 없으면 권한을 유도할 수 없다')
         } else {
           for (const el of arr.elements) {
-            if (!ts.isObjectLiteralExpression(el)) {
-              report(file, 'dynamic-transaction', 'transaction 항목을 객체 리터럴로 쓴다')
+            const items = txnItemLiterals(el)
+            if (!items) {
+              report(file, 'dynamic-transaction',
+                'transaction 항목은 객체 리터럴이나 `...목록.map((x) => ({ … }))` 로 쓴다 — 그 밖의 형태는 항목을 볼 수 없어 권한을 유도할 수 없다')
               continue
             }
-            let itemOp, itemColl
-            for (const prop of el.properties) {
-              if (!ts.isPropertyAssignment(prop) || !prop.name || !('text' in prop.name)) continue
-              if (prop.name.text === 'op') itemOp = ts.isStringLiteral(prop.initializer) ? prop.initializer.text : undefined
-              if (prop.name.text === 'collection') itemColl = resolveName(prop.initializer)
-            }
-            const g = itemOp && Object.hasOwn(TXN_OP_TO_GRANT, itemOp) ? TXN_OP_TO_GRANT[itemOp] : undefined
-            if (g && itemColl) addGrant(itemColl, g)
-            else if (itemOp && !g) {
-              // 리터럴로 썼는데 모르는 op 다. 리터럴을 탓하면 원인을 찾을 수 없다.
-              report(file, 'dynamic-transaction',
-                `transaction 항목 op '${itemOp}' 은 지원하지 않는다 — ${Object.keys(TXN_OP_TO_GRANT).join('·')} 중 하나를 쓴다`)
-            } else {
-              report(file, 'dynamic-transaction',
-                'transaction 항목의 op·collection 을 문자열 리터럴(또는 모듈 스코프 const)로 쓴다')
+            for (const item of items) {
+              let itemOp, itemColl
+              for (const prop of item.properties) {
+                if (!ts.isPropertyAssignment(prop) || !prop.name || !('text' in prop.name)) continue
+                const value = unwrapExpr(prop.initializer)
+                if (prop.name.text === 'op') itemOp = ts.isStringLiteral(value) ? value.text : undefined
+                if (prop.name.text === 'collection') itemColl = resolveName(value)
+              }
+              const g = itemOp && Object.hasOwn(TXN_OP_TO_GRANT, itemOp) ? TXN_OP_TO_GRANT[itemOp] : undefined
+              if (g && itemColl) addGrant(itemColl, g)
+              else if (itemOp && !g) {
+                // 리터럴로 썼는데 모르는 op 다. 리터럴을 탓하면 원인을 찾을 수 없다.
+                report(file, 'dynamic-transaction',
+                  `transaction 항목 op '${itemOp}' 은 지원하지 않는다 — ${Object.keys(TXN_OP_TO_GRANT).join('·')} 중 하나를 쓴다`)
+              } else {
+                report(file, 'dynamic-transaction',
+                  'transaction 항목의 op·collection 을 문자열 리터럴(또는 모듈 스코프 const)로 쓴다')
+              }
             }
           }
         }
