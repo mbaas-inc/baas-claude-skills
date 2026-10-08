@@ -176,8 +176,8 @@ prepare (위젯)      → 금액 확정 + 위젯 렌더. **미생성.**
    승인 요청 confirm 으로 세션 PAID + 레코드 반영(웹훅은 승인 요청이 끝내지 못한 결제의 마무리, 가상계좌는 #932 에서 제외). PaymentEngine을 재사용 결제 모듈로 정식화
    (create_session/get_session_by_ref/confirm_payment/settle_by_payment_key, 구 create_paid_session 제거),
    **결제 웹훅을 지급대행과 분리** — 결제 `/webhook/toss/payment`, 지급대행 `/webhook/toss`(seller/payout) 각자 도메인.
-   결제 웹훅은 **PAYMENT_STATUS_CHANGED**(카드 등, paymentKey 재조회) + **DEPOSIT_CALLBACK**(가상계좌 입금, orderId로
-   세션→기록된 paymentKey 재조회 — 가상계좌는 PAYMENT_STATUS_CHANGED 발생이 보장 안 되므로 필수)를 모두 처리하고
+   결제 웹훅은 **PAYMENT_STATUS_CHANGED**(카드 등, paymentKey 재조회) + **DEPOSIT_CALLBACK**(가상계좌 입금 — #932 에서
+   가상계좌를 받지 않게 되며 처리 제거)를 모두 처리하고
    `PaymentSettlementService`가 feature_type으로 소비자에 디스패치. 미결제 이탈 cleanup(#932 에서 제거 — §5.6).
    **SDK 변경(별도)**: 결제하기 클릭 시 백엔드 start 호출 후 requestPayment(coordinated).
 3. **커스텀 결제 개방(중기)**: custom target_type + 어댑터(read-through/서버 이행). 스킬에 "커스텀 결제 붙이는 법" 규약.
@@ -195,7 +195,8 @@ prepare (위젯)      → 금액 확정 + 위젯 렌더. **미생성.**
 **남은 것(Phase 2 구현 세부)**
 - **웹훅 운용** (토스 공식 스펙 기준, docs.tosspayments.com/guides/v2/webhook):
   - **이벤트**: 결제정산은 **`PAYMENT_STATUS_CHANGED`**(모든 결제수단 상태 변경). 취소는 `CANCEL_STATUS_CHANGED`,
-    가상계좌 입금은 `DEPOSIT_CALLBACK`. (지급대행 `payout.changed`/`seller.changed`는 기존 처리)
+    가상계좌 입금은 `DEPOSIT_CALLBACK`(#932 부터 가상계좌를 받지 않아 처리하지 않는다). (지급대행
+    `payout.changed`/`seller.changed`는 기존 처리)
   - **등록**: 토스 **개발자센터 웹훅 메뉴 → 웹훅 등록하기**(이름·URL·이벤트 선택), **상점(MID)별** 설정.
     지급대행은 셀러 서브상점 단위 → 등록·정산이 셀러 단위. (ops/사람 — 코드로 불가)
   - **응답 규약**: **10초 이내 200** 반환 필수. 미수신 시 **최대 7회 재전송**(1·4·16·64·256·1024·4096분, ~3일19시간).

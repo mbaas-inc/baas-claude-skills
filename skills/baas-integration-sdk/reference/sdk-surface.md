@@ -641,8 +641,9 @@ await r.book(targetId, { reserved_at, form_data, payment_method });  // 무료·
 - ⚠️ **유료 + 복수 제공인데 `payment_method` 를 안 보내면 400** `"결제 방법을 선택해 주세요."` 다.
   단일 제공일 때만 서버가 자동 선택한다 — 그래서 "지금 onsite 하나뿐"인 상태에서 만든 코드는
   나중에 online 이 켜지는 순간 400 으로 죽는다.
-- ⚠️ **`book()` 에 `payment_method: 'online'` 을 보내면 400** `"카드 결제 예약은 결제 준비(prepare)를
-  거쳐 결제 완료 시 생성됩니다."` — 카드는 반드시 `beginWidgetCheckout` 경로다(결제 완료 시점에 예약 생성).
+- ⚠️ **`book()` 에 `payment_method: 'online'` 을 보내면 400** `"카드 결제 예약은 결제하기를 거쳐 결제가
+  끝나야 확정됩니다."` — 카드는 반드시 `beginWidgetCheckout` 경로다(결제하기 때 예약을 만들고, 자리는 결제가
+  끝나야 센다).
 - 제공되지 않는 수단을 보내도 400 `"선택한 결제 방법은 제공되지 않습니다."`
 
 **`fetchSlots()` 반환 shape — 배열이 아니라 봉투이고, 시각 필드명은 `slot` 이다**(`reserved_at` 아님):
@@ -670,7 +671,7 @@ const w = await r.beginWidgetCheckout(targetId, {
   reserved_at, form_data,
   methodsSelector: "#toss-payment-methods", agreementSelector: "#toss-agreement" });
 //   customerKey 는 넘기지 않는다 — 넘기면 SDK 의 익명 키 폴백이 걸리지 않는다(아래 규칙).
-//   → 진입 시 SDK가 start(예약 PENDING+세션 생성, 슬롯 선점) → 위젯 렌더(w.amount, w.orderId). 결제 버튼 클릭 시(동기):
+//   → 진입 시 SDK가 start(예약 PENDING+세션 생성, 자리는 아직 안 잡음) → 위젯 렌더(w.amount, w.orderId). 결제 버튼 클릭 시(동기):
 await w.requestPayment({
   successUrl: `${location.origin}/reservation-payment-success`,
   failUrl: `${location.origin}/reservation-payment-fail`, orderName: `${target.name} 예약` });
