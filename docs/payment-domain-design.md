@@ -39,15 +39,15 @@
   `PaymentSession`을 **CREATED**로 만든다(결제 축 앵커) + 도메인 레코드(order/booking)를 **함께** 만들어 세션을
   참조시킨다(레코드가 상품/수량·reserved_at/form_data·서버확정 금액을 담음). "결제됐는가"는 세션 상태로 판정하고,
   예약 승인여부(status=PENDING/CONFIRMED)는 **별개 축**으로 둔다. 위젯 열기(prepare)엔 미생성(노이즈 방지). 상세 §5.5.
-- **정산은 도메인 레코드를 새로 만들지 않는다** — 레코드는 결제하기 때 이미 있고, 결제 완료(카드=동기 confirm /
-  가상계좌=비동기 웹훅)는 **세션을 PAID로 넘기고 레코드에 반영**할 뿐이다.
+- **정산은 도메인 레코드를 새로 만들지 않는다** — 레코드는 결제하기 때 이미 있고, 결제 완료(승인 요청 confirm,
+  승인 요청이 끝내지 못하면 웹훅)는 **세션을 PAID로 넘기고 레코드에 반영**할 뿐이다. 가상계좌는 받지 않는다(§5.6).
 - **이행 어댑터 위치 = (b) 도메인 모듈이 결제 도메인에 플러그인 등록**(결제 도메인은 store/reservation을 모름).
   웹훅은 feature_type을 모른 채 오므로, 엔진이 order_no(feature_ref)로 세션을 찾고 `session.feature_type`으로
   디스패처가 소비자(store/reservation)의 `settle_from_session`을 호출한다.
 - **Phase 1(식별자 order_no 단일화) 완료** — store(PR #640)·reservation(PR #642) 머지, SDK 0.10.4 반영.
 - **Phase 2(세션 앵커 + 웹훅 정산) 완료** — PaymentEngine을 재사용 결제 모듈로 정식화(create_session/confirm_payment/
   settle_by_payment_key), store·reservation 세션 앵커 통일, `webhook/toss.py`에 `PAYMENT_STATUS_CHANGED` 정산 디스패처,
-  미결제 이탈 정리(cleanup). (아래 §9 참조)
+  미결제 이탈 정리(cleanup). (아래 §9 참조) — cleanup 은 #932 에서 없앴다. 자리는 결제 상태로 계산한다(§5.6).
 
 ## 2. 목표
 - **하나의 결제 계약**: prepare → 위젯 → confirm → 이행. 식별자·약관·위젯·정산을 결제 도메인이 단일 소유.
@@ -115,11 +115,12 @@ POST /payment/confirm
 prepare (위젯)      → 금액 확정 + 위젯 렌더. **미생성.**
 [결제하기 클릭 = start] → 세션 CREATED + 도메인 레코드(order PENDING / booking) 동시 생성·링크
                       → 응답 { order_no } → 토스 requestPayment(orderId=order_no)
-카드(동기) = confirm  → successUrl 복귀 → order_no로 세션 조회 → 토스 confirm(캡처) → status=DONE → 세션 PAID
-                      → 레코드 반영(order PAID / 예약 승인정책 적용) [멱등]
-가상계좌(비동기) = 웹훅 → 입금 시 PAYMENT_STATUS_CHANGED → paymentKey로 토스 재조회 검증(실결제액 == 세션 금액)
-                      → 세션 PAID → feature_type 디스패치 → 레코드 반영 [멱등: 이미 PAID면 skip]
-cleanup             → 이탈(paymentKey 없는 CREATED) 세션 + 링크 레코드 만료(주기 job)
+승인 = confirm       → successUrl 복귀 → 세션 잠금 → (예약) 정원 재확인 → 토스 confirm(캡처) → status=DONE
+                      → 세션 PAID + 레코드 반영(order PAID / 예약 승인정책 적용) 한 트랜잭션 [멱등]
+                      → 입금 대기(가상계좌)로 끝나면 토스 취소 후 거절
+웹훅 = 마무리         → PAYMENT_STATUS_CHANGED → paymentKey로 토스 재조회 검증(실결제액 == 세션 금액)
+                      → 이미 PAID면 skip. CREATED 인데 DONE이면 승인 요청이 커밋 못 한 것 → PAID + 레코드 반영 + 알림
+이탈                 → 아무것도 안 함. 결제 전 레코드는 자리를 잡지 않고 목록에 안 보인다(정리 배치 없음, §5.6)
 ```
 - **결제 축 = 세션** — 클라엔 `order_no`만 반환. 레코드/세션 내부(금액·상세)는 열지 않는다.
 - **스키마 영향 = 없음**: `PaymentSession`은 이미 CREATED 상태·feature_type/feature_ref/amount·`(feature_type,
@@ -127,6 +128,20 @@ cleanup             → 이탈(paymentKey 없는 CREATED) 세션 + 링크 레코
   **새 컬럼/테이블/enum 불필요**. 변경은 **동작**(세션을 결제하기 때 CREATED로 생성 → 완료 시 PAID)뿐.
 - **새 결제 기능 붙이기**: `PAYMENT_CAPABLE_FEATURES`에 feature_type 등록 + 결제하기 때 create_session+레코드 생성 +
   결제 완료 어댑터(`settle_from_session`) 제공. 결제 축은 엔진/세션이 전담(소비자는 자기 레코드 완결만).
+
+## 5.6 결제 후 확정 — 자리는 결제 상태로 계산한다 (aiapp-service#932, 확정)
+- **점유 = 결제 완료.** 예약 · 주문이 자리(정원 · 1인 한도)를 잡는지는 레코드 상태가 아니라 세션이 PAID 인지로
+  계산한다(`occupying_clause`). 결제창만 열고 떠난 레코드는 자리를 잡지 않고 목록에 안 보이므로 **정리 배치가 없다**
+  (#926 의 5분 배치 대체).
+- **결제 상태는 PAID / UNPAID / CANCELLED 셋.** 가상계좌는 받지 않는다 — 기한 만료에 토스 웹훅이 없고, 입금 오류는
+  DONE→WAITING 으로 되돌아가며, 환불에 손님 계좌가 필요하고, 커스텀 백엔드가 입금 대기를 다룰 수 없다.
+- **네이티브(예약)**: 같은 DB 라 승인 직전에 Target 을 잠그고 정원을 다시 센다 — 마감이면 청구 전에 거절.
+  잠금 순서는 결제 세션 → 예약 → Target 이고, 잠금 조회 뒤에야 일반 읽기를 한다(REPEATABLE READ 스냅숏).
+- **커스텀**: 정원은 커스텀 원장(dyncol)만 안다. 그래서 **결제 → 확정(정원 `guard` + `order_no` unique 트랜잭션) →
+  넘치면 `payments.cancel` 로 환불**하는 보상 트랜잭션(Saga)으로 지킨다. 확정은 멱등이라 승인 뒤 끊긴 결제는
+  다시 부르면 마무리된다(`payments.list` 로 PAID 인데 확정 안 된 줄을 찾는다). 가이드는 `baas-backend` 스킬.
+- **승인 뒤 저장 실패**: 웹훅이 세션을 PAID 로 마무리하고 오류 로그를 남긴다. 네이티브는 그 사이 정원이 찼거나
+  레코드가 취소됐으면 환불, 커스텀은 위 확정 재시도가 판단한다.
 
 ## 6. 안전 불변식 (반드시 유지)
 앞선 논의(백엔드 프리미티브·웹훅)에서 도출한 것들:
@@ -158,12 +173,12 @@ cleanup             → 이탈(paymentKey 없는 CREATED) 세션 + 링크 레코
 ## 9. 마이그레이션 경로 (단계적)
 1. ✅ **계약 통일(완료)**: store #640 + reservation #642 로 confirm/prepare 필드 `order_no` 통일, SDK 0.10.4 반영.
 2. ✅ **세션 앵커 + 웹훅 정산(완료 = Phase 2)**: (§5.5) 결제하기 때 세션 CREATED + 도메인 레코드 동시 생성,
-   카드 confirm(동기)·가상계좌 웹훅(비동기)으로 세션 PAID + 레코드 반영. PaymentEngine을 재사용 결제 모듈로 정식화
+   승인 요청 confirm 으로 세션 PAID + 레코드 반영(웹훅은 승인 요청이 끝내지 못한 결제의 마무리, 가상계좌는 #932 에서 제외). PaymentEngine을 재사용 결제 모듈로 정식화
    (create_session/get_session_by_ref/confirm_payment/settle_by_payment_key, 구 create_paid_session 제거),
    **결제 웹훅을 지급대행과 분리** — 결제 `/webhook/toss/payment`, 지급대행 `/webhook/toss`(seller/payout) 각자 도메인.
    결제 웹훅은 **PAYMENT_STATUS_CHANGED**(카드 등, paymentKey 재조회) + **DEPOSIT_CALLBACK**(가상계좌 입금, orderId로
    세션→기록된 paymentKey 재조회 — 가상계좌는 PAYMENT_STATUS_CHANGED 발생이 보장 안 되므로 필수)를 모두 처리하고
-   `PaymentSettlementService`가 feature_type으로 소비자에 디스패치. 미결제 이탈 cleanup.
+   `PaymentSettlementService`가 feature_type으로 소비자에 디스패치. 미결제 이탈 cleanup(#932 에서 제거 — §5.6).
    **SDK 변경(별도)**: 결제하기 클릭 시 백엔드 start 호출 후 requestPayment(coordinated).
 3. **커스텀 결제 개방(중기)**: custom target_type + 어댑터(read-through/서버 이행). 스킬에 "커스텀 결제 붙이는 법" 규약.
 4. **정리**: store/reservation의 중복 prepare/confirm 제거(어댑터로 대체), 스킬을 결제 단일 도메인 관점으로 재서술.

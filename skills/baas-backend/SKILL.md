@@ -913,25 +913,108 @@ return { status: 'booked' }
               {"name":"deposit","type":"number","required":true} ] }
 ```
 
+**자리는 결제가 끝난 뒤에 센다.** 결제하기 때 자리를 올려 두면 결제창만 열고 떠난 손님이 자리를 묶고,
+그걸 풀 배치가 필요해진다. 대신 승인 뒤 정원을 넘으면 **결제를 되돌린다**(보상 트랜잭션). 순서는 셋이다.
+
+| 단계 | 하는 일 | 실패하면 |
+|---|---|---|
+| 결제 | `payments.confirm` — 토스 승인. 세션이 `PAID` 가 된다 | 던진다. 청구 없음, 되돌릴 것 없음 |
+| 확정 | 한 트랜잭션: 자리 `increment` + 정원 `guard` · 예약 `create`(`order_no` unique) | 정원 초과 · 중복 예약 → 보상 |
+| 보상 | `payments.cancel` — 전액 환불 | — |
+
+```jsonc
+// backend/schema.json — 주문서 · 예약 · 자리. 브라우저는 셋 다 쓰지 못한다(serverFn 만 쓴다)
+{ "name": "checkouts", "label": "주문서", "access": {"read":"service","create":"service","update":"service","delete":"service"},
+  "fields": [ {"name":"order_no","type":"string","required":true,"unique":true},
+              {"name":"account_id","type":"string","required":true},
+              {"name":"service_id","type":"string","required":true},
+              {"name":"slot_id","type":"string","required":true} ] },
+{ "name": "bookings", "label": "예약", "access": {"read":"service","create":"service","update":"service","delete":"service"},
+  "fields": [ {"name":"order_no","type":"string","required":true,"unique":true},
+              {"name":"slot_account_key","type":"string","required":true,"unique":true},
+              {"name":"account_id","type":"string","required":true},
+              {"name":"slot_id","type":"string","required":true},
+              {"name":"status","type":"string","required":true} ] }
+```
+
 ```ts
 // src/services/deposit.ts
-export const startDeposit = serverFn<{ serviceId: string; slot: string }, DepositStart>(async (input, ctx) => {
+type Checkout = { order_no: string; account_id: string; service_id: string; slot_id: string }
+type Booking = { order_no: string; account_id: string; slot_id: string; status: string }
+
+// 결제하기 — 자리는 잡지 않는다. 무엇을 얼마에 결제하는지(주문서)만 남긴다
+export const startDeposit = serverFn<{ serviceId: string; slotId: string }, DepositStart>(async (input, ctx) => {
   const svc = await ctx.sdk.dyncol.get<Service>('services', input.serviceId)   // 금액은 DB 에서
   if (!svc) throw new ServerFnError('없는 시술이에요', 404)
-  if (!(await holdSlot(ctx, input.slot))) throw new ServerFnError('이미 마감된 시간이에요', 409)
   const pay = await ctx.sdk.payments.create({ amount: svc.data.deposit, itemName: `${svc.data.name} 예약금` })
-  await saveBooking(ctx, { slot: input.slot, serviceId: input.serviceId, orderNo: pay.order_no })  // PENDING
+  await ctx.sdk.dyncol.create('checkouts', { order_no: pay.order_no, account_id: ctx.accountId,
+                                             service_id: input.serviceId, slot_id: input.slotId })
   return { order_no: pay.order_no, amount: pay.amount, client_key: pay.client_key,
            item_name: pay.item_name, payment_mode: pay.payment_mode }
 }, { access: 'member' })
 
+// 승인 — 결제 → 확정 → (넘치면) 보상
 export const confirmDeposit = serverFn<{ orderNo: string; paymentKey: string; amount: number }, { status: string }>(
   async (input, ctx) => {
-    const pay = await ctx.sdk.payments.confirm(input.orderNo, { paymentKey: input.paymentKey, amount: input.amount })
-    if (pay.status !== 'PAID') return { status: 'waiting' }      // 가상계좌 입금 대기
-    await confirmBookingByOrder(ctx, input.orderNo)                // 같은 요청 안에서 원장 확정
-    return { status: 'confirmed' }
+    await ctx.sdk.payments.confirm(input.orderNo, { paymentKey: input.paymentKey, amount: input.amount })  // PAID 아니면 던진다
+    return settleDeposit(ctx, input.orderNo)
   }, { access: 'member' })
+
+/** 확정 · 보상 — 몇 번 불러도 결과가 같다. 승인 뒤 끊긴 결제는 이걸 다시 부르면 마무리된다 */
+async function settleDeposit(ctx: ServerCtx, orderNo: string, compensate = true): Promise<{ status: string }> {
+  const pay = await ctx.sdk.payments.get(orderNo)
+  if (pay.status !== 'PAID') return { status: pay.status === 'CANCELLED' ? 'refunded' : 'unpaid' }
+  const { items: [checkout] } = await ctx.sdk.dyncol.list<Checkout>('checkouts', { filter: { order_no: orderNo }, limit: 1 })
+  if (!checkout) throw new ServerFnError('없는 주문서예요', 404)
+  const c = checkout.data
+  try {
+    await ctx.sdk.dyncol.transaction([
+      { op: 'increment', collection: 'slots', target: { id: c.slot_id }, field: 'booked', by: 1,
+        guard: { booked: { lte: { field: 'capacity' } } }, label: 'slot' },
+      // order_no unique — 두 번째 호출은 여기서 막혀 자리를 두 번 세지 않는다(위 increment 도 함께 되돌아간다)
+      { op: 'create', collection: 'bookings', label: 'booking',
+        data: { order_no: orderNo, account_id: c.account_id, slot_id: c.slot_id, status: 'confirmed',
+                slot_account_key: `${c.slot_id}:${c.account_id}` } },
+    ])
+    return { status: 'confirmed' }
+  } catch (e) {
+    if (errorStatus(e) !== 409) throw e
+    const failed = errorDetail(e)?.failed as { label?: string } | undefined
+    if (!failed) {   // unique 위반 — 이미 확정했거나(같은 order_no), 같은 시간을 이미 예약했다
+      const { items } = await ctx.sdk.dyncol.list('bookings', { filter: { order_no: orderNo }, limit: 1 })
+      if (items.length) return { status: 'confirmed' }   // 멱등
+    }
+    if (!compensate) return { status: failed?.label === 'slot' ? 'full' : 'duplicate' }   // 사장님이 고른다
+    // 보상 — 결제는 됐는데 확정할 수 없다. 환불한다(이미 취소됐으면 그대로 돌아온다)
+    await ctx.sdk.payments.cancel(orderNo, failed?.label === 'slot' ? '정원 마감 — 자동 환불' : '중복 예약 — 자동 환불')
+    return { status: 'refunded' }
+  }
+}
+
+// 사장님 관리 화면 — 결제됐는데 예약이 없는 주문(승인 뒤 끊긴 결제)을 보여 준다. 조회는 아무것도 바꾸지 않는다
+export const listUnsettledDeposits = serverFn<void, { orderNo: string; slotId: string; amount: number }[]>(
+  async (_input, ctx) => {
+    const { items: checkouts } = await ctx.sdk.dyncol.list<Checkout>('checkouts', { sort: '-created_at', limit: 100 })
+    const nos = checkouts.map((c) => c.data.order_no)
+    // 같은 주문번호의 예약만 가져와 대조한다 — 「최근 예약 100건」과 대조하면 오래된 확정 건을 미확정으로 본다
+    const { items: bookings } = await ctx.sdk.dyncol.list<Booking>('bookings', { filter: { order_no: { in: nos } }, limit: 100 })
+    const done = new Set(bookings.map((b) => b.data.order_no))
+    const open = checkouts.filter((c) => !done.has(c.data.order_no))
+    const paid = new Map((await ctx.sdk.payments.list(open.map((c) => c.data.order_no)))
+      .filter((p) => p.status === 'PAID').map((p) => [p.order_no, p.amount]))
+    return open.filter((c) => paid.has(c.data.order_no))
+      .map((c) => ({ orderNo: c.data.order_no, slotId: c.data.slot_id, amount: paid.get(c.data.order_no)! }))
+  }, { access: 'owner' })
+
+// 사장님이 고른다 — 확정을 다시 시도하거나(자리 있으면 예약, 없으면 그대로 알림) 환불한다
+export const resolveDeposit = serverFn<{ orderNo: string; action: 'settle' | 'refund' }, { status: string }>(
+  async (input, ctx) => {
+    if (input.action === 'refund') {
+      await ctx.sdk.payments.cancel(input.orderNo, '사장님 처리 — 환불')
+      return { status: 'refunded' }
+    }
+    return settleDeposit(ctx, input.orderNo, false)   // 자리가 없으면 환불하지 않고 'full' 로 돌려준다
+  }, { access: 'owner' })
 ```
 
 - **브라우저에서는 id 만 받는다.** `input.amount` · `input.price` 처럼 금액이 든 입력으로 `create` 하지 마라.
@@ -939,16 +1022,32 @@ export const confirmDeposit = serverFn<{ orderNo: string; paymentKey: string; am
 - **금액 컬렉션을 기본 접근(선언 없음)으로 두지 마라.** 기본은 「로그인 회원이 행을 만들 수 있다」라서, 회원이
   1원짜리 시술을 만들고 그 id 로 결제하면 ② 를 지켜도 뚫린다. 금액 수정은 `access: 'owner'` serverFn 으로 연다
 - **결제자는 요청한 회원이다.** `create` 는 인자로 결제자를 받지 않는다 — `access: 'member'` 로 둔다
-- **결제 상태를 컬렉션 필드로 판정하지 마라.** 원장에는 `order_no` 만 두고, 상태는 `payments.get` 이
-  정본이다. `paid: true` 같은 필드를 브라우저가 쓰게 하면 결제 없이 확정된다
-- **`confirm` 이 `PAID` 일 때만 확정한다.** 실패는 던진다(알림과 반대) — 잡아서 성공으로 바꾸지 마라
-- 취소 · 환불은 `payments.cancel(orderNo, 사유)`. 결제 전이면 세션만 닫힌다. 원장 취소와 같은 요청에서 부른다
-- 결제하지 않고 이탈한 세션은 서버 정리 배치가 닫는다(30분 경과 기준). 원장의 PENDING 은 **스스로 만료**시킨다 —
-  만료 전에 `payments.get` 으로 상태를 확인하고 `CREATED` 면 `payments.cancel` 로 함께 닫는다
+- **결제 상태를 컬렉션 필드로 판정하지 마라.** 주문서에는 `order_no` 만 두고, 상태는 `payments.get` ·
+  `payments.list` 가 정본이다. `paid: true` 같은 필드를 브라우저가 쓰게 하면 결제 없이 확정된다.
+  예약의 `status` 는 결제가 아니라 예약 자체의 상태(확정 · 취소)다
+- **자리를 결제하기 때 올리지 마라(`holdSlot` 금지).** 결제창만 열고 떠난 손님이 자리를 묶는다. 주문서는
+  자리를 잡지 않으니 떠난 주문서는 지우지도, 만료시키지도 않는다 — 정리 배치가 없다
+- **정원은 확정 단계의 `guard` 로만 판정한다.** `payments.list` 로 세서 확인한 뒤 확정하면 동시 결제 두 건이 같은
+  마지막 자리를 통과한다. 넘친 쪽은 보상 단계가 환불한다 — 플랫폼은 이 정원을 모르므로 대신 환불해 주지 않는다
+- **`settleDeposit` 은 멱등이어야 한다.** 승인은 됐는데 확정 전에 끊기면(serverFn 중단, 플랫폼이 승인 뒤 저장에
+  실패해 웹훅이 PAID 로 복구) 결제만 있고 예약이 없다. `order_no` unique 가 두 번 세는 것을 막으니 다시 부르면 된다
+- **끊긴 결제는 손님이 복귀 화면에 있을 때 끝낸다.** `confirmDeposit` 이 실패(5xx · 네트워크)하면 복귀 화면이
+  같은 값으로 몇 번(간격을 늘려 3회 정도) 다시 부른다. 플랫폼 저장 실패는 웹훅이 몇 초 안에 PAID 로 복구하므로
+  재시도한 `confirm` 은 PAID 를 받고 확정으로 넘어간다. 400(금액 불일치 · 가상계좌 · 취소된 결제)은 다시 부르지 않는다
+- **그래도 남은 것은 사장님이 처리한다.** 손님이 그 사이 창을 닫으면 결제만 남는다 — 관리 화면에
+  `listUnsettledDeposits` 로 보여 주고 `resolveDeposit` 버튼(확정 / 환불)을 둔다. **조회가 확정 · 환불을 하게
+  만들지 마라** — 목록을 열 때마다 돈이 움직이면 예측할 수 없고, 동시에 열면 경합한다. 손님 쪽 목록에는 이런
+  주문을 「결제 확인 중」으로만 보여 준다
+- **가상계좌는 받지 않는다.** 입금 대기로 끝난 승인은 플랫폼이 토스에서 취소하고 400 을 던진다 —
+  `status: 'waiting'` 같은 입금 대기 분기를 만들지 마라
+- **`confirm` 실패는 던진다**(알림과 반대) — 잡아서 성공으로 바꾸지 마라
+- 확정된 예약 취소는 앞의 「예약 취소」 패턴(단건 `update(…, { if: { status: 'confirmed' } })` → 승자만 자리
+  `increment(-1)`)에 `payments.cancel(orderNo, 사유)` 를 이어 부른다. 결제 전 주문서는 취소할 것이 없다
 - `payment_mode` 가 `test` 면 **테스트 결제**다 — 실제로 청구되지 않는다. 판매자 승인 전 프로젝트는 모두
   test 다. 화면에 「테스트 결제」 안내를 띄우고, 사용자에게도 그렇게 알린다
 - 프론트는 `usePayment().beginWidget(startDeposit 의 응답, 셀렉터)` 로 위젯을 띄우고, 복귀 페이지에서
-  `getRedirectResult()` 값을 `confirmDeposit` 에 넘긴다(위젯 규칙은 `baas-integration-sdk` 결제 공통 규약)
+  `getRedirectResult()` 값을 `confirmDeposit` 에 넘긴다(위젯 규칙은 `baas-integration-sdk` 결제 공통 규약).
+  `refunded` 가 오면 「마감돼 결제를 취소했어요」를 보여 준다
 
 ### 파일 업로드 — 누가 올리나는 serverFn 이 정한다 (`sdk.storage.presign`)
 
