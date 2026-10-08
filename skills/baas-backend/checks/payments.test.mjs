@@ -78,6 +78,29 @@ test('get · cancel 경로', () => {
   assert.deepEqual(r.calls[1].body, { reason: '고객 요청' })
 })
 
+test('list — 주문번호를 반복 쿼리로 보내고, 중복은 한 번만', () => {
+  const r = run(`() => new Response(JSON.stringify({ data: [] }), { status: 200 })`,
+    `(sdk) => sdk.payments.list(['pcs_1', 'pcs_2', 'pcs_1'])`)
+  assert.equal(r.error, null)
+  assert.equal(r.calls.length, 1)
+  assert.equal(r.calls[0].method, 'GET')
+  assert.equal(r.calls[0].url, 'http://baas.test/service/payments/sessions?order_no=pcs_1&order_no=pcs_2')
+})
+
+test('list — 서버 한도 100건을 넘으면 나눠 부르고, 비어 있으면 부르지 않는다', () => {
+  const many = Array.from({ length: 150 }, (_, i) => `pcs_${i}`)
+  const r = run(`() => new Response(JSON.stringify({ data: [{ order_no: 'x' }] }), { status: 200 })`,
+    `(sdk) => sdk.payments.list(${JSON.stringify(many)})`)
+  assert.equal(r.calls.length, 2)
+  assert.equal(new URL(r.calls[0].url).searchParams.getAll('order_no').length, 100)
+  assert.equal(new URL(r.calls[1].url).searchParams.getAll('order_no').length, 50)
+  assert.deepEqual(r.out, [{ order_no: 'x' }, { order_no: 'x' }])
+
+  const empty = run(OK, `(sdk) => sdk.payments.list([])`)
+  assert.equal(empty.calls.length, 0)
+  assert.deepEqual(empty.out, [])
+})
+
 test('실패는 던진다 — 금액 불일치 400 이 값으로 삼켜지면 예약이 결제 없이 확정된다', () => {
   const r = run(
     `() => new Response(JSON.stringify({ message: '결제 금액이 세션 금액과 일치하지 않습니다.' }), { status: 400 })`,

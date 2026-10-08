@@ -477,9 +477,10 @@ await submitResponse(surveyId, answers);   // 공개 제출
   백엔드 `start` 를 호출해 order_no 를 미리 확보한다. 앱은 `beginWidgetCheckout` → `handle.requestPayment` 만 호출.
 - **⚠ `handle.requestPayment` 는 결제 버튼 클릭 핸들러 안에서 *동기로* 호출한다(앞에 `await` 등 비동기 작업 금지).**
   현대카드 등 팝업/앱카드 결제창은 사용자 제스처가 끊기면 안 뜬다 — 그래서 order_no 를 클릭 전에 미리 만들어 둔다.
-  (미결제 이탈 세션/주문은 서버 정리 배치가 만료.)
-- **결제 완료 = 카드는 동기(successUrl 복귀 → confirm), 가상계좌는 비동기(입금 웹훅)** 로 처리된다. 앱의 복귀
-  페이지 confirm 은 카드 완결/즉시 UX용이고, 가상계좌는 입금 시 서버 웹훅이 완결하므로 복귀 시점엔 "입금 대기"일 수 있다.
+  (결제까지 안 간 주문/예약은 자리를 잡지 않고 목록에도 안 보인다 — 정리할 것이 없다.)
+- **결제 완료 = successUrl 복귀 → confirm.** 카드 · 간편결제 · 계좌이체만 받는다 — **가상계좌는 받지 않는다**(입금
+  대기로 끝나면 서버가 취소하고 오류를 돌려준다). 예약은 confirm 직전에 정원을 다시 확인하므로, 결제 사이 마감되면
+  청구 없이 오류가 온다 — 그 메시지를 그대로 보여 준다.
 - `toss_client_key` 는 **결제위젯 키**(`test_gck_/live_gck_`)여야 한다(개별연동 `ck_` 키는 위젯 미지원).
 - 결제 복귀 라우트는 **평면 경로**(`/checkout-success` 등)로 둔다.
 - 결제창 닫힘/취소는 `code === "USER_CANCEL"` 에러 → 앱에서 무시(토스트 금지).
@@ -601,8 +602,9 @@ await r.book(targetId, { reserved_at, form_data, payment_method });  // 무료·
 - ⚠️ **유료 + 복수 제공인데 `payment_method` 를 안 보내면 400** `"결제 방법을 선택해 주세요."` 다.
   단일 제공일 때만 서버가 자동 선택한다 — 그래서 "지금 onsite 하나뿐"인 상태에서 만든 코드는
   나중에 online 이 켜지는 순간 400 으로 죽는다.
-- ⚠️ **`book()` 에 `payment_method: 'online'` 을 보내면 400** `"카드 결제 예약은 결제 준비(prepare)를
-  거쳐 결제 완료 시 생성됩니다."` — 카드는 반드시 `beginWidgetCheckout` 경로다(결제 완료 시점에 예약 생성).
+- ⚠️ **`book()` 에 `payment_method: 'online'` 을 보내면 400** `"카드 결제 예약은 결제하기를 거쳐 결제가
+  끝나야 확정됩니다."` — 카드는 반드시 `beginWidgetCheckout` 경로다(결제하기 때 예약을 만들고, 자리는 결제가
+  끝나야 센다).
 - 제공되지 않는 수단을 보내도 400 `"선택한 결제 방법은 제공되지 않습니다."`
 
 **`fetchSlots()` 반환 shape — 배열이 아니라 봉투이고, 시각 필드명은 `slot` 이다**(`reserved_at` 아님):
@@ -630,7 +632,7 @@ const w = await r.beginWidgetCheckout(targetId, {
   reserved_at, form_data,
   methodsSelector: "#toss-payment-methods", agreementSelector: "#toss-agreement" });
 //   customerKey 는 넘기지 않는다 — 넘기면 SDK 의 익명 키 폴백이 걸리지 않는다(아래 규칙).
-//   → 진입 시 SDK가 start(예약 PENDING+세션 생성, 슬롯 선점) → 위젯 렌더(w.amount, w.orderId). 결제 버튼 클릭 시(동기):
+//   → 진입 시 SDK가 start(예약 PENDING+세션 생성, 자리는 아직 안 잡음) → 위젯 렌더(w.amount, w.orderId). 결제 버튼 클릭 시(동기):
 await w.requestPayment({
   successUrl: `${location.origin}/reservation-payment-success`,
   failUrl: `${location.origin}/reservation-payment-fail`, orderName: `${target.name} 예약` });
