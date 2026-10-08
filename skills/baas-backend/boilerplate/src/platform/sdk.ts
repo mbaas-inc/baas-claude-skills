@@ -119,7 +119,16 @@ export type GuardBound = number | { field: string }
 export type GuardCondition =
   | { gte: GuardBound } | { lte: GuardBound } | { gt: GuardBound } | { lt: GuardBound }
 
-/** 트랜잭션 한 단계. `collection` 이 항목마다 있어 복수 컬렉션에 걸칠 수 있다. */
+/** 트랜잭션 한 단계. `collection` 이 항목마다 있어 복수 컬렉션에 걸칠 수 있다.
+ *
+ * **`update`·`delete` 는 최상위 `id` 로만 대상을 정한다.** 서버의 트랜잭션 경로는 이 둘에서
+ * `target` 을 해석하지 않고 `id` 만 읽는다(없으면 400 `update 는 id 가 필요합니다`). 필터 대상은
+ * `increment` 만 된다.
+ *
+ * **트랜잭션 안 `update` 에는 전제조건(`if`)이 없다.** 서버가 적용하지 않으므로 타입에서 뺐다.
+ * 전제조건이 필요한 상태 전이(취소·승인처럼 한 번만 일어나야 하는 것)는 단건
+ * `dyncol.update(…, { if })` 로 먼저 확정하고, 그 승자만 뒤따르는 변경을 한다.
+ */
 export type TxnOperation =
   | {
       op: 'create'
@@ -132,13 +141,18 @@ export type TxnOperation =
   | {
       op: 'update'
       collection: string
-      target: RecordTarget
+      /** 대상 레코드 id. 필터 대상(`target`)은 트랜잭션 안 `update` 에서 쓸 수 없다. */
+      id: string
       data: Record<string, unknown>
-      /** 전제조건 — 내가 읽은 그 상태가 아직 그대로인가. */
-      if?: Record<string, unknown>
       label?: string
     }
-  | { op: 'delete'; collection: string; target: RecordTarget; label?: string }
+  | {
+      op: 'delete'
+      collection: string
+      /** 대상 레코드 id. 필터 대상(`target`)은 트랜잭션 안 `delete` 에서 쓸 수 없다. */
+      id: string
+      label?: string
+    }
   | {
       op: 'increment'
       collection: string
@@ -160,22 +174,6 @@ export interface TxnFailure {
   field?: string
   value?: number
 }
-
-/**
- * 비공개 파일 업로드 대상 (aiapp-service#919). 공개 주소가 없다 — 브라우저는 `upload_url` 에 `content_type` 으로 PUT 하고,
- * 앱은 `file_id` 만 원장에 저장한다. 볼 때마다 `storage.private.view` 로 단기 주소를 받는다.
- */
-export interface PrivateUploadTarget {
-  /** 저장소 직접 PUT 주소 (5분·1회용). 형식과 크기가 서명에 묶여 있다 */
-  upload_url: string
-  /** 발급 때 서명한 Content-Type — 브라우저 PUT 에 그대로 쓰인다 */
-  content_type: string
-  /** 파일 식별자 — 원장에 저장하고 열람 · 삭제 때 넘긴다 */
-  file_id: string
-}
-
-/** 비공개 파일 형식 — 사진(카메라 원본 HEIC 포함)과 PDF. 최대 10MB */
-export type PrivateContentType = 'image/jpeg' | 'image/png' | 'image/webp' | 'image/heic' | 'application/pdf'
 
 /** 회원 1명. 플랫폼이 노출 범위를 정한다 — `data`(자유형 JSON)·과금·운영 메모는 오지 않는다. */
 export interface ServiceAccount {
@@ -237,6 +235,88 @@ export interface AccountListOptions {
   offset?: number
   /** `user_id`·`name`·`phone` 부분 검색. */
   keyword?: string
+}
+
+/** 관리자 알림 결과. **실패도 값으로 온다** — `disabled`·`limited` 는 오류가 아니다.
+ *
+ * | 값 | 뜻 |
+ * |---|---|
+ * | `sent` | 소유자에게 보냈다 |
+ * | `failed` | 보내지 못했다(채널 실패·네트워크·미선언 키). 기능 동작은 이미 끝났으므로 그대로 둔다 |
+ * | `skipped` | 보낼 채널이나 수신처가 없다 |
+ * | `disabled` | 소유자가 이 알림을 꺼 두었다 — 새 선언의 기본값이다 |
+ * | `limited` | 발송 한도에 걸렸다 |
+ */
+export type OwnerNotifyStatus = 'sent' | 'failed' | 'skipped' | 'disabled' | 'limited'
+
+/** 알림 값 하나. 서버는 스칼라만 받고 URL 을 지우며 200자로 자른다 — 사람이 읽을 문자열로 보낸다. */
+export type OwnerNotifyValue = string | number | boolean | null
+
+export interface OwnerNotifyResult {
+  result: OwnerNotifyStatus
+  /** 발송 이력 id. 요청이 서버에 닿지 못했으면 없다. */
+  log_id?: number
+  /** `failed` 일 때 원인. 서버 응답(미선언 키 404 등)이나 전송 오류의 메시지다. */
+  error?: { status?: number; message: string }
+}
+
+/** 커스텀 결제 상태 — 결제 상태의 정본은 이 값이다. 자기 컬렉션에 복사해 둔 값을 믿지 않는다. */
+export type PaymentStatus = 'CREATED' | 'PAID' | 'CANCELLED'
+
+/** 커스텀 결제 1건 (aiapp-service#900). `order_no` 를 자기 원장(예약 레코드 등)에 보관한다. */
+export interface ServicePayment {
+  /** 주문번호(토스 orderId). 승인 · 취소 · 조회에 쓴다. */
+  order_no: string
+  account_id: string
+  /** 서버가 세션에 박은 금액(원). 승인 때 토스 금액과 이 값이 다르면 거절된다. */
+  amount: number
+  item_name: string | null
+  status: PaymentStatus
+  /** `test` 면 테스트 결제(실제 청구 없음), `live` 면 실결제. 판매자 승인 상태로 서버가 정한다. */
+  payment_mode: 'test' | 'live'
+  /** 결제위젯 클라이언트 키 — 브라우저에 그대로 넘긴다(공개 키). */
+  client_key: string
+  pay_method: string | null
+  receipt_url: string | null
+  paid_at: string | null
+  cancelled_at: string | null
+  created_at: string
+}
+
+/**
+ * 비공개 파일 업로드 대상 (aiapp-service#919). 공개 주소가 없다 — 브라우저는 `uploadTo(대상, file)` 로 올리고,
+ * 앱은 `file_id` 만 원장에 저장한다. 볼 때마다 `storage.private.view` 로 단기 주소를 받는다.
+ */
+export interface PrivateUploadTarget {
+  /** 저장소 직접 PUT 주소 (5분·1회용). 형식과 크기가 서명에 묶여 있다 */
+  upload_url: string
+  /** 발급 때 서명한 Content-Type — 브라우저 PUT 에 그대로 쓰인다 */
+  content_type: string
+  /** 파일 식별자 — 원장에 저장하고 열람 · 삭제 때 넘긴다 */
+  file_id: string
+}
+
+/** 비공개 파일 형식 — 사진(카메라 원본 HEIC 포함)과 PDF. 최대 10MB */
+export type PrivateContentType = 'image/jpeg' | 'image/png' | 'image/webp' | 'image/heic' | 'application/pdf'
+
+/** 업로드 분류 — 커스텀 백엔드가 쓰는 것만. images 는 이미지 확장자·최대 10MB. */
+export type StorageCategory = 'images' | 'store' | 'reservation'
+
+/**
+ * 업로드 대상 (aiapp-service#904). **브라우저에 그대로 넘긴다** — 브라우저는 `useFileUpload().uploadTo(대상, file)`
+ * 로 `upload_url` 에 직접 올리고, 올린 뒤 `cdn_url` 을 원장에 저장한다.
+ */
+export interface StorageUploadTarget {
+  /** 저장소 직접 PUT 주소 (단기·1회용). 저장하지 않는다 */
+  upload_url: string
+  /** 발급 때 서명한 Content-Type — 브라우저 PUT 에 그대로 쓰인다 */
+  content_type: string
+  /** 인라인 표시용 영구 주소 — 원장 · 컬렉션 필드에 저장한다 */
+  cdn_url: string
+  /** 첨부 다운로드용 주소 */
+  download_url: string
+  /** 저장 경로 (프로젝트 접두사 제외) */
+  key: string
 }
 
 function buildSdk(ctx: RequestContext) {
@@ -443,6 +523,9 @@ function buildSdk(ctx: RequestContext) {
      *
      * 잠금은 서버가 정규 순서로 걸고 **실행은 보낸 순서 그대로**다 — 앞에서 만든 레코드를
      * 뒤 작업의 reference 로 쓸 수 있다(`create` 에 id 를 미리 정하는 이유).
+     *
+     * `update`·`delete` 는 최상위 `id` 로만 대상을 정하고, 트랜잭션 안 `update` 에는 `if` 가
+     * 없다(`TxnOperation` 참고). 한 번만 일어나야 하는 상태 전이는 단건 `update(…, { if })` 다.
      */
     transaction: (operations: TxnOperation[]) =>
       call<{
@@ -585,9 +668,117 @@ function buildSdk(ctx: RequestContext) {
       call<Record<string, unknown>>('PUT', `/service/boards/posts/${postId}`, post),
   }
 
-  // 비공개 파일(aiapp-service#919). **누가 올리고 볼 수 있는지는 이 serverFn 이 판정한다** — 플랫폼은 프로젝트
-  // 경계 · 파일 형식/크기만 본다. 실패는 던진다 — 형식 · 크기 거절(400)을 그대로 화면에 보여 준다.
+  // 관리자 알림(aiapp-service#884). 기능 동작이 **성공한 뒤** 프로젝트 소유자에게 알린다.
+  //
+  // **수신자를 받지 않는다.** 서버가 프로젝트 소유자로 고정한다 — 받는 사람을 caller 가 정하면
+  // 이 경로가 방문자·회원에게 아무 내용이나 보내는 발송 API 가 된다.
+  //
+  // **던지지 않는다.** 알림은 부수 효과다. 예약은 이미 저장됐는데 알림 실패로 예외가 올라가면
+  // 손님은 실패 화면을 보고 다시 시도해 예약이 두 건이 된다. 그래서 어떤 실패도 결과 값으로
+  // 돌려주고 로그만 남긴다. 미선언 키(404)도 마찬가지다 — 로그의 메시지가 schema.json 선언과
+  // 수렴을 가리킨다.
+  const notify = {
+    /** 소유자에게 알린다. `key` 는 `backend/schema.json` 의 `notifications` 에 선언된 것이어야 한다. */
+    owner: async (
+      key: string,
+      values: Record<string, OwnerNotifyValue> = {},
+    ): Promise<OwnerNotifyResult> => {
+      try {
+        const data = await call<{ result: OwnerNotifyStatus; log_id?: number }>(
+          'POST', '/service/notifications/owner', { key, values },
+        )
+        return { result: data.result, log_id: data.log_id }
+      } catch (e) {
+        const status = e instanceof SdkError ? e.status : undefined
+        const message = e instanceof Error ? e.message : String(e)
+        // 토큰은 call 밖으로 나오지 않는다 — 여기 남는 것은 키·상태·서버 메시지뿐이다.
+        console.error(
+          `[notify.owner] ${key} 알림 실패${status ? ` (${status})` : ''}: ${message}`,
+          { requestId: ctx.requestId },
+        )
+        return { result: 'failed', error: { status, message } }
+      }
+    },
+  }
+
+  // 커스텀 결제(aiapp-service#900). **금액은 serverFn 이 정한다** — 자기 원장에서 계산한 값을
+  // 넘기고, 브라우저가 보낸 금액은 절대 쓰지 않는다. 세션 금액이 서버에 박히므로 위젯에서 금액을
+  // 바꿔도 승인 때 거절된다.
+  //
+  // **승인도 serverFn 이 한다.** 토스 successUrl 로 돌아온 paymentKey 를 받아 `confirm` 하고,
+  // `status === 'PAID'` 일 때만 같은 요청 안에서 자기 원장(예약 확정 등)을 갱신한다. 결제 상태를
+  // 컬렉션 필드에 두고 브라우저가 쓰게 하면 위변조된다 — 상태는 `get` 이 정본이다.
+  //
+  // 결제자는 **이 요청의 로그인 회원**으로 고정한다. 결제자를 인자로 받으면 다른 회원 이름으로
+  // 결제가 만들어진다. 비로그인이면 만들 수 없다.
+  //
+  // 알림과 달리 **던진다.** 결제 실패를 값으로 삼키면 예약이 결제 없이 확정된다.
+  const payments = {
+    /** 결제 세션 만들기. 응답의 order_no · amount · client_key 를 브라우저에 넘겨 위젯을 띄운다. */
+    create: async (opts: { amount: number; itemName: string }) => {
+      if (!ctx.accountId) {
+        throw new SdkError('로그인한 회원만 결제할 수 있습니다.', 401, 'LOGIN_REQUIRED')
+      }
+      return call<ServicePayment>('POST', '/service/payments/sessions', {
+        account_id: ctx.accountId,
+        amount: opts.amount,
+        item_name: opts.itemName,
+      })
+    },
+
+    /** 결제 1건 — 상태의 정본. 다른 프로젝트 결제이거나 없으면 404. */
+    get: (orderNo: string) =>
+      call<ServicePayment>('GET', `/service/payments/sessions/${encodeURIComponent(orderNo)}`),
+
+    /**
+     * 승인. `paymentKey` · `amount` 는 토스 successUrl 쿼리 값이다. 금액이 세션과 다르면 400.
+     * `status === 'PAID'` 를 확인한 뒤에 자기 원장을 확정한다(가상계좌 입금 대기는 `CREATED`).
+     */
+    confirm: (orderNo: string, payment: { paymentKey: string; amount: number }) =>
+      call<ServicePayment>('POST', `/service/payments/sessions/${encodeURIComponent(orderNo)}/confirm`, {
+        payment_key: payment.paymentKey,
+        amount: payment.amount,
+      }),
+
+    /** 취소. 결제 완료면 전액 환불, 결제 전이면 세션만 닫는다. 이미 취소됐으면 그대로 돌려준다. */
+    cancel: (orderNo: string, reason: string) =>
+      call<ServicePayment>('POST', `/service/payments/sessions/${encodeURIComponent(orderNo)}/cancel`, {
+        reason,
+      }),
+  }
+
+  // 파일 업로드(aiapp-service#904). **누가 올려도 되는지는 이 serverFn 이 판정한다** — `access: 'owner'` 면
+  // 소유자 전용(관리자 화면의 사장님 업로드), 역할 규칙은 코드로. 플랫폼은 프로젝트 경계 · 파일 형식/크기만 본다.
+  //
+  // 브라우저 직접 업로드(`useFileUpload().upload`)는 앱 회원 로그인이 필요하다. 관리자 진입으로 소유자
+  // 인증된 사장님은 회원이 아니므로 그 경로로는 401 이다 — 이 표면으로 대상을 받아 넘긴다.
+  //
+  // 실패는 던진다 — 형식 · 크기 거절(400)을 그대로 화면에 보여 준다.
   const storage = {
+    /** 업로드 대상 발급. `contentType` · `size` 는 브라우저가 고른 File 의 `type` · `size` 를 넘긴다. */
+    presign: async (file: {
+      filename: string
+      contentType: string
+      size: number
+      category?: StorageCategory
+    }): Promise<StorageUploadTarget> => {
+      const data = await call<{ original: { presign_url: string; cdn_url: string; download_url: string; key: string } }>(
+        'POST', '/service/storage/presign', {
+          category: file.category ?? 'images',
+          filename: file.filename,
+          content_type: file.contentType,
+          size: file.size,
+        },
+      )
+      return {
+        upload_url: data.original.presign_url,
+        content_type: file.contentType,
+        cdn_url: data.original.cdn_url,
+        download_url: data.original.download_url,
+        key: data.original.key,
+      }
+    },
+
     /**
      * 비공개 파일(aiapp-service#919) — 처방전 사진처럼 **정해진 사람만 보는 파일**. 공개 주소가 없고, 볼 때마다
      * 단기 주소(5분)를 받는다. 누가 올리고 볼 수 있는지는 이 serverFn 이 판정한다(플랫폼은 프로젝트 경계 ·
@@ -621,7 +812,7 @@ function buildSdk(ctx: RequestContext) {
     },
   }
 
-  return { dyncol, account, secrets, reservation, board, storage, ctx }
+  return { dyncol, account, secrets, reservation, board, notify, payments, storage, ctx }
 }
 
 export type Sdk = ReturnType<typeof buildSdk>

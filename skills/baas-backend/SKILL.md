@@ -1,6 +1,6 @@
 ---
 name: baas-backend
-description: "(BaaS 백엔드) 프로젝트 전용 Node 백엔드의 서비스 로직을 작성하는 가이드. 프레임워크(envelope 파싱·주입 토큰·에러 직렬화·배포·라우트 생성)는 플랫폼이 담당하고, 서버 로직을 프론트와 같은 트리(`src/services/*.ts`)에 `serverFn` 으로 작성하면 빌드가 envelope 라우트와 타입 유도 fetch 스텁을 만든다. 제공: dyncol 데이터 접근(unique·원자 증감·조건부 갱신·트랜잭션·집계), 네이티브 기능 호출. Use when: 구현 브리프의 '백엔드 연결 후보'가 채워졌을 때 — 여러 레코드의 합·개수로 판정되는 규칙(선착순·정원·재고), 상태 전이·승인 흐름, 플랫폼이 감싸지 않은 외부 연동(사내 시스템·서드파티 API). 결제와 회원 인증은 네이티브가 담당하므로 여기서 다루지 않고, 프론트 코드·화면도 다루지 않는다."
+description: "(BaaS 백엔드) 프로젝트 전용 Node 백엔드의 서비스 로직을 작성하는 가이드. 프레임워크(envelope 파싱·주입 토큰·에러 직렬화·배포·라우트 생성)는 플랫폼이 담당하고, 서버 로직을 프론트와 같은 트리(`src/services/*.ts`)에 `serverFn` 으로 작성하면 빌드가 envelope 라우트와 타입 유도 fetch 스텁을 만든다. 제공: dyncol 데이터 접근(unique·원자 증감·조건부 갱신·트랜잭션·집계), 네이티브 기능 호출, 관리자(프로젝트 소유자) 알림. Use when: 구현 브리프의 '백엔드 연결 후보'가 채워졌을 때 — 여러 레코드의 합·개수로 판정되는 규칙(선착순·정원·재고), 상태 전이·승인 흐름, 플랫폼이 감싸지 않은 외부 연동(사내 시스템·서드파티 API), 「예약·주문이 생기면 알림 받게 해줘」 같은 소유자 알림. 결제와 회원 인증은 네이티브가 담당하므로 여기서 다루지 않고, 프론트 코드·화면도 다루지 않는다."
 ---
 
 # BaaS 백엔드 스킬 (서비스 로직 작성 가이드)
@@ -194,6 +194,7 @@ serverFn 이 **하나도 없으면 `backend/` 를 만들지 않는다** — 서�
 |---|---|
 | 서버 컬렉션 | 선언과 현재를 비교해 **차이만** 적용(멱등). 빠뜨림이 원리적으로 불가능해진다 |
 | `src/types/collections.ts` | 레코드 타입. **`interface MenuStockRecord` 를 손으로 쓰지 마라** |
+| `src/types/notifications.ts` | `notifications` 를 선언했을 때만. 관리자 알림 키·값 타입 — 「관리자 알림」 절 참조 |
 
 **레코드 타입을 직접 선언하지 마라.** 손으로 쓰면 스키마와 두 출처가 되고 조용히 갈라진다
 (실측: `status` 를 `'confirmed' | 'cancelled'` 로 썼는데 스키마에는 `picked_up` 이 있었다).
@@ -241,6 +242,27 @@ dyncol.transaction → 항목마다 그 항목의 collection·op 로 유도된�
 
 `batch` 의 두 번째 인자와 `transaction` 의 배열은 **리터럴이어야 한다** — 항목을 볼 수
 없으면 어느 컬렉션에 무슨 권한이 필요한지 유도할 수 없어 빌드가 선다.
+
+**그래서 항목 수가 요청마다 달라지는 트랜잭션은 쓸 수 없다**(`items.map(...)`·`push` 로 만든 배열은
+`dynamic-transaction` 으로 선다). 「시술 시간만큼 30분 칸을 전부 잠근다」처럼 개수가 변하는 잠금이
+필요하면 **잠금 단위를 키워 개수를 고정한다** — 날짜마다 장부 레코드 하나(`date` unique)에 그날
+잡힌 칸을 담고, 읽은 버전이 그대로일 때만 쓴다:
+
+```ts
+const ledger = await getOrCreateLedger(sdk, date)              // { id, slots, version }
+if (wanted.some((t) => ledger.slots[t])) return { status: 'taken' }
+try {
+  await sdk.dyncol.update(LEDGER, ledger.id,
+    { slots: JSON.stringify({ ...ledger.slots, ...claim }), version: ledger.version + 1 },
+    { if: { version: ledger.version } })                       // 그 사이 누가 썼으면 409
+} catch (e) {
+  if (errorStatus(e) === 409) return { status: 'taken' }       // 다시 읽고 판단하게 한다
+  throw e
+}
+```
+
+같은 날 예약끼리 순서대로 처리되지만, 한 사람이 운영하는 가게처럼 하루 예약 수가 적으면 문제가
+되지 않는다(실측 2026-10-05: 10명 동시 → 1건).
 
 그래서 컬렉션명을 **문자열 리터럴이나 모듈 스코프 `const`** 로 써야 한다. 이건 스타일
 규칙이 아니라 권한이 유도되는 조건이다.
@@ -456,6 +478,8 @@ await sdk.dyncol.update('po', id, { status: 'approved' },
                         { if: { status: 'pending', amount: seenAmount } })
 ```
 
+`if` 는 **이 단건 경로에서만** 적용된다. 트랜잭션 안 `update` 에는 없다(아래 트랜잭션 절).
+
 **상태 전이·순번 진행은 예외 없이 `if` 를 붙인다.** unique 로는 막을 수 없다 — 잠글 값이
 없기 때문이다. 실측 (동시 20명 승인 시도):
 
@@ -492,6 +516,11 @@ await sdk.dyncol.transaction([
 ])
 ```
 
+메뉴 수처럼 항목 수가 정해지지 않으면 위처럼 `...목록.map((x) => ({ … }))` 로 펼친다. 추출기는 콜백이
+돌려주는 객체 리터럴의 `op`·`collection` 으로 권한을 유도하므로 둘은 **문자열 리터럴**로 쓴다(`op` 의
+`as const` 는 괜찮다). 항목을 변수에 모아 `...ops` 로 펼치거나 `collection` 을 변수로 쓰면 추출기가
+항목을 볼 수 없어 빌드가 멈춘다. 전체 코드는 `examples/order-stock.ts` 다.
+
 #### 경계는 `guard` 로 **함께 보낸다**
 
 받아서 TypeScript 로 보면 이미 늦다 — 그때는 「쓴다 → 본다 → 되돌린다」가 되고 그 사이가
@@ -519,10 +548,40 @@ catch (e) {
 
 **index 로 분기하지 마라** — 항목 수가 바뀌는 순간 조용히 어긋난다.
 
-#### 대상은 `target` 으로 — id 를 먼저 찾지 마라
+#### `increment` 대상은 `target` 으로 — id 를 먼저 찾지 마라
 
 `{ id }` 또는 `{ filter: { … } }` 다. 밖에서 조회해 id 를 구하면 그 사이 대상이 바뀔 수 있고,
 트랜잭션이 낡은 id 로 시작한다. 필터는 **정확히 1건**에 맞아야 하고, 아니면 실패한다.
+
+#### `update`·`delete` 는 최상위 `id` 로만 — 그리고 `if` 가 없다
+
+서버의 트랜잭션 경로는 `update`·`delete` 에서 `target` 을 읽지 않고 최상위 `id` 만 본다
+(없으면 400 `update 는 id 가 필요합니다`). 필터로 대상을 정할 수 있는 것은 `increment` 뿐이다.
+
+```ts
+{ op: 'update', collection: 'reservations', id: reservationId, data: { memo }, label: 'reservation' }
+{ op: 'delete', collection: 'holds', id: holdId, label: 'hold' }
+```
+
+**트랜잭션 안 `update` 는 전제조건(`if`)을 적용하지 않는다.** 그래서 한 번만 일어나야 하는
+상태 전이를 트랜잭션 안 `update` 로 하면 경합에 뚫린다 — 같은 예약을 두 사람이 동시에
+취소하면 둘 다 통과하고 자리가 두 번 돌아온다. 그런 전이는 **단건 `update(…, { if })` 로 먼저
+확정하고, 그 승자만** 뒤따르는 변경을 한다:
+
+```ts
+// 예약 취소 — 확정 상태일 때 한 번만, 그 승자만 자리를 되돌린다
+try {
+  await sdk.dyncol.update('reservations', reservationId, { status: 'cancelled' },
+                          { if: { status: 'confirmed' } })
+} catch (e) {
+  if (errorStatus(e) === 409) return { status: 'already_cancelled' }   // 경합에서 졌다
+  throw e
+}
+await sdk.dyncol.increment('slots', { id: slotId }, 'booked', -1)
+```
+
+두 단계 사이에서 멈추면 예약은 취소됐는데 자리는 돌아오지 않은 채 남는다. 그쪽은 정원을
+넘기지 않는 방향이라 안전하다(반대 순서로 하면 정원을 넘길 수 있다).
 
 `create` 는 id 를 미리 정할 수 있다 — 같은 요청에서 자식의 `reference` 값으로 쓰려면 필요하다.
 잠금은 서버가 정규 순서로 걸고 **실행은 보낸 순서 그대로**라, 이 의존이 지켜진다.
@@ -549,6 +608,7 @@ soft-delete 된 레코드는 `restore` 로 되살린다(인가는 `delete` 권�
 | 응답 | **6MB** | 초과분은 presigned URL |
 | 기본 타임아웃 | **10초** | 대량 순회는 페이지로 나눠 요청마다 조금씩 |
 | 인덱스 | containment(=) 만 GIN | 범위·부분일치·임의 정렬은 순차 스캔 — 대량 컬렉션에서 피한다 |
+| 필터 연산자 | 필드 타입별로 다르다 | `string` 은 범위 비교(`gte` 등) 불가 — 날짜 범위로 찾을 필드는 `date` 로 선언한다. `like` 는 부분 일치(`%` 를 넣지 않는다). 표는 `baas-integration-sdk` 의 `sdk-surface.md` 「필터 DSL」 |
 
 ### 회원 정보 — 인증은 받아 쓰고, 인가는 네 일이다
 
@@ -732,9 +792,196 @@ await sdk.board.createPost('NOTICE', { title: '점검 안내', content: '...' })
 > 못했다.** 우회로 고려된 「신청 내역을 커스텀 컬렉션에 복사해 쌓기」는 시작 시점 이후만
 > 잡히고 실제 예약과 어긋나므로 **하지 마라.**
 
+### 관리자 알림 — 「X 가 생기면 알려 줘」는 `sdk.notify.owner`
+
+「예약이 들어오면 알림 받게 해줘」·「주문 생기면 메일 줘」 같은 요구는 **선언 + 서버 호출**로
+만든다. 받는 사람은 **항상 프로젝트 소유자**이고, 서버가 정한다 — 호출하는 쪽이 수신자를
+고를 수 없다.
+
+#### 1. 선언 — `backend/schema.json` 의 `notifications`
+
+컬렉션과 같은 파일에 적는다. 표시 이름은 **한국어로** 쓴다 — 소유자가 그대로 읽는다.
+
+```jsonc
+{
+  "collections": [ ... ],
+  "notifications": [
+    { "key": "reservation.created", "label": "새 예약 접수", "feature": "reservation",
+      "fields": [
+        { "name": "customer", "label": "예약자" },
+        { "name": "slot",     "label": "예약 일시" },
+        { "name": "people",   "label": "인원" }
+      ] }
+  ]
+}
+```
+
+| 항목 | 규칙 |
+|---|---|
+| `key` | 소문자·숫자로 시작, 소문자·숫자·`.`·`_`·`-` 만, 64자 이내. `<기능>.<사건>` 형태로 쓴다(`order.paid`) |
+| `label` | **20자 이내, 주소(URL) 금지.** 알림톡 메시지 제목이 된다 |
+| `feature` | 선택. 어느 기능의 알림인지 묶는 이름(`reservation`) |
+| `fields` | 20개까지. `name` 은 영문·숫자·`_`(코드에서 쓰는 키), `label` 은 30자 이내 표시 이름. 문자열만 쓰면 이름이 곧 표시 이름이다 |
+
+추출이 규칙 위반을 **빌드 실패로** 낸다. 그리고 `src/types/notifications.ts` 를 만든다 —
+**손으로 쓰지 마라.** 이 타입 덕분에 선언하지 않은 키·값 이름은 컴파일 에러가 된다(런타임에는
+404 가 `failed` 로 조용히 삼켜지므로, 오타를 잡을 곳이 타입뿐이다).
+
+#### 2. 호출 — 동작이 **성공한 뒤**, serverFn 안에서만
+
+```ts
+import type { OwnerNotifySdk } from '../types/notifications'
+
+const sdk = ctx.sdk as BookingSdk & OwnerNotifySdk
+await sdk.dyncol.transaction([ ... ])            // 예약 확정 — 실패하면 여기서 빠져나간다
+await sdk.notify.owner('reservation.created', {
+  customer: input.name,
+  slot: '10월 5일(일) 14:00',
+  people: `${input.people}명`,
+})
+return { status: 'booked' }
+```
+
+- **성공이 확정된 다음 줄에서 부른다.** 409·정원 초과·트랜잭션 실패 분기에서 부르면 일어나지
+  않은 일을 알리게 된다
+- **던지지 않는다.** 실패도 `{ result: 'failed', error }` 로 돌아온다 — 예약은 이미 저장됐는데
+  알림 때문에 예외가 올라가면 손님이 다시 눌러 두 건이 된다. 결과로 기능 응답을 바꾸지 마라.
+  `disabled`(소유자가 꺼 둠)·`limited`(발송 한도)·`skipped`(받을 곳 없음)는 **정상**이다
+- **`await` 한다.** 응답을 보낸 뒤에는 실행 환경이 멈춰 보내지 않은 알림이 사라진다
+- **값은 사람이 읽을 문자열로** 만든다 — `4` 가 아니라 `"4명"`, ISO 시각이 아니라
+  `"10월 5일(일) 14:00"`, `35000` 이 아니라 `"35,000원"`. 서버는 선언한 값만 남기고, 스칼라만
+  받고, 주소(URL)를 지우고, 값마다 200자로 자른다
+- 선언한 값은 **전부 채운다**(타입이 필수로 요구한다). 정말 없으면 `null` 을 명시한다
+- **브라우저(프론트)에서 부르지 마라.** 서버 간 전용 경로라 주입 토큰으로만 열린다. 프론트에
+  알림 코드를 두지 않는다
+- **손님·회원에게 보내는 용도가 아니다.** 수신자 인자가 없는 것은 의도다 — 받는 사람을 호출자가
+  정하면 아무에게나 아무 내용을 보내는 발송 API 가 된다. 「손님에게 예약 확인 문자」 같은 요구는
+  이 표면으로 만들 수 없으니 **그 사실을 사용자에게 알린다**
+- **네이티브 문의하기는 이미 소유자에게 메일로 간다.** 같은 사건을 또 선언하지 마라 — 두 번 받는다
+
+#### 3. 등록하고, **받는 곳과 끄는 법을 알린다**
+
+`node backend/extract.mjs` 가 수렴(`baas collection converge --file backend/schema.json`)으로
+선언을 서버에 올린다. 등록은 멱등이고, **지우지 않으며, 이미 있는 알림의 켜짐·채널을 바꾸지
+않는다.**
+
+**새 알림은 켜진 채(ON, 채널 `email`)로 시작한다** — 사용자가 「알려 줘」라고 요청해서 만든
+알림이고, 받는 사람은 늘 프로젝트 관리자 본인이다(aiapp-service#923). 다시 켤지 묻지 않는다.
+등록한 뒤 이렇게 마무리한다:
+
+1. `baas notification list` 로 켜짐을 **실행해서** 확인한다. 같은 키를 사용자가 예전에 꺼 뒀다면
+   꺼진 채 남아 있다(선언은 켜짐을 바꾸지 않는다) — 그때만 "예전에 꺼 두신 알림이에요. 다시 켤까요?"
+   라고 묻고, 켜겠다고 하면 `baas notification enable <key>`
+2. 사용자에게 말한다 — "알림을 만들었어요. 프로젝트 관리자 계정 이메일로 받아요. 그만 받고 싶으면
+   말씀해 주세요, 끌 수 있어요."
+
+받는 곳은 늘 프로젝트 관리자(소유자) 계정이라 따로 조회하지 않는다. 이메일·전화번호를 채팅에 옮겨
+적지 마라 — 개인정보가 대화 기록에 남는다.
+
+| 명령 | 쓰임 |
+|---|---|
+| `baas notification list` | 선언된 알림과 켜짐·채널 |
+| `baas notification enable <key>` / `disable <key>` | 켜기·끄기. 그만 받으려면 선언을 지우지 말고 끈다(선언을 지워도 서버에서 지워지지 않는다) |
+| `baas notification channels <key> email[,alimtalk]` | 받을 채널 |
+| `baas notification recipient` | 받는 이메일·전화번호와 그 출처 |
+| `baas notification logs` | 최근 발송 결과 — 「알림이 안 와요」는 이걸 **실행해서** 본다 |
+
+**알림톡을 켜기 전에만** `recipient` 로 전화번호가 등록돼 있는지 확인하고, 번호를 그대로 보여 주지
+말고 끝자리만 보여 주며 **그 번호가 맞는지 사용자에게 확인받는다.** 번호가 없으면 서버가 거절한다. 알림톡은 아직 열리지 않았을 수 있다 — 거절되면
+이메일로 받도록 안내한다.
+
+### 결제 — 금액은 DB 에서 읽고, 승인은 serverFn 이 한다 (`sdk.payments`)
+
+예약금 · 이용권처럼 **커스텀 원장에 붙는 결제**는 이 표면으로 만든다(aiapp-service#900). 네이티브
+스토어 · 예약 기능을 쓰는 화면은 그쪽 `beginWidgetCheckout` 을 쓴다 — 여기서 다시 만들지 마라.
+
+**금액의 원본은 컬렉션(DB)이다.** 시술 · 상품 · 예약금 금액은 사장님이 관리 화면에서 고치는 데이터이므로
+코드 상수가 아니라 컬렉션에 둔다. 위변조 방어는 세 겹이고, 앞의 둘이 **이 역할의 책임**이다.
+
+| 겹 | 누가 | 막는 것 |
+|---|---|---|
+| ① 금액 컬렉션은 `service` 전용 | 이 역할(`schema.json`) | 회원이 1원짜리 시술 행을 **직접 만들거나 고치는** 것 |
+| ② serverFn 이 DB 에서 금액을 읽는다 | 이 역할(serverFn) | 브라우저가 보낸 금액 · 금액이 든 객체를 믿는 것 |
+| ③ 세션 금액 고정 + 승인 대조 | 플랫폼 | 위젯 · 복귀 주소에서 금액을 바꾸는 것(다르면 400) |
+
+```jsonc
+// backend/schema.json — 금액이 든 컬렉션은 브라우저가 쓰지 못하게(읽기도 serverFn 이 골라 준다)
+{ "name": "services", "label": "시술",
+  "access": {"read":"service","create":"service","update":"service","delete":"service"},
+  "fields": [ {"name":"name","type":"string","required":true},
+              {"name":"price","type":"number","required":true},
+              {"name":"deposit","type":"number","required":true} ] }
+```
+
+```ts
+// src/services/deposit.ts
+export const startDeposit = serverFn<{ serviceId: string; slot: string }, DepositStart>(async (input, ctx) => {
+  const svc = await ctx.sdk.dyncol.get<Service>('services', input.serviceId)   // 금액은 DB 에서
+  if (!svc) throw new ServerFnError('없는 시술이에요', 404)
+  if (!(await holdSlot(ctx, input.slot))) throw new ServerFnError('이미 마감된 시간이에요', 409)
+  const pay = await ctx.sdk.payments.create({ amount: svc.data.deposit, itemName: `${svc.data.name} 예약금` })
+  await saveBooking(ctx, { slot: input.slot, serviceId: input.serviceId, orderNo: pay.order_no })  // PENDING
+  return { order_no: pay.order_no, amount: pay.amount, client_key: pay.client_key,
+           item_name: pay.item_name, payment_mode: pay.payment_mode }
+}, { access: 'member' })
+
+export const confirmDeposit = serverFn<{ orderNo: string; paymentKey: string; amount: number }, { status: string }>(
+  async (input, ctx) => {
+    const pay = await ctx.sdk.payments.confirm(input.orderNo, { paymentKey: input.paymentKey, amount: input.amount })
+    if (pay.status !== 'PAID') return { status: 'waiting' }      // 가상계좌 입금 대기
+    await confirmBookingByOrder(ctx, input.orderNo)                // 같은 요청 안에서 원장 확정
+    return { status: 'confirmed' }
+  }, { access: 'member' })
+```
+
+- **브라우저에서는 id 만 받는다.** `input.amount` · `input.price` 처럼 금액이 든 입력으로 `create` 하지 마라.
+  `confirm` 의 `amount` 는 토스가 돌려준 값이고 서버가 세션 금액과 대조한다(다르면 400)
+- **금액 컬렉션을 기본 접근(선언 없음)으로 두지 마라.** 기본은 「로그인 회원이 행을 만들 수 있다」라서, 회원이
+  1원짜리 시술을 만들고 그 id 로 결제하면 ② 를 지켜도 뚫린다. 금액 수정은 `access: 'owner'` serverFn 으로 연다
+- **결제자는 요청한 회원이다.** `create` 는 인자로 결제자를 받지 않는다 — `access: 'member'` 로 둔다
+- **결제 상태를 컬렉션 필드로 판정하지 마라.** 원장에는 `order_no` 만 두고, 상태는 `payments.get` 이
+  정본이다. `paid: true` 같은 필드를 브라우저가 쓰게 하면 결제 없이 확정된다
+- **`confirm` 이 `PAID` 일 때만 확정한다.** 실패는 던진다(알림과 반대) — 잡아서 성공으로 바꾸지 마라
+- 취소 · 환불은 `payments.cancel(orderNo, 사유)`. 결제 전이면 세션만 닫힌다. 원장 취소와 같은 요청에서 부른다
+- 결제하지 않고 이탈한 세션은 서버 정리 배치가 닫는다(30분 경과 기준). 원장의 PENDING 은 **스스로 만료**시킨다 —
+  만료 전에 `payments.get` 으로 상태를 확인하고 `CREATED` 면 `payments.cancel` 로 함께 닫는다
+- `payment_mode` 가 `test` 면 **테스트 결제**다 — 실제로 청구되지 않는다. 판매자 승인 전 프로젝트는 모두
+  test 다. 화면에 「테스트 결제」 안내를 띄우고, 사용자에게도 그렇게 알린다
+- 프론트는 `usePayment().beginWidget(startDeposit 의 응답, 셀렉터)` 로 위젯을 띄우고, 복귀 페이지에서
+  `getRedirectResult()` 값을 `confirmDeposit` 에 넘긴다(위젯 규칙은 `baas-integration-sdk` 결제 공통 규약)
+
+### 파일 업로드 — 누가 올리나는 serverFn 이 정한다 (`sdk.storage.presign`)
+
+사장님이 관리 화면에서 사진을 올리는 것처럼 **올릴 수 있는 사람이 정해진 업로드**는 serverFn 이 업로드
+주소를 받아 브라우저에 넘긴다(aiapp-service#904). 업로드 모듈은 형식 · 크기 · 저장 경로만 검사하고
+**누가 올리는지는 판정하지 않는다** — 그 판정이 이 serverFn 의 `access` 다.
+
+```ts
+// src/services/gallery.ts — 소유자만 업로드 주소를 받는다
+export const presignGalleryPhoto = serverFn<
+  { filename: string; contentType: string; size: number },
+  StorageUploadTarget
+>(async (input, ctx) => {
+  return ctx.sdk.storage.presign({ ...input, category: 'images' })
+}, { access: 'owner' })
+
+export const addGalleryPhoto = serverFn<{ cdnUrl: string }, { id: string }>(async (input, ctx) => {
+  const row = await ctx.sdk.dyncol.create('gallery', { image_url: input.cdnUrl })
+  return { id: row.id }
+}, { access: 'owner' })
+```
+
+- 프론트는 `useFileUpload().uploadTo(presignGalleryPhoto 의 응답, file)` 로 파일을 올리고, 돌려받은
+  `cdn_url` 을 `addGalleryPhoto` 에 넘긴다. 앱 회원 로그인이 없어도 된다 — 소유자 인증은 serverFn 이 받는다
+- **분류(`category`)는 `images`(기본) · `store` · `reservation`** 만 받는다. 게시판 첨부는 게시판 기능 몫이라
+  여기서 발급하지 않는다. `images` 는 이미지 확장자 · 최대 10MB, 실행 파일은 분류와 상관없이 거절(400 을 던진다)
+- 받은 주소는 **곧 만료되는 일회용**이다. 저장해 두지 말고, 올린 뒤 남길 것은 `cdn_url` 이다
+- 회원이 자기 프로필 사진을 올리는 것처럼 **로그인 회원이면 누구나** 올리는 업로드는 serverFn 없이
+  브라우저 `useFileUpload().upload` 로 충분하다
+
 ### 비공개 파일 — 정해진 사람만 보는 파일 (`sdk.storage.private`)
 
-공개 업로드 주소(CDN)는 **주소를 아는 누구나 로그인 없이 연다.** 처방전 · 진료 사진 · 신분증처럼
+`storage.presign` 의 `cdn_url` 은 **주소를 아는 누구나 로그인 없이 연다.** 처방전 · 진료 사진 · 신분증처럼
 정해진 사람만 봐야 하는 파일은 비공개로 올린다(aiapp-service#919). 공개 주소가 없고, 볼 때마다 serverFn 이
 권한을 확인한 뒤 **5분짜리 열람 주소**를 받아 넘긴다.
 
@@ -752,8 +999,7 @@ export const viewPhotos = serverFn<{ visitId: string }, { file_id: string; url: 
 }, { access: 'member', authorizes: true })
 ```
 
-- 프론트는 받은 대상으로 **저장소에 직접 올린다** — `fetch(t.upload_url, { method: 'PUT', headers: { 'Content-Type': t.content_type }, body: file })`
-  (BaaS API 가 아니라 저장소 서명 주소라 직접 부른다). 올린 뒤 **`file_id` 만** 원장에 저장한다.
+- 프론트는 `useFileUpload().uploadTo(presignPhoto 의 응답, file)` 로 올리고, **`file_id` 만** 원장에 저장한다.
   열람 주소는 곧 만료되므로 저장하지 말고 화면에 보일 때마다 받는다
 - 형식은 `image/jpeg` · `png` · `webp` · `heic` · `application/pdf`, 최대 10MB. `size` 는 실제 바이트 수 —
   다른 크기로 올리면 저장소가 서명 불일치로 거절한다
@@ -902,9 +1148,11 @@ try { ... } catch (e) {
 | 파일 | 무엇을 막는가 |
 |---|---|
 | `examples/slot-booking.ts` | 동시 예약이 같은 마지막 자리를 통과하는 것 → 한 트랜잭션에 **정원 `guard` + `slot_account_key` unique** 를 함께 보낸다 (조회로 판정하면 뚫린다) |
+| `examples/order-stock.ts` | 여러 메뉴를 한 번에 주문할 때 재고가 음수가 되거나 정원이 넘치는 것 → 메뉴 수만큼 `...lines.map(…)` 으로 펼친 재고 차감과 정원 `guard`·주문 생성을 한 트랜잭션에 보낸다 |
 
-예제는 **CI 에서 타입체크된다**(`examples/tsconfig.json`). 저작 모델이 바뀌면 여기서 먼저
-깨지므로, 가이드가 실제로 컴파일되지 않는 코드를 보여주는 일이 다시 생기지 않는다 —
+예제는 **CI 에서 타입체크되고 추출기로도 돌려 본다**(`examples/tsconfig.json`,
+`checks/examples-extract.test.mjs`) — 예제가 권하는 형태를 추출기가 막으면 여기서 걸린다.
+저작 모델이 바뀌면 여기서 먼저 깨지므로, 가이드가 실제로 컴파일되지 않는 코드를 보여주는 일이 다시 생기지 않는다 —
 2026-09-16 에 옛 모델(`route.post`)과 없는 API(`sdk.baas.sendSms`)가 그렇게 살아남아 있었다.
 
 임포트 경로만 프로젝트와 다르다(`../boilerplate/src/serverFn`). 프로젝트에서는 `./serverFn` 이다.
@@ -913,12 +1161,15 @@ try { ... } catch (e) {
 
 - [ ] `fetch` 를 직접 쓴 곳이 없다 (전부 `sdk` 경유)
 - [ ] 상태 전이·순번 진행에 `if` 를 붙였다
+- [ ] 트랜잭션 안 `update`·`delete` 는 최상위 `id` 로 지정했고, 전제조건이 필요한 전이는 트랜잭션 밖 단건 `update(…, { if })` 로 했다
 - [ ] 집계 판정을 조회 결과로 하지 않았다 (원자 반환값 또는 `if`)
 - [ ] 보상이 필요한 경로에서 **되돌리는 순서**를 정했다 (카운터 먼저, 선점 레코드 나중)
 - [ ] 목록 조회에 커서·상한이 있다
 - [ ] **브리프의 기능이 네이티브에 있는지 먼저 확인했다** (`features.json` 이 정본)
 - [ ] 네이티브를 안 쓰기로 했으면 그 이유를 사용자에게 알렸다
 - [ ] 외부 연동이 있으면 **키를 먼저 요청**했다
+- [ ] 관리자 알림은 `schema.json` 에 선언했고, 동작이 **성공한 뒤** serverFn 에서만 `notify.owner` 를 불렀다
+- [ ] 새 알림이 **켜진 채 관리자 이메일로 온다**는 것과 끄는 법을 사용자에게 알렸고, `baas notification list` 로 켜짐을 확인했다
 - [ ] 본문이 403 을 던지는 함수에 `authorizes: true` 를 선언했다
 - [ ] 역할 표를 만들었으면 **첫 행을 넣는 경로**를 정하고 사용자에게 알렸다
 - [ ] 브리프에서 **구현하지 않은 항목**을 보고에 적었다 (스케줄처럼 아직 제공되지 않는 것 포함)

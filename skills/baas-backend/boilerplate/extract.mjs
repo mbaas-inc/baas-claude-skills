@@ -20,7 +20,7 @@ import ts from 'typescript'
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { convergeSchema, readSchema, renderTypes } from './schema.mjs'
+import { convergeSchema, readSchema, renderNotificationTypes, renderTypes } from './schema.mjs'
 
 // 프로젝트 루트에서 실행한다: `node backend/extract.mjs`
 // 추출기가 backend/ 안에 살아도 대상은 **앱의** src/services 다.
@@ -33,6 +33,8 @@ const GRANTS_OUT = path.join(ROOT, 'backend', 'service-grants.json')
 const SECRETS_OUT = path.join(ROOT, 'backend', 'secret-names.json')
 // 선언에서 만든 레코드 타입. 손으로 쓰던 두 번째 출처를 없앤다.
 const TYPES_OUT = path.join(ROOT, 'src', 'types', 'collections.ts')
+// 관리자 알림 키·값 타입. `notify.owner` 의 키 오타를 컴파일 에러로 만든다.
+const NOTIFY_TYPES_OUT = path.join(ROOT, 'src', 'types', 'notifications.ts')
 // 함수별 접근 선언. 공개 표면을 한 파일로 검토할 수 있게 한다.
 const ACCESS_OUT = path.join(ROOT, 'backend', 'serverfn-access.json')
 
@@ -177,8 +179,59 @@ const DYNCOL_OP_TO_GRANT = {
   remove: 'delete', restore: 'delete',
 }
 
-/** `batch` 의 목록 키와 `transaction` 의 `op` 값이 요구하는 grant. */
+/** `batch` 의 목록 키가 요구하는 grant. */
 const ITEM_OP_TO_GRANT = { create: 'create', update: 'update', delete: 'delete' }
+
+/**
+ * `transaction` 항목 `op` 이 요구하는 grant — `TxnOperation`(src/platform/sdk.ts)의 네 가지다.
+ * `increment` 는 단건 `dyncol.increment` 와 같이 `update` 다. SKILL.md 가 정원 차감을 트랜잭션 안
+ * `increment` 로 권하므로, 여기서 빠지면 권한 대로 쓴 코드가 빌드에서 막힌다.
+ */
+const TXN_OP_TO_GRANT = { ...ITEM_OP_TO_GRANT, increment: 'update' }
+
+/** 괄호·`as`·`satisfies`·`!` 를 벗긴다 — 타입 표기는 값(어느 컬렉션에 무슨 연산)을 바꾸지 않는다. */
+function unwrapExpr(node) {
+  let n = node
+  while (
+    n &&
+    (ts.isParenthesizedExpression(n) || ts.isAsExpression(n) || ts.isSatisfiesExpression(n) ||
+      ts.isNonNullExpression(n) || ts.isTypeAssertionExpression(n))
+  ) {
+    n = n.expression
+  }
+  return n
+}
+
+/**
+ * `transaction([...])` 원소 하나를 객체 리터럴 항목들로 푼다. 볼 수 없으면 null.
+ *
+ * 항목 수가 정해지지 않은 주문(메뉴마다 재고 차감)은 `...lines.map((l) => ({ op: 'increment', … }))` 로
+ * 펼칠 수밖에 없다(SKILL.md 「트랜잭션」 절). 콜백이 돌려주는 객체 리터럴에 op·collection 이 그대로
+ * 적혀 있으면 권한을 정적으로 알 수 있으므로 그것을 항목으로 본다. 블록 본문이면 모든 return 이
+ * 객체 리터럴이어야 한다 — 하나라도 다른 값을 돌려주면 그 항목을 볼 수 없다.
+ */
+function txnItemLiterals(el) {
+  const node = unwrapExpr(el)
+  if (ts.isObjectLiteralExpression(node)) return [node]
+  if (!ts.isSpreadElement(node)) return null
+  const call = unwrapExpr(node.expression)
+  if (!ts.isCallExpression(call) || !ts.isPropertyAccessExpression(call.expression) ||
+      call.expression.name.text !== 'map') return null
+  const callback = call.arguments[0] && unwrapExpr(call.arguments[0])
+  if (!callback || !(ts.isArrowFunction(callback) || ts.isFunctionExpression(callback))) return null
+  if (!ts.isBlock(callback.body)) {
+    const body = unwrapExpr(callback.body)
+    return ts.isObjectLiteralExpression(body) ? [body] : null
+  }
+  const returns = []
+  const visit = (n) => {
+    if (ts.isFunctionLike(n)) return // 안쪽 함수의 return 은 이 콜백이 돌려주는 값이 아니다
+    if (ts.isReturnStatement(n)) returns.push(n.expression && unwrapExpr(n.expression))
+    ts.forEachChild(n, visit)
+  }
+  ts.forEachChild(callback.body, visit)
+  return returns.length > 0 && returns.every((r) => r && ts.isObjectLiteralExpression(r)) ? returns : null
+}
 
 /**
  * serverFn 본문의 `sdk.dyncol.<op>(<컬렉션>, …)` 호출부에서 필요한 grant 를 모은다.
@@ -252,21 +305,30 @@ function collectGrants(call, bindings, file, grants) {
             'dyncol.transaction() 의 operations 를 배열 리터럴로 쓴다 — 항목을 볼 수 없으면 권한을 유도할 수 없다')
         } else {
           for (const el of arr.elements) {
-            if (!ts.isObjectLiteralExpression(el)) {
-              report(file, 'dynamic-transaction', 'transaction 항목을 객체 리터럴로 쓴다')
+            const items = txnItemLiterals(el)
+            if (!items) {
+              report(file, 'dynamic-transaction',
+                'transaction 항목은 객체 리터럴이나 `...목록.map((x) => ({ … }))` 로 쓴다 — 그 밖의 형태는 항목을 볼 수 없어 권한을 유도할 수 없다')
               continue
             }
-            let itemOp, itemColl
-            for (const prop of el.properties) {
-              if (!ts.isPropertyAssignment(prop) || !prop.name || !('text' in prop.name)) continue
-              if (prop.name.text === 'op') itemOp = ts.isStringLiteral(prop.initializer) ? prop.initializer.text : undefined
-              if (prop.name.text === 'collection') itemColl = resolveName(prop.initializer)
-            }
-            const g = itemOp ? ITEM_OP_TO_GRANT[itemOp] : undefined
-            if (g && itemColl) addGrant(itemColl, g)
-            else {
-              report(file, 'dynamic-transaction',
-                'transaction 항목의 op·collection 을 문자열 리터럴(또는 모듈 스코프 const)로 쓴다')
+            for (const item of items) {
+              let itemOp, itemColl
+              for (const prop of item.properties) {
+                if (!ts.isPropertyAssignment(prop) || !prop.name || !('text' in prop.name)) continue
+                const value = unwrapExpr(prop.initializer)
+                if (prop.name.text === 'op') itemOp = ts.isStringLiteral(value) ? value.text : undefined
+                if (prop.name.text === 'collection') itemColl = resolveName(value)
+              }
+              const g = itemOp && Object.hasOwn(TXN_OP_TO_GRANT, itemOp) ? TXN_OP_TO_GRANT[itemOp] : undefined
+              if (g && itemColl) addGrant(itemColl, g)
+              else if (itemOp && !g) {
+                // 리터럴로 썼는데 모르는 op 다. 리터럴을 탓하면 원인을 찾을 수 없다.
+                report(file, 'dynamic-transaction',
+                  `transaction 항목 op '${itemOp}' 은 지원하지 않는다 — ${Object.keys(TXN_OP_TO_GRANT).join('·')} 중 하나를 쓴다`)
+              } else {
+                report(file, 'dynamic-transaction',
+                  'transaction 항목의 op·collection 을 문자열 리터럴(또는 모듈 스코프 const)로 쓴다')
+              }
             }
           }
         }
@@ -491,6 +553,14 @@ try {
     fs.mkdirSync(path.dirname(TYPES_OUT), { recursive: true })
     fs.writeFileSync(TYPES_OUT, renderTypes(schema))
     console.log(`레코드 타입 생성 ${schema.collections.length}개 → src/types/collections.ts`)
+    const notifyTypes = renderNotificationTypes(schema)
+    if (notifyTypes) {
+      fs.writeFileSync(NOTIFY_TYPES_OUT, notifyTypes)
+      console.log(`알림 타입 생성 ${schema.notifications.length}개 → src/types/notifications.ts`)
+    } else if (fs.existsSync(NOTIFY_TYPES_OUT)) {
+      // 선언을 지웠는데 타입이 남으면 코드는 컴파일되고 서버는 404 를 낸다 — 같이 지운다.
+      fs.rmSync(NOTIFY_TYPES_OUT)
+    }
     console.log(convergeSchema(ROOT))
   }
 } catch (error) {
@@ -605,12 +675,21 @@ for (const { module, fns } of extracted) {
       `    this.detail = detail\n` +
       `  }\n` +
       `}\n\n` +
+      `// 서버에 닿지 못하면 브라우저는 영문 TypeError("Failed to fetch") 를 던진다. 그대로 두면\n` +
+      `// 그 문구가 화면에 나온다 — status 0 의 한국어 실패로 바꿔 화면이 다른 실패와 같이 다루게 한다.\n` +
+      `export const NETWORK_ERROR_MESSAGE =\n` +
+      `  '서버에 연결하지 못했어요. 인터넷 연결을 확인하고 잠시 후 다시 시도해 주세요.'\n\n` +
       `async function call(path: string, input: unknown) {\n` +
-      `  const res = await fetch(\`\${API_BASE}\${path}\`, {\n` +
-      `    method: 'POST',\n` +
-      `    headers: { 'content-type': 'application/json' },\n` +
-      `    body: JSON.stringify(input ?? {}),\n` +
-      `  })\n` +
+      `  let res: Response\n` +
+      `  try {\n` +
+      `    res = await fetch(\`\${API_BASE}\${path}\`, {\n` +
+      `      method: 'POST',\n` +
+      `      headers: { 'content-type': 'application/json' },\n` +
+      `      body: JSON.stringify(input ?? {}),\n` +
+      `    })\n` +
+      `  } catch {\n` +
+      `    throw new ServerFnCallError(NETWORK_ERROR_MESSAGE, 0)\n` +
+      `  }\n` +
       `  if (!res.ok) {\n` +
       `    // 프레임워크는 실패에 \`{ error: message }\` 를 싣는다(스킬 계약표). 본문이\n` +
       `    // 비어 있거나 JSON 이 아닐 수 있으므로 읽기 실패는 상태 코드로 덮는다.\n` +

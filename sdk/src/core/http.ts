@@ -17,6 +17,22 @@ export class BaasError extends Error {
   }
 }
 
+/**
+ * 서버에 닿지 못했을 때(오프라인·DNS·CORS·연결 끊김) 화면에 보일 문구.
+ * 브라우저 fetch 는 이때 `TypeError("Failed to fetch")` 를 던지고, 그 영문이 훅의 `error.message`
+ * 로 그대로 화면에 나왔다 — 앱마다 처리하게 두지 않고 여기서 한국어 `BaasError` 로 바꾼다.
+ */
+export const NETWORK_ERROR_MESSAGE = "서버에 연결하지 못했어요. 인터넷 연결을 확인하고 잠시 후 다시 시도해 주세요.";
+
+/** fetch 가 응답 없이 실패하면 `BaasError(NETWORK_ERROR, status 0)` 로 바꿔 던진다. */
+export async function fetchOrNetworkError(input: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch {
+    throw new BaasError(NETWORK_ERROR_MESSAGE, "NETWORK_ERROR", 0);
+  }
+}
+
 export interface RequestOptions {
   method?: string;
   body?: unknown;
@@ -26,7 +42,7 @@ export interface RequestOptions {
 
 export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const url = `${getBaseUrl()}${path}`;
-  const res = await fetch(url, {
+  const res = await fetchOrNetworkError(url, {
     method: opts.method || "GET",
     headers: {
       "Content-Type": "application/json",

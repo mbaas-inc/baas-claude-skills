@@ -69,3 +69,12 @@ test('실패 본문의 `{ error: message }` 를 읽는다', () => {
   assert.match(body, /payload\.error/,
     '계약표가 약속한 `{ error: message }` 를 스텁이 버리고 있다')
 })
+
+test('서버에 닿지 못하면 영문 "Failed to fetch" 대신 status 0 의 한국어 실패를 던진다', () => {
+  // 미용실 예약 E2E(2026-10-05): 개발 서버가 내려간 사이 화면에 브라우저 영문이 그대로 나왔다.
+  // 앱마다 처리하게 두면 생성될 때마다 빠진다 — 스텁이 바꿔 던져 다른 실패와 같은 분기로 받게 한다.
+  const { body } = clientStub()
+  assert.match(body, /catch \{\s*throw new ServerFnCallError\(NETWORK_ERROR_MESSAGE, 0\)/,
+    '연결 실패가 그대로 전파된다 — 화면에 브라우저 영문 메시지가 노출된다')
+  assert.match(body, /서버에 연결하지 못했어요/)
+})

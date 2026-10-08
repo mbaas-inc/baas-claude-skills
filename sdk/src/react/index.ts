@@ -4,7 +4,7 @@
  */
 import * as core from "../core/index";
 import { AuthProvider, useAuth, RequireAuth } from "./AuthProvider";
-import { useLogin, useSignup, useLogout } from "./hooks";
+import { useLogin, useSignup, useSmsLogin, useLogout } from "./hooks";
 import { useBoard } from "./useBoard";
 import { useCollection } from "./useCollection";
 import { useFileUpload } from "./useFileUpload";
@@ -41,6 +41,10 @@ export const BaasSDK = {
   confirmSignupEmailCode: core.confirmSignupEmailCode,
   getSnsProviders: core.getSnsProviders,
   completeProfile: core.completeProfile,
+  // sms login (문자 인증 로그인 — 발송/인증·로그인/미가입 가입)
+  requestSmsLoginCode: core.requestSmsLoginCode,
+  loginWithSms: core.loginWithSms,
+  signupWithSms: core.signupWithSms,
   // board (dynamic)
   listPosts: core.listPosts,
   getPost: core.getPost,
@@ -57,6 +61,7 @@ export const BaasSDK = {
   getPublicRecord: core.getPublicRecord,
   // storage (파일 업로드 — presign→S3 PUT, cdn_url 반환)
   uploadFile: core.uploadFile,
+  uploadToTarget: core.uploadToTarget,
   // notice/faq/comments
   listNoticePosts: core.listNoticePosts,
   getNoticePost: core.getNoticePost,
@@ -87,8 +92,10 @@ export const BaasSDK = {
   getBooking: core.getBooking,
   updateBooking: core.updateBooking,
   cancelBooking: core.cancelBooking,
-  // payment (결제 공통 — 약관 조회. 금액 실행은 store/reservation 소유)
+  // payment (결제 공통 — 약관 조회 · 커스텀 결제 위젯. 금액은 store/reservation/커스텀 백엔드 소유)
   getPurchaseTerms: core.getPurchaseTerms,
+  beginPaymentWidget: core.beginPaymentWidget,
+  getPaymentRedirectResult: core.getPaymentRedirectResult,
   getStoreConfig: core.getStoreConfig,
   listProducts: core.listProducts,
   listCategories: core.listCategories,
@@ -105,6 +112,7 @@ export const BaasSDK = {
   RequireAuth,
   useLogin,
   useSignup,
+  useSmsLogin,
   useLogout,
   useBoard,
   useCollection,
@@ -121,7 +129,7 @@ export const BaasSDK = {
 };
 
 export {
-  AuthProvider, useAuth, RequireAuth, useLogin, useSignup, useLogout, useBoard, useCollection,
+  AuthProvider, useAuth, RequireAuth, useLogin, useSignup, useSmsLogin, useLogout, useBoard, useCollection,
   useFileUpload,
   usePayment, useRecipient, useInquiry, useNotice, useFaq, useComments, useSurvey, useReservation, useStore,
 };

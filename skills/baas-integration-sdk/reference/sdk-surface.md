@@ -13,8 +13,8 @@ transport·envelope·project_id 주입은 SDK 내부가 처리한다 — 아래 
 | 호출 형태 | 실패 시 |
 |---|---|
 | **훅의 액션 함수** (`useBoard().submitPost`<!--collection:start-->, `useCollection().fetchRecords`<!--collection:end-->, `useStore().confirm`, `useLogin().login`, `useFileUpload().upload` …) | **throw 하지 않는다.** `null`(또는 `login`/`logout` 은 `false`) 을 resolve 하고 실패는 훅의 `error` state 에 담긴다 |
-| **예외 — `beginWidgetCheckout`** (store·reservation) | 이것만 **throw 한다**(내부 래퍼를 거치지 않음) → `try/catch` 필요 |
-| **훅 없는 top-level 함수** (`BaasSDK.uploadFile`, `changePassword`, `getAccountInfo` …) | `BaasError`(`.message` 한국어, `.errorCode`, `.status`) **throw** |
+| **예외 — `beginWidgetCheckout`** (store·reservation) <!--collection:start-->· `usePayment().beginWidget`<!--collection:end--> | 이것만 **throw 한다**(내부 래퍼를 거치지 않음) → `try/catch` 필요 |
+| **훅 없는 top-level 함수** (`BaasSDK.uploadFile`, `uploadToTarget`, `changePassword`, `getAccountInfo` …) | `BaasError`(`.message` 한국어, `.errorCode`, `.status`) **throw** |
 
 ```tsx
 // ❌ 훅 액션에 try/catch — catch 가 실행되지 않아 실패가 성공처럼 보인다
@@ -75,6 +75,22 @@ slots}` 봉투이고 `fetchTarget` 은 `reservation_settings` 가 중첩된 객�
 
 ## 인증 (account)
 
+### 로그인 방식 고르기 (사용자 요구사항 기준)
+
+로그인 방식은 **사이트를 만드는 사용자가 요구한 대로** 고른다. 서버 쪽 설정은 없다 — 아래 방식은 모두 늘 쓸 수 있다.
+
+| 사용자가 이렇게 말하면 | 방식 | 화면 |
+|---|---|---|
+| "아이디·비밀번호로 로그인", 별말 없음 | 아이디·비밀번호 | `useLogin()` + `useSignup()` |
+| "휴대폰(전화번호·핸드폰)으로 로그인/가입", "문자로 인증", "번호 인증" | 문자 인증 로그인 | `useSmsLogin()` 한 화면 — 아래 「문자 인증 로그인」 절 |
+| "카카오·네이버·구글·애플 로그인", "간편 로그인" | SNS | SNS 버튼 — 아래 「SNS 가입 버튼」 절 |
+| "이메일 인증 후 가입" | 아이디·비밀번호 + 이메일 인증 | `useSignup()` (프로젝트 설정 EMAIL 필요 — 가입 절차 절) |
+
+- **"본인인증", "인증번호"만 말하고 수단이 없으면 묻는다** — "휴대폰 문자로 할까요, 이메일로 할까요?". 국내 서비스에서
+  본인인증은 대개 휴대폰을 뜻하지만, 짐작으로 고르면 화면 전체를 다시 만들어야 한다.
+- **여러 방식을 함께 요구하면 한 로그인 화면에 함께 둔다** (예: 휴대폰 로그인 + 카카오 버튼). 방식마다 화면을 따로 만들지 않는다.
+- 휴대폰 로그인만 쓰는 사이트는 아이디·비밀번호 입력란을 두지 않는다 — 가입 때 아이디·비밀번호를 생략할 수 있다.
+
 ### `AuthProvider` / `useAuth()` — 전역 인증 상태 (앱 루트 1회)
 ```tsx
 // 앱 루트를 감싼다
@@ -108,7 +124,7 @@ const { isLoggedIn, user, loading, error, refetch, clear } = BaasSDK.useAuth();
 - **일관성 체크**: 한 그룹에서 일부 라우트를 가드했으면 그 그룹의 공용/목록 화면도 같은 기준으로 가드해야 한다
   (일부만 가드하고 레이아웃/형제를 빼먹으면 결함). 미인증 fallback 은 `<Navigate to="/login" replace/>` 로 로그인 유도.
 
-### `useLogin()` / `useSignup()` / `useLogout()`
+### `useLogin()` / `useSignup()` / `useLogout()` (문자 인증 로그인은 `useSmsLogin()` — 아래 절)
 ```tsx
 const { login, loading, error } = BaasSDK.useLogin();
 await login(userId, userPw);      // 성공 시 전역 인증 상태 자동 갱신(refetch). boolean 반환
@@ -154,10 +170,56 @@ useEffect(() => { fetchConfig(); }, []);
 | `false` | 바로 로그인 안내 |
 | `true` | "관리자 승인 후 이용 가능합니다" 안내 (계정은 PENDING 상태) |
 
+> 휴대폰 번호로 로그인·가입하는 앱은 이 설정과 무관하다 — 아래 「문자 인증 로그인」 절(`useSmsLogin()`).
+
 서버가 거부하는 경우(모두 `error.message` 그대로 노출):
 - `401 이메일 인증이 필요합니다. 먼저 인증을 완료해주세요.` — 인증 없이 `signup()` 호출
 - `400 이메일 인증을 사용하는 프로젝트는 아이디가 이메일 형식이어야 합니다.`
 - `429 인증코드는 60초에 한 번만 요청할 수 있습니다.` — `error` 노출 + 재발송 버튼을 60초간 비활성화
+
+### 문자 인증 로그인 — `useSmsLogin()` (기획에 휴대폰 로그인이 있을 때)
+
+휴대폰 번호 소유가 곧 로그인 수단인 앱용이다. **로그인과 가입이 한 흐름**이다 — 번호를 인증하면
+가입된 번호는 그 자리에서 로그인되고, 처음인 번호는 추가 정보를 받아 가입과 동시에 로그인된다.
+**프로젝트 설정이 필요 없다**(SNS 로그인처럼 늘 제공된다). 기획에 "휴대폰(문자) 인증으로 로그인/가입"이 있으면
+이 화면을 쓰고, 아이디·비밀번호 로그인(`useLogin`)과 함께 둘지는 기획이 정한다. `fetchConfig()` 로 분기하지 않는다.
+
+```tsx
+const { step, phone, remainingAttempts, sendCode, verify, signup, reset, loading, error } = BaasSDK.useSmsLogin();
+// step: "phone" → "code" → ("signup") → "done" | "pending"
+
+await sendCode(phone);            // 인증번호 발송 → step="code". 가입 여부와 무관하게 보낸다
+await verify(code);               // 가입된 번호 → 로그인 완료, step="done"
+                                  // 처음인 번호 → step="signup" (인증 완료 상태가 서버에 남는다)
+await signup({ name, termsAgreed: true, privacyAgreed: true });   // step="done" (승인제면 "pending")
+// 아이디·비밀번호를 받는 앱이면 signup({ ..., userId, userPw }) — 받지 않으면 생략(번호가 아이디가 된다)
+```
+
+| `step` | 화면 |
+|---|---|
+| `"phone"` | 번호 입력(`formatPhone`) + 「인증번호 받기」 → `sendCode(phone)` |
+| `"code"` | 6자리 입력 + 「확인」 → `verify(code)`. 틀리면 `remainingAttempts` 로 "N회 남음" 안내. 「재발송」은 `sendCode(phone)` |
+| `"signup"` | **이 번호로 처음 오신 분** — 이름·약관 동의(필요하면 앱이 정한 추가 항목) → `signup({...})` |
+| `"done"` | 로그인됨 — 전역 인증 상태는 훅이 갱신했다. 화면 전환만 |
+| `"pending"` | 승인제 프로젝트 — "관리자 승인 후 이용 가능합니다" 안내 (로그인 안 됨) |
+
+- 로그인 화면과 가입 화면을 **따로 만들지 않는다.** 사용자는 자기가 가입했는지 모르고 번호부터 넣는다.
+- **가입 여부를 미리 묻지 않는다** — 서버는 인증번호를 확인한 뒤에만 알려 준다.
+- 약관 전문은 `useSignup().fetchTerms()` 로 받아 `"signup"` 단계 화면 안에서 동의받는다(아래 약관 절).
+- 인증번호 유효 시간은 5분이다. `"signup"` 단계에서 오래 머물면 가입이 만료로 실패하니 처음부터(`reset()`) 다시 받게 한다.
+- core 함수가 필요하면: `BaasSDK.requestSmsLoginCode(phone)` · `loginWithSms(phone, code)` → `{ verified, registered, remaining_attempts }` · `signupWithSms({ phone, name, termsAgreed, privacyAgreed, userId?, userPw? })`.
+
+서버가 거부하는 경우(모두 `error.message` 그대로 노출):
+- `502 문자를 보내지 못했습니다. 잠시 후 다시 시도해주세요.` — 발송 실패. 인증번호가 남지 않아 **바로 재시도할 수 있다**(쿨다운 없음)
+- `429 인증코드는 60초에 한 번만 요청할 수 있습니다.` — 재발송 버튼을 60초간 비활성화
+- `400 MAX_ATTEMPTS_EXCEEDED` · `400 EXPIRED` — 인증번호를 다시 받게 한다(`sendCode`)
+- `403 탈퇴 처리된 계정입니다.` · `403 가입 승인 대기 중입니다…` — 로그인 불가 안내
+- `409 이 번호로 가입된 계정이 여러 개입니다…` — 아이디·비밀번호 로그인(`useLogin`)으로 안내
+- `400 이미 가입된 전화번호입니다.` — 가입 단계에서 같은 번호 회원이 이미 있음(다시 `verify` 하면 로그인된다)
+
+- 인증번호가 틀리면 예외가 아니라 `verify()` 결과가 `verified=false` 다(남은 횟수 `remainingAttempts`). `error` 만 보고 분기하지 않는다.
+- 아이디를 생략하고 가입한 회원은 `useAuth().user.email` 에 번호가 들어 있다 — **이메일로 표시하지 않는다**(마이페이지 등).
+- 로그인 쿠키는 프로젝트 쿠키다 — API 는 프로젝트 도메인의 `/aiapp-baas/...` 로만 인증된다(SDK 기본 경로 그대로 쓰면 된다).
 
 ### 약관 (가입 화면 안에서 동의를 받는다)
 
@@ -273,6 +335,19 @@ UX: 제출 성공 시 "접수되었습니다" 안내, 폼 초기화. 인증 불�
 ## 문의하기 (inquiry)
 
 비로그인 방문자가 이름·연락처(전화 **또는** 이메일)·내용을 남기는 "Contact us / 상담신청" 폼. 접수 여부·안내 문구·개인정보 동의 문구는 **서버(소유자 설정)가 내려준다** — 화면은 진입 시 `fetchConfig()` 로 읽어 분기하고, 문구를 코드에 박아 두지 않는다. 앱(SDK)이 설정을 바꾸는 API 는 없다 — 소유자 설정이라 프로비저닝 담당이 CLI 로 바꾼다.
+
+**이 기능이 하는 일과 하지 않는 일 (의도된 설계)**
+- 접수되면 문의 내용이 소유자의 알림 이메일(따로 정하지 않으면 가입 계정 이메일)로 바로 전송된다.
+- 소유자의 알림 전화번호(따로 정하지 않으면 가입 계정 전화번호)가 있으면, 메일이 왔으니 확인하라는 알림톡이 함께 간다. 알림톡에는 문의 내용이 없고, 메일이 나가지 않으면 알림톡도 가지 않는다.
+- 받은 문의는 그 메일로 확인한다. 앱 안에서 받은 문의를 조회·상태 변경하는 표면은 **제공하지 않는다.** 없는 것이 아니라 두지 않은 것이다.
+- 동의 문구 버전 기록 · 보존기간 파기 · 중복 접수 방지 · 위 알림은 이 기능을 쓸 때만 따라온다.
+
+**기획에 「받은 문의 관리」 같은 앱 내 관리 화면이 있으면**
+- 먼저 사용자에게 알린다: "문의는 메일로 받는 방식이라 앱 안 관리 화면이 없습니다."
+- 기본은 이 기능(폼 + 메일 알림)으로 만들고 관리 화면은 빼 둔다.
+<!--collection:start-->
+- 사용자가 앱 안 관리가 꼭 필요하다고 하면 그때 커스텀 데이터로 만든다. 이 경우 위 동의 기록·파기·알림은 따라오지 않으므로 그 점을 사용자에게 함께 알린다.
+<!--collection:end-->
 
 **준비 작업 — 알림이 어디로 가는지 먼저 확인하고 알린다.** 접수 알림은 소유자가 따로 정하지 않으면 **가입 계정 이메일**로 간다(설정을 조회하면 지금 주소와, 그게 직접 정한 것인지 계정에서 따온 것인지가 함께 내려온다). 문의 폼을 넣을 때 사용자에게 그 주소를 알리고, **바꾸겠다고 할 때만** 바꾼다 — 묻지 않고 넘어가면 사장님은 문의가 어디로 오는지도, 바꿀 수 있다는 것도 모른 채 남는다. 실행 문법은 `baas <group> <action> --help`.
 ```tsx
@@ -483,12 +558,32 @@ const terms = await pay.fetchTerms();   // { title, content, version }
   ```
 
 ### 커스텀 화면에 결제를 붙일 때
-현재 SDK 는 결제 금액을 안전하게 다루는 prepare/confirm 을 **store·reservation 에만** 제공한다. 따라서
-"돈이 실제로 움직이는" 결제는 **store 또는 reservation 을 경유**한다. 결제 화면엔 위 ①②를 동일 적용.
+"돈이 실제로 움직이는" 결제의 금액은 **브라우저가 정하지 않는다.** 네이티브 스토어 · 예약은 그쪽
+`beginWidgetCheckout` 을 쓴다. 결제 화면엔 위 ①② 와 위젯 규칙을 동일 적용.
 <!--collection:start-->
-커스텀 컬렉션은 그 결과(주문/예약 id 등)를 **reference 로 연결**해 도메인 데이터를 관리한다.
-**커스텀 컬렉션 필드에 금액·결제상태를 두고 클라이언트가 직접 쓰는 방식은 위·변조 가능하므로 금지**
-(결제 확정은 반드시 서버 소유).
+커스텀 원장(예약금 · 이용권 등 컬렉션으로 만든 도메인)에 붙는 결제는 **금액을 DB(컬렉션)에 두고, 커스텀
+백엔드(serverFn)가 그 값을 읽어 세션을 만들고 승인한다**(`baas-backend` 의 `sdk.payments`). 앱은 결제 대상
+id 만 보내고 위젯만 띄운다 — 금액을 보내지 않는다.
+
+```tsx
+const pay = BaasSDK.usePayment();
+// 결제 화면 — serverFn 이 금액을 정해 만든 세션을 그대로 넘긴다(앱이 금액을 만들지 않는다)
+const session = await startDeposit({ serviceId, slot });   // id 만 — 금액은 serverFn 이 DB 에서 읽는다
+const handle = await pay.beginWidget(session, { methodsSelector: "#pay-methods", agreementSelector: "#pay-agreement" });
+if (handle.paymentMode === "test") showNotice("테스트 결제예요 — 실제로 청구되지 않아요.");
+// 결제 버튼 onClick — 동기로(앞에 await 금지)
+handle.requestPayment({ successUrl: `${location.origin}/deposit-success`, failUrl: `${location.origin}/deposit-fail` });
+
+// 복귀 페이지(/deposit-success)
+const r = pay.getRedirectResult();          // { ok, orderNo, paymentKey, amount } | { ok:false, code, message } | null
+if (r?.ok) await confirmDeposit({ orderNo: r.orderNo, paymentKey: r.paymentKey, amount: r.amount });
+```
+
+- **승인은 브라우저가 하지 않는다.** `getRedirectResult()` 의 ok 는 「토스에서 돌아왔다」일 뿐이다 —
+  serverFn 이 `payments.confirm` 으로 PAID 를 받아야 결제 완료다.
+- failUrl 의 `code` 가 `PAY_PROCESS_CANCELED`(사용자 취소)면 조용히 결제 화면으로 돌려보낸다.
+- 원장에는 `order_no` 만 두고 상태는 서버(`payments.get`)가 정본이다. **커스텀 컬렉션 필드에 금액·결제상태를
+  두고 클라이언트가 직접 쓰는 방식은 위·변조 가능하므로 금지.**
 <!--collection:end-->
 
 ---
@@ -722,6 +817,20 @@ await transaction([
   아니면 `submitRecord`/`editRecord`가 400. self-reference(같은 컬렉션) 허용 — 트리는 root anchor
   (`post_id`)+parent(`parent_id`) 이중 참조로 설계하고 anchor 평면 조회 후 클라에서 조립한다.
 - **필터 DSL**: `filter: { field: { op: value } }`, op ∈ `eq|ne|gt|gte|lt|lte|like|in|has`(array 요소 포함).
+  **필드 타입마다 쓸 수 있는 연산자가 다르다** — 맞지 않으면 400 `op_not_allowed_for_<타입>:<op>`:
+
+  | 타입 | 연산자 |
+  |---|---|
+  | `string` | `eq` `ne` `like` `in` — **범위 비교(`gt`·`gte`·`lt`·`lte`)는 안 된다** |
+  | `number` | `eq` `ne` `gt` `gte` `lt` `lte` `in` |
+  | `date` | `eq` `ne` `gt` `gte` `lt` `lte` |
+  | `enum` · `reference` | `eq` `ne` `in` |
+  | `boolean` | `eq` `ne` |
+  | `array` | `has` |
+
+  날짜·시각을 범위로 찾을 필드(「이번 달 예약」)는 **처음부터 `date` 타입**으로 선언한다. `string` 으로
+  만든 뒤에는 타입을 바꿀 수 없어(스키마는 더하기만 된다) 숫자 필드를 하나 더 두게 된다.
+  `like` 는 **값 그대로 부분 일치**다(서버가 앞뒤에 `%` 를 붙인다, 대소문자 무시) — `%` 를 직접 넣지 않는다.
   sort는 `field`/`-field`. `or: {...}` 는 서로 OR 이고 그 묶음이 `filter` 와 AND 로 결합된다(한 겹만 — 중첩 없음).
   **성능**: 등호(`eq`)·`has` 만 인덱스를 탄다. `like`·범위 비교·커스텀 필드 정렬은 전체 스캔이므로
   큰 컬렉션에서 목록 UX 를 설계할 때 감안한다. `limit` 상한은 100.
@@ -789,7 +898,25 @@ await BaasSDK.useCollection().submitRecord("products", { name, image_url: res.cd
   `file_id`(board_attachment 에서만 — 게시글 `file_ids` 연결용).
 - 훅은 `isUploading`(로딩)·`error`(실패 시 `BaasError`)를 노출하고 실패 시 `null` 반환(에러 표시 방식은 앱 UX 소관).
 - 훅 없이 직접 호출: `await BaasSDK.uploadFile(file, { category })` (성공 시 결과 resolve, 실패 시 throw).
-- 업로드는 **로그인 필요**(프로젝트 소속). `<input accept="image/*">` 로 클라 사전 필터 권장.
+- `upload` 는 **로그인 회원**(프로젝트 소속)으로 올린다. `<input accept="image/*">` 로 클라 사전 필터 권장.
+<!--collection:start-->
+### 올릴 수 있는 사람이 정해진 업로드 — `uploadTo`
+
+사장님 관리 화면의 사진처럼 **누가 올리는지 정해진 업로드**는 커스텀 백엔드(serverFn)가 업로드 주소를
+받아 넘기고, 앱은 그 주소로 올리기만 한다(aiapp-service#904). 앱 회원 로그인이 필요 없다 — 소유자 인증 ·
+권한 판정은 serverFn 의 `access` 가 한다(serverFn 쪽은 `baas-backend` 「파일 업로드」 절).
+
+```tsx
+const { uploadTo, isUploading, error } = BaasSDK.useFileUpload();
+
+const target = await presignGalleryPhoto({ filename: file.name, contentType: file.type, size: file.size });
+const res = await uploadTo(target, file);       // → { cdn_url, download_url?, key? } | null
+if (res) await addGalleryPhoto({ cdnUrl: res.cdn_url });
+```
+- 실패 규약은 `upload` 와 같다(throw 없이 `null` + 훅 `error`). 훅 없이는 `BaasSDK.uploadToTarget(target, file)`(throw).
+- serverFn 이 준 `content_type` 그대로 올린다(서명이 그 값에 묶여 있다 — 바꾸면 S3 가 403).
+- 관리 화면 업로드를 `upload` 로 만들고 401 에 「회원으로 로그인」을 안내하지 마라 — 소유자는 회원이 아니다.
+<!--collection:end-->
 
 ---
 
@@ -810,3 +937,5 @@ await BaasSDK.useCollection().submitRecord("products", { name, image_url: res.cd
 | `NOT_FOUND` | 404 | 대상 없음 | |
 | `ALREADY_EXISTS` | 409 | 중복·충돌 | 회원가입 아이디 중복 등 |
 | `INTERNAL_SERVER_ERROR` | 500 | 서버 오류 | 재시도 가능 |
+| `NETWORK_ERROR` | 0 | 서버에 닿지 못함(오프라인·연결 끊김) | SDK 가 브라우저 영문(`Failed to fetch`) 대신 한국어 `.message` 를 싣는다 — 그대로 노출하고 다시 시도를 안내 |
+| `UPLOAD_FAILED` | S3 응답 코드 | 파일 본체 업로드(S3) 거절 | `useFileUpload` 의 `error` — 그대로 노출 |

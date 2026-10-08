@@ -18,6 +18,7 @@ export {
   getSnsProviders,
   completeProfile,
 } from "./signup";
+export { requestSmsLoginCode, loginWithSms, signupWithSms } from "./smsLogin";
 export {
   listPosts,
   getPost,
@@ -49,8 +50,8 @@ export {
   listPublicRecords,
   getPublicRecord,
 } from "./collection";
-export { uploadFile } from "./storage";
-export { getPurchaseTerms } from "./payment";
+export { uploadFile, uploadToTarget } from "./storage";
+export { getPurchaseTerms, beginPaymentWidget, getPaymentRedirectResult } from "./payment";
 export { registerRecipient } from "./recipient";
 export { getInquiryConfig, submitInquiry } from "./inquiry";
 export { normalizePhone, formatPhone } from "./phone";
@@ -113,6 +114,7 @@ export type {
   VerifyCodeResult,
   CompleteProfileInput,
 } from "./signup";
+export type { SmsCodeSent, SmsLoginResult, SmsSignupInput, SmsSignupResult } from "./smsLogin";
 export type { Comment } from "./notice";
 export type {
   DynRecord,
@@ -135,8 +137,15 @@ export type {
   UploadCategory,
   UploadOptions,
   UploadResult,
+  ServerUploadTarget,
 } from "./storage";
-export type { PurchaseTerms } from "./payment";
+export type {
+  PurchaseTerms,
+  CustomPaymentSession,
+  PaymentWidgetParams,
+  CustomPaymentWidgetHandle,
+  PaymentRedirectResult,
+} from "./payment";
 export type { RecipientInput } from "./recipient";
 export type { InquiryConfig, InquiryInput, InquiryResult } from "./inquiry";
 export type { Survey } from "./survey";
