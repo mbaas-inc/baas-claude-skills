@@ -114,6 +114,16 @@ test("iframe 안 결제 실패는 실패 주소로, 사용자 취소는 리다�
   assert.equal(cancelled.assigned, null);
 });
 
+test("iframe 안 입력 오류(약관 미동의 등)는 실패 주소로 보내지 않고 던진다 — 앱이 예약을 풀지 않게", async () => {
+  const seen = framedToss({ error: { code: "NEED_AGREEMENT_WITH_REQUIRED_TERMS", message: "필수 약관에 동의해주세요." } });
+  const h = await beginPaymentWidget(SESSION, { methodsSelector: "#m", agreementSelector: "#a" });
+  await assert.rejects(
+    () => h.requestPayment({ successUrl: "/ok", failUrl: "/fail" }),
+    (e) => e.code === "NEED_AGREEMENT_WITH_REQUIRED_TERMS",
+  );
+  assert.equal(seen.assigned, null);
+});
+
 test("iframe 이 아니면 지금처럼 복귀 주소를 넘겨 토스가 리다이렉트한다", async () => {
   const seen = framedToss({ result: undefined });
   globalThis.window.top = globalThis.window.self;

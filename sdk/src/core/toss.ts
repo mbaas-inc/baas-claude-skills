@@ -126,6 +126,14 @@ function isMobileBrowser(): boolean {
 }
 
 /**
+ * 리다이렉트 방식에서 failUrl 로 가는 코드 — 결제창 안에서 난 실패뿐이다(토스 SDK 에러 코드 문서).
+ * 약관 미동의 · 카드사 미선택 같은 입력 오류는 리다이렉트 방식에서도 그 자리에서 던져져 앱이 문구만 보여 주고
+ * 다시 누르게 한다. Promise 방식은 이것까지 같은 catch 로 던지므로, 가려내지 않고 failUrl 로 보내면 앱이
+ * 결제를 포기한 것으로 보고 예약을 푼다.
+ */
+const FAIL_URL_CODES = new Set(["PAY_PROCESS_CANCELED", "PAY_PROCESS_ABORTED", "REJECT_CARD_COMPANY"]);
+
+/**
  * iframe 안에서의 결제 — 리다이렉트 대신 Promise 로 결과를 받아 앱 프레임이 스스로 복귀 주소로 이동한다.
  *
  * 리다이렉트 방식에서는 토스 결제창(iframe)이 결제 뒤 앱 프레임을 successUrl 로 옮기는데, 앱이 sandbox
@@ -144,10 +152,8 @@ async function requestPaymentInFrame(
     result = await widgets.requestPayment(params);
   } catch (e) {
     const err = e as { code?: string; message?: string };
-    if (err.code === "USER_CANCEL") throw e; // 리다이렉트 방식과 같다 — 앱이 무시한다
-    window.location.assign(
-      withQuery(failUrl, { code: err.code ?? "PAYMENT_FAILED", message: err.message ?? "", orderId: p.orderId }),
-    );
+    if (!err.code || !FAIL_URL_CODES.has(err.code)) throw e; // USER_CANCEL · 입력 오류 — 리다이렉트 방식과 같다
+    window.location.assign(withQuery(failUrl, { code: err.code, message: err.message ?? "", orderId: p.orderId }));
     return;
   }
   const amount = typeof result.amount === "number" ? result.amount : result.amount.value;
