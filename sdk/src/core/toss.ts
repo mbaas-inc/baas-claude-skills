@@ -23,7 +23,9 @@ export interface TossWidgetsInstance {
   setAmount(amount: { currency: string; value: number }): Promise<void>;
   renderPaymentMethods(opts: { selector: string; variantKey?: string }): Promise<unknown>;
   renderAgreement(opts: { selector: string; variantKey?: string }): Promise<unknown>;
+  /** 복귀 주소를 주면 리다이렉트(void), 생략하면 Promise 로 결과를 돌려준다(PC 전용). */
   requestPayment(params: TossWidgetRequestPaymentParams): Promise<void>;
+  requestPayment(params: Omit<TossWidgetRequestPaymentParams, "successUrl" | "failUrl">): Promise<TossPaymentResult>;
 }
 export interface TossPaymentsInstance {
   widgets(options: { customerKey: string }): TossWidgetsInstance;
@@ -97,6 +99,70 @@ export async function renderPaymentWidget(params: WidgetRenderParams): Promise<P
     widgets.renderAgreement({ selector: params.agreementSelector, variantKey: "AGREEMENT" }),
   ]);
   return {
-    requestPayment: (p) => widgets.requestPayment(p),
+    requestPayment: (p) =>
+      isFramed() && !isMobileBrowser() ? requestPaymentInFrame(widgets, p) : widgets.requestPayment(p),
   };
+}
+
+/** 토스 Promise 방식 결과 — v2 는 amount 를 `{ currency, value }` 로 주지만 숫자인 경우도 받는다. */
+export interface TossPaymentResult {
+  paymentType?: string;
+  orderId: string;
+  paymentKey: string;
+  amount: number | { value: number };
+}
+
+/** 앱이 다른 화면 안(iframe)에 떠 있나 — Studio 미리보기 등. 교차 출처라 top 을 못 읽어도 iframe 이다. */
+function isFramed(): boolean {
+  try {
+    return typeof window !== "undefined" && window.self !== window.top;
+  } catch {
+    return true;
+  }
+}
+
+function isMobileBrowser(): boolean {
+  return typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+}
+
+/**
+ * iframe 안에서의 결제 — 리다이렉트 대신 Promise 로 결과를 받아 앱 프레임이 스스로 복귀 주소로 이동한다.
+ *
+ * 리다이렉트 방식에서는 토스 결제창(iframe)이 결제 뒤 앱 프레임을 successUrl 로 옮기는데, 앱이 sandbox
+ * iframe 안(Studio 미리보기)이면 결제창이 그 제한을 물려받아 상위 프레임을 옮기지 못한다 — 결제창은
+ * 끝났는데 복귀 페이지가 열리지 않아 승인 요청이 오지 않는다. 자기 프레임 이동은 sandbox 에서도 되므로,
+ * 복귀 페이지에는 토스 리다이렉트와 같은 쿼리를 붙여 `getPaymentRedirectResult()` 가 그대로 읽게 한다.
+ * Promise 방식은 PC 전용이라 모바일은 리다이렉트 그대로 둔다(토스 문서).
+ */
+async function requestPaymentInFrame(
+  widgets: TossWidgetsInstance,
+  p: TossWidgetRequestPaymentParams,
+): Promise<void> {
+  const { successUrl, failUrl, ...params } = p;
+  let result: TossPaymentResult;
+  try {
+    result = await widgets.requestPayment(params);
+  } catch (e) {
+    const err = e as { code?: string; message?: string };
+    if (err.code === "USER_CANCEL") throw e; // 리다이렉트 방식과 같다 — 앱이 무시한다
+    window.location.assign(
+      withQuery(failUrl, { code: err.code ?? "PAYMENT_FAILED", message: err.message ?? "", orderId: p.orderId }),
+    );
+    return;
+  }
+  const amount = typeof result.amount === "number" ? result.amount : result.amount.value;
+  window.location.assign(
+    withQuery(successUrl, {
+      paymentType: result.paymentType ?? "NORMAL",
+      orderId: result.orderId,
+      paymentKey: result.paymentKey,
+      amount: String(amount),
+    }),
+  );
+}
+
+function withQuery(url: string, params: Record<string, string>): string {
+  const u = new URL(url, window.location.href);
+  for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
+  return u.toString();
 }

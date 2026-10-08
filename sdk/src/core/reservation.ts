@@ -166,13 +166,13 @@ export function clearReservationCheckoutContext(): void {
  * 예약 결제위젯 시작 — `prepareBooking()`(응답에 client_key/amount 포함)로 금액을 서버 확정해 결제수단/약관
  * 위젯을 앱 DOM(셀렉터)에 렌더한다(이 시점엔 예약·세션을 만들지 않는다 — 위젯만 열고 이탈해도 잔재 없음).
  * 반환 handle 을 앱이 보관했다가 결제 버튼 클릭 시 `handle.requestPayment(...)` 호출: **이 시점에** `startBooking()`
- * 으로 예약(PENDING)+결제 세션(CREATED)을 만들고(슬롯 선점) 그 order_no 로 토스 결제를 요청한다.
+ * 으로 예약(PENDING)+결제 세션(CREATED)을 만들고(자리는 결제가 끝나야 센다) 그 order_no 로 토스 결제를 요청한다.
  *
  * confirm 에 필요한 컨텍스트(order_no/reserved_at/form_data)는 리다이렉트 사이 유지돼야 하므로 start 직후
  * sessionStorage 에 저장한다 → 복귀 페이지에서 `getReservationCheckoutContext()` 로 읽고 토스 쿼리(paymentKey/
  * amount)와 합쳐 `confirm(target_id, { order_no, payment_key, amount, reserved_at, form_data })` 후
- * `clearReservationCheckoutContext()`. 카드는 이 confirm(동기)이, 가상계좌는 입금 웹훅(비동기)이 결제를 완결한다.
- * 예약·세션은 이 위젯 진입 시점에 만들어지고(슬롯 선점, 미완료는 정리 배치가 만료), 결제 요청은 클릭 시 **동기**
+ * `clearReservationCheckoutContext()`. 결제는 이 confirm 이 완결한다(가상계좌는 받지 않는다, aiapp-service#932).
+ * 예약·세션은 이 위젯 진입 시점에 만들어지고(결제 전엔 자리를 잡지 않아 정리할 것이 없다), 결제 요청은 클릭 시 **동기**
  * 호출한다(현대카드 등 팝업 결제창의 사용자 제스처 유지). 예약은 `client_key` 를 config 가 아니라 start 응답으로 받는다.
  */
 export async function beginReservationWidgetCheckout(
