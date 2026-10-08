@@ -52,7 +52,7 @@ export const prepareOrder = (productId: string, quantity: number) =>
 
 // ── 회원: 결제 개시("결제하기" 클릭 시점) → 결제 세션(CREATED) + 주문(PENDING) 생성, order_no 발급 ──
 // 위젯 열기(prepare)엔 만들지 않고, 실제 결제 요청 시점에만 세션을 만든다(미결제 세션 노이즈 방지).
-// 반환 order_no 를 토스 orderId 로 쓴다 → 카드 confirm(동기) / 가상계좌 웹훅(비동기)이 이 세션을 완결.
+// 반환 order_no 를 토스 orderId 로 쓴다 → 복귀 confirm 이 이 세션을 완결(가상계좌는 받지 않는다, aiapp-service#932).
 export const startOrder = (productId: string, quantity: number) =>
   request<{ order_no: string; amount: number; order_name: string }>(`/store/orders/checkout/start`, {
     method: "POST",
@@ -148,11 +148,11 @@ export interface StoreWidgetHandle {
  * 만들어 order_no·금액을 서버 확정한 뒤 결제수단/약관 위젯을 앱 DOM(셀렉터)에 렌더한다. 반환 handle 을 앱이
  * 보관했다가 결제 버튼 클릭 시 `handle.requestPayment(...)` 를 **동기로** 호출한다(클릭~요청 사이에 비동기 작업을
  * 넣지 않는다 — 현대카드 등 팝업 결제창의 사용자 제스처 유지). 세션/주문은 이 위젯 진입 시점(보통 약관 동의 후)에
- * 만들어지고, 결제까지 안 간 미완료는 서버 정리 배치가 만료시킨다.
+ * 만들어지고, 결제까지 안 간 주문은 자리 · 목록에 잡히지 않아 정리할 것이 없다(aiapp-service#932).
  *
  * 복귀 페이지에서는 `getStoreCheckoutContext()`(order_no/product_id/quantity) 또는 successUrl 쿼리(orderId)와
  * 토스 쿼리(paymentKey/amount)를 합쳐 `confirm({ order_no, payment_key, amount, product_id, quantity })` 후
- * `clearStoreCheckoutContext()`. 카드는 이 confirm(동기)이, 가상계좌는 입금 웹훅(비동기)이 결제를 완결한다.
+ * `clearStoreCheckoutContext()`. 결제는 이 confirm 이 완결한다(가상계좌는 받지 않는다).
  * `toss_client_key` 는 위젯 키(gck_).
  */
 export async function beginStoreWidgetCheckout(
