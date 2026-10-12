@@ -123,6 +123,23 @@ const { isLoggedIn, user, loading, error, refetch, clear } = BaasSDK.useAuth();
   공개 브라우징 허용이면 회원 액션(마이페이지·글쓰기·결제 등)만 가드. 생성 전에 이 축을 먼저 정한다.
 - **일관성 체크**: 한 그룹에서 일부 라우트를 가드했으면 그 그룹의 공용/목록 화면도 같은 기준으로 가드해야 한다
   (일부만 가드하고 레이아웃/형제를 빼먹으면 결함). 미인증 fallback 은 `<Navigate to="/login" replace/>` 로 로그인 유도.
+- **메뉴·링크 노출도 같은 기준**: 회원 전용 화면(내 예약·마이페이지·내 주문 등)으로 가는 **메뉴·탭·링크는
+  `useAuth().isLoggedIn` 일 때만 렌더**한다. 가드는 들어오는 것을 막을 뿐이라, 비로그인에게 「내 예약」 메뉴가
+  보이면 누르는 순간 로그인 화면으로 튕긴다 — 비로그인에게 「내」 화면은 없다(실측 2026-10-12: 헤더에 「예약하기 ·
+  내 예약」이 로그인 여부와 무관하게 노출). `loading` 동안에는 회원 메뉴를 그리지 않는다(깜빡임 방지).
+  ```tsx
+  const { isLoggedIn, loading } = BaasSDK.useAuth()
+  <nav>
+    <NavLink to="/">예약하기</NavLink>                      {/* 공개 둘러보기 — 항상 */}
+    {!loading && isLoggedIn && <NavLink to="/my">내 예약</NavLink>}   {/* 회원 전용 — 로그인 때만 */}
+    {!loading && (isLoggedIn ? <LogoutButton/> : <NavLink to="/login">로그인</NavLink>)}
+  </nav>
+  ```
+  - **공개 화면 안의 회원 행동은 숨기지 않는다** — 둘러보다가 「예약하기」·「글쓰기」를 누르는 순간 로그인을
+    요구하는 것은 정상 흐름이다(버튼 문구를 「로그인하고 예약하기」처럼 바꿔 알린다). 숨기는 것은 **회원 전용
+    화면으로 가는 진입 메뉴**뿐이다.
+  - 관리자 화면 링크는 이 규칙이 아니라 `isProjectOwner` 기준이다(`baas-backend` 「관리자 화면은 누구 권한으로
+    열렸는지 보여 준다」).
 
 ### `useLogin()` / `useSignup()` / `useLogout()` (문자 인증 로그인은 `useSmsLogin()` — 아래 절)
 ```tsx
