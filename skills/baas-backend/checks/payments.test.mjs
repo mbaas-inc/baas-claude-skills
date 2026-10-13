@@ -21,18 +21,26 @@ import { test } from 'node:test'
 const HERE = path.dirname(new URL(import.meta.url).pathname)
 const BOILERPLATE = path.join(HERE, '..', 'boilerplate')
 
-/** 골격 SDK 로 `body`(sdk 를 쓰는 async 코드)를 실행한다. `fetch` 는 `respond` 로 바꿔 끼운다. */
-function run(respond, body, accountId = 'acc-1') {
+/**
+ * 골격 SDK 로 `body`(sdk 를 쓰는 async 코드)를 실행한다. `fetch` 는 `respond` 로 바꿔 끼운다.
+ *
+ * 값(`accountId` · `data`)은 코드 문자열에 끼우지 않고 `data.json` 으로 넘긴다 — 실행할 코드에 값을
+ * 이어 붙이면 이스케이프가 빠진 코드 생성이 된다(CodeQL js/bad-code-sanitization). `body` · `respond`
+ * 는 `DATA` 로 그 값을 읽는다.
+ */
+function run(respond, body, accountId = 'acc-1', data = null) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'payments-'))
   fs.cpSync(BOILERPLATE, root, { recursive: true, filter: (src) => !src.includes('node_modules') })
+  fs.writeFileSync(path.join(root, 'data.json'), JSON.stringify({ accountId, data }))
   fs.writeFileSync(path.join(root, 'run.mjs'), `
+    const { accountId, data: DATA } = JSON.parse(await (await import('node:fs/promises')).readFile(new URL('./data.json', import.meta.url), 'utf8'))
     const calls = []
     globalThis.fetch = async (url, init) => {
       calls.push({ url, method: init.method, headers: init.headers, body: init.body ? JSON.parse(init.body) : undefined })
       return (${respond})()
     }
     const { buildSdk } = await import('./src/platform/sdk.ts')
-    const sdk = buildSdk({ token: 'tok', projectId: 'p1', requestId: 'r1', accountId: ${JSON.stringify(accountId)} })
+    const sdk = buildSdk({ token: 'tok', projectId: 'p1', requestId: 'r1', accountId })
     let out = null, error = null
     try { out = await (${body})(sdk) }
     catch (e) { error = { message: e.message, status: e.status } }
@@ -90,7 +98,7 @@ test('list — 주문번호를 반복 쿼리로 보내고, 중복은 한 번만'
 test('list — 서버 한도 100건을 넘으면 나눠 부르고, 비어 있으면 부르지 않는다', () => {
   const many = Array.from({ length: 150 }, (_, i) => `pcs_${i}`)
   const r = run(`() => new Response(JSON.stringify({ data: [{ order_no: 'x' }] }), { status: 200 })`,
-    `(sdk) => sdk.payments.list(${JSON.stringify(many)})`)
+    `(sdk) => sdk.payments.list(DATA)`, 'acc-1', many)
   assert.equal(r.calls.length, 2)
   assert.equal(new URL(r.calls[0].url).searchParams.getAll('order_no').length, 100)
   assert.equal(new URL(r.calls[1].url).searchParams.getAll('order_no').length, 50)

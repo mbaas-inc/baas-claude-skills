@@ -15,14 +15,20 @@ import { test } from 'node:test'
 const HERE = path.dirname(new URL(import.meta.url).pathname)
 const BOILERPLATE = path.join(HERE, '..', 'boilerplate')
 
-function run(respond, body) {
+/**
+ * 서버 응답(`reply` = `{ data, status }`)은 코드 문자열에 끼우지 않고 `data.json` 으로 넘긴다 — 실행할
+ * 코드에 값을 이어 붙이면 이스케이프가 빠진 코드 생성이 된다(CodeQL js/bad-code-sanitization).
+ */
+function run(reply, body) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'storage-private-'))
   fs.cpSync(BOILERPLATE, root, { recursive: true, filter: (src) => !src.includes('node_modules') })
+  fs.writeFileSync(path.join(root, 'data.json'), JSON.stringify(reply))
   fs.writeFileSync(path.join(root, 'run.mjs'), `
+    const DATA = JSON.parse(await (await import('node:fs/promises')).readFile(new URL('./data.json', import.meta.url), 'utf8'))
     const calls = []
     globalThis.fetch = async (url, init) => {
       calls.push({ url, method: init.method, headers: init.headers, body: init.body ? JSON.parse(init.body) : undefined })
-      return (${respond})()
+      return new Response(JSON.stringify(DATA.data), { status: DATA.status })
     }
     const { buildSdk } = await import('./src/platform/sdk.ts')
     const sdk = buildSdk({ token: 'tok', projectId: 'p1', requestId: 'r1', accountId: 'a1' })
@@ -38,7 +44,7 @@ function run(respond, body) {
   return JSON.parse(line.slice('__OUT__'.length))
 }
 
-const json = (data, status = 200) => `() => new Response(JSON.stringify(${JSON.stringify(data)}), { status: ${status} })`
+const json = (data, status = 200) => ({ data, status })
 const FID = 'a'.repeat(32) + '.jpg'
 
 test('업로드 대상 — 서비스 경로, uploadTo 가 받는 모양', () => {

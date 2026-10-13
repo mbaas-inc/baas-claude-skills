@@ -27,10 +27,14 @@ const TSC = path.join(BOILERPLATE, 'node_modules', 'typescript', 'bin', 'tsc')
  * 골격의 SDK 를 그대로 띄워 `notify.owner` 를 한 번 부른다. `fetch` 는 `respond` 로 바꿔 끼운다.
  * 반환: { out: 결과 값, calls: 보낸 요청, threw, stderr }
  */
-function callNotify(respond, expr = "sdk.notify.owner('reservation.created', { name: '홍길동', people: '4명' })") {
+// 값(`data`)은 코드 문자열에 끼우지 않고 `data.json` 으로 넘긴다 — 실행할 코드에 값을 이어 붙이면
+// 이스케이프가 빠진 코드 생성이 된다(CodeQL js/bad-code-sanitization). `respond` · `expr` 은 `DATA` 로 읽는다.
+function callNotify(respond, expr = "sdk.notify.owner('reservation.created', { name: '홍길동', people: '4명' })", data = null) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'notify-'))
   fs.cpSync(BOILERPLATE, root, { recursive: true, filter: (src) => !src.includes('node_modules') })
+  fs.writeFileSync(path.join(root, 'data.json'), JSON.stringify(data))
   fs.writeFileSync(path.join(root, 'run.mjs'), `
+    const DATA = JSON.parse(await (await import('node:fs/promises')).readFile(new URL('./data.json', import.meta.url), 'utf8'))
     const calls = []
     globalThis.fetch = async (url, init) => {
       calls.push({ url, method: init.method, headers: init.headers, body: init.body === undefined ? undefined : JSON.parse(init.body) })
@@ -175,8 +179,8 @@ export const recipientOut: Same<Awaited<ReturnType<PlatformNotify['recipient']>>
 test('설정 목록 — GET /service/notifications 의 items', () => {
   const items = [{ key: 'reservation.created', label: '새 예약', feature: null, fields: [], enabled: true,
     channels: ['alimtalk', 'email'], updated_at: '2026-10-13T10:00:00' }]
-  const r = callNotify(`() => new Response(JSON.stringify({ data: { items: ${JSON.stringify(items)} } }), { status: 200 })`,
-    'sdk.notify.list()')
+  const r = callNotify(`() => new Response(JSON.stringify({ data: { items: DATA } }), { status: 200 })`,
+    'sdk.notify.list()', items)
   assert.equal(r.threw, false)
   assert.deepEqual(r.out, items)
   const [c] = r.calls
@@ -203,8 +207,8 @@ test('번호 없는 알림톡 · 모르는 키는 던진다 — 서버 문구 �
 
 test('받는 곳 — GET /service/notifications/recipient (가린 값)', () => {
   const to = { email: 'jj***@mbaas.kr', email_source: 'account', phone: '010-****-7122', phone_source: 'account' }
-  const r = callNotify(`() => new Response(JSON.stringify({ data: ${JSON.stringify(to)} }), { status: 200 })`,
-    'sdk.notify.recipient()')
+  const r = callNotify(`() => new Response(JSON.stringify({ data: DATA }), { status: 200 })`,
+    'sdk.notify.recipient()', to)
   assert.deepEqual(r.out, to)
   assert.equal(r.calls[0].url, 'http://baas.test/service/notifications/recipient')
   assert.equal(r.calls[0].method, 'GET')
