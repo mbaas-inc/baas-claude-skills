@@ -244,7 +244,7 @@ export interface AccountListOptions {
  * | `sent` | 소유자에게 보냈다 |
  * | `failed` | 보내지 못했다(채널 실패·네트워크·미선언 키). 기능 동작은 이미 끝났으므로 그대로 둔다 |
  * | `skipped` | 보낼 채널이나 수신처가 없다 |
- * | `disabled` | 소유자가 이 알림을 꺼 두었다 — 새 선언의 기본값이다 |
+ * | `disabled` | 소유자가 이 알림을 꺼 두었다(새 선언은 켜진 채로 시작한다) |
  * | `limited` | 발송 한도에 걸렸다 |
  */
 export type OwnerNotifyStatus = 'sent' | 'failed' | 'skipped' | 'disabled' | 'limited'
@@ -258,6 +258,29 @@ export interface OwnerNotifyResult {
   log_id?: number
   /** `failed` 일 때 원인. 서버 응답(미선언 키 404 등)이나 전송 오류의 메시지다. */
   error?: { status?: number; message: string }
+}
+
+/** 관리자 알림 채널. 앞에서부터 보내고 첫 성공에서 멈춘다 — 새 알림은 `['alimtalk', 'email']`. */
+export type OwnerNotifyChannel = 'alimtalk' | 'email'
+
+/** 관리자 알림 설정 한 줄. 정본은 플랫폼이라 콘솔·CLI 로 바꾼 값과 같다(aiapp-service#954). */
+export interface OwnerNotificationSetting {
+  key: string
+  label: string
+  feature: string | null
+  fields: { name: string; label: string | null }[]
+  enabled: boolean
+  channels: OwnerNotifyChannel[]
+  updated_at: string
+}
+
+/** 알림 받는 곳 — 앱 화면용이라 **가린 값**이다(`jj***@mbaas.kr` · `010-****-7122`).
+ * `phone` 이 null 이면 알림톡은 건너뛰고 다음 채널로 간다. 출처는 `setting`(직접 지정) · `account`(가입 계정). */
+export interface OwnerNotifyRecipient {
+  email: string | null
+  email_source: 'setting' | 'account'
+  phone: string | null
+  phone_source: 'setting' | 'account'
 }
 
 /** 커스텀 결제 상태 — 결제 상태의 정본은 이 값이다. 자기 컬렉션에 복사해 둔 값을 믿지 않는다. */
@@ -703,6 +726,22 @@ function buildSdk(ctx: RequestContext) {
         return { result: 'failed', error: { status, message } }
       }
     },
+
+    // 아래 셋은 관리자 페이지의 「알림 설정」용이다(aiapp-service#954). 정본은 플랫폼 한 곳이라 콘솔·CLI 와
+    // 같은 값을 읽고 바꾼다 — 앱 컬렉션에 켬/끔을 따로 두면 두 값이 어긋난다.
+    // **서버는 부른 serverFn 이 소유자 전용인지 모른다.** `access: 'owner'` serverFn 에서만 부른다.
+    // owner() 와 달리 **던진다** — 설정 화면은 실패를 사장님께 보여 줘야 한다.
+
+    /** 선언된 알림과 켬/끔·채널 순서. */
+    list: async (): Promise<OwnerNotificationSetting[]> =>
+      (await call<{ items: OwnerNotificationSetting[] }>('GET', '/service/notifications')).items,
+
+    /** 켜기·끄기·채널 순서. 지원하지 않는 채널·번호 없는 알림톡은 400, 미선언 키는 404 로 던진다. */
+    update: (key: string, change: { enabled?: boolean; channels?: OwnerNotifyChannel[] }) =>
+      call<OwnerNotificationSetting>('PATCH', `/service/notifications/${encodeURIComponent(key)}`, change),
+
+    /** 알림 받는 곳(가린 값). 바꾸는 곳은 플랫폼 문의 알림 설정이다 — 앱에서는 보여 주기만 한다. */
+    recipient: () => call<OwnerNotifyRecipient>('GET', '/service/notifications/recipient'),
   }
 
   // 커스텀 결제(aiapp-service#900). **금액은 serverFn 이 정한다** — 자기 원장에서 계산한 값을
