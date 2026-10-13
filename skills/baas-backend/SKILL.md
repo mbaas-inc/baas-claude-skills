@@ -877,8 +877,9 @@ return { status: 'booked' }
    가입 이메일로 가요. 끄거나 이메일을 먼저 받게 바꿀 수 있고, 원하시면 관리자 페이지에 알림 설정도
    넣어 드릴게요."
 
-받는 곳은 늘 프로젝트 관리자(소유자) 계정이라 따로 조회하지 않는다. 이메일·전화번호를 채팅에 옮겨
-적지 마라 — 개인정보가 대화 기록에 남는다.
+받는 사람은 늘 프로젝트 관리자(소유자) 본인이라 따로 조회하지 않는다. 연락처는 기본이 **가입 계정의 이메일 ·
+휴대폰**이고, 사용자가 다른 곳으로 받겠다고 하면 아래 표의 `inquiry setting` 으로 바꾼다. 이메일·전화번호를
+채팅에 옮겨 적지 마라 — 개인정보가 대화 기록에 남는다.
 
 **설정의 정본은 플랫폼 한 곳이다.** 알림마다 켬/끔과 채널 순서가 플랫폼에 저장되고, 아래 명령(채팅)과
 관리자 페이지(4번) 둘 다 **같은 값**을 바꾼다. 앱 컬렉션에 알림 켬/끔을 따로 두지 마라 — 두 값이 어긋나
@@ -889,7 +890,12 @@ return { status: 'booked' }
 | `baas notification list` | 선언된 알림과 켜짐·채널 |
 | `baas notification enable <key>` / `disable <key>` | 켜기·끄기. 그만 받으려면 선언을 지우지 말고 끈다(선언을 지워도 서버에서 지워지지 않는다) |
 | `baas notification channels <key> email,alimtalk` | 채널 순서 — 앞 채널부터 보내고 첫 성공에서 멈춘다. `email` 하나만 두면 이메일만 |
-| `baas notification recipient` | 받는 이메일·전화번호와 그 출처 |
+| `baas notification recipient` | 받는 이메일·전화번호와 그 출처(`account` 가입 계정 · `setting` 따로 지정) |
+| `baas inquiry setting update --notify-email <주소>` | 받는 이메일 바꾸기. `""` 면 가입 계정 이메일로 되돌린다 |
+| `baas inquiry setting update --from-json '{"notify_phone":"010…"}'` | 받는 휴대폰(알림톡) 바꾸기. `""` 면 가입 계정 번호로 되돌린다 |
+
+받는 곳을 바꾸는 길은 **이 채팅(명령)뿐이다** — 콘솔 · 앱에 그 화면이 없다. 이 값은 **문의 알림과 함께 쓴다**:
+바꾸면 문의 접수 알림도 같은 곳으로 간다. 바꾸기 전에 그 사실을 사용자에게 말한다.
 | `baas notification logs` | 최근 발송 결과 — 「알림이 안 와요」는 이걸 **실행해서** 본다 |
 
 켬/끔·채널은 사용자가 **직접 요청했을 때만** 바꾼다. 채널에 알림톡을 넣거나 알림톡만 남길 때는 먼저
@@ -909,8 +915,10 @@ return { status: 'booked' }
 - **손님 화면 코드에서 부르지 마라.** 브라우저에서는 열리지도 않는다(서버 간 전용)
 - `notify.owner` 와 달리 **실패를 던진다** — 지원하지 않는 채널·번호 없는 알림톡은 400, 선언되지 않은 키는
   404. 메시지를 화면에 그대로 보여 준다
-- 받는 곳(`recipient`)은 **가린 값**이다(`jj***@mbaas.kr` · `010-****-7122`). 보여 주기만 한다 — 받는 곳을
-  바꾸는 곳은 플랫폼 설정이고 앱에서 바꾸지 않는다
+- 받는 곳(`recipient`)은 **가린 값**이다(`jj***@mbaas.kr` · `010-****-7122`). 보여 주기만 한다. 출처
+  (`email_source` · `phone_source`)로 「가입 계정」 · 「따로 지정」을 붙여 준다. **화면에 「어디서 바꿀 수 있다」를
+  적지 마라** — 콘솔 · 앱에 바꾸는 화면이 없다(실측 2026-10-13: 「문의 설정에서 바꿉니다」라고 적어 사용자가
+  없는 메뉴를 찾았다). 바꾸는 길은 채팅의 `inquiry setting` 명령(3번 표)뿐이다
 
 ```ts
 // src/services/notifySettings.ts — 관리자 페이지 「알림 설정」
@@ -1005,9 +1013,12 @@ export const startDeposit = serverFn<{ serviceId: string; slotId: string }, Depo
 // 승인 — 결제 → 확정 → (넘치면) 보상
 export const confirmDeposit = serverFn<{ orderNo: string; paymentKey: string; amount: number }, { status: string }>(
   async (input, ctx) => {
+    // 결제자 확인 — 플랫폼은 프로젝트만 보고 누가 불렀는지는 모른다. 주문서 주인이 요청한 회원인지 여기서 본다
+    const { items: [checkout] } = await ctx.sdk.dyncol.list<Checkout>('checkouts', { filter: { order_no: input.orderNo }, limit: 1 })
+    if (!checkout || checkout.data.account_id !== ctx.accountId) throw new ServerFnError('주문을 찾을 수 없어요', 403)
     await ctx.sdk.payments.confirm(input.orderNo, { paymentKey: input.paymentKey, amount: input.amount })  // PAID 아니면 던진다
     return settleDeposit(ctx, input.orderNo)
-  }, { access: 'member' })
+  }, { access: 'member', authorizes: true })
 
 /** 확정 · 보상 — 몇 번 불러도 결과가 같다. 승인 뒤 끊긴 결제는 이걸 다시 부르면 마무리된다 */
 async function settleDeposit(ctx: ServerCtx, orderNo: string, compensate = true): Promise<{ status: string }> {
@@ -1071,6 +1082,11 @@ export const resolveDeposit = serverFn<{ orderNo: string; action: 'settle' | 're
 - **금액 컬렉션을 기본 접근(선언 없음)으로 두지 마라.** 기본은 「로그인 회원이 행을 만들 수 있다」라서, 회원이
   1원짜리 시술을 만들고 그 id 로 결제하면 ② 를 지켜도 뚫린다. 금액 수정은 `access: 'owner'` serverFn 으로 연다
 - **결제자는 요청한 회원이다.** `create` 는 인자로 결제자를 받지 않는다 — `access: 'member'` 로 둔다
+- **주문번호로 무언가를 하는 손님 serverFn 은 주문서 주인부터 확인한다**(승인 · 상세 · 영수증 · 손님 취소).
+  플랫폼의 `payments.confirm` · `get` · `cancel` 은 **프로젝트만** 확인하고 어느 회원이 불렀는지는 모른다.
+  주문번호는 복귀 주소 쿼리에 실리는 값이라 비밀이 아니다 — 확인을 빠뜨리면 로그인한 아무 회원이 남의 주문을
+  보고, 손님 취소가 있으면 남의 예약을 취소 · 환불시킨다. 주문서 `account_id` 와 `ctx.accountId` 가 다르면
+  403 을 던지고 `authorizes: true` 를 선언한다(위 `confirmDeposit`). 사장님 전용(`access: 'owner'`)은 제외
 - **결제 상태를 컬렉션 필드로 판정하지 마라.** 주문서에는 `order_no` 만 두고, 상태는 `payments.get` ·
   `payments.list` 가 정본이다. `paid: true` 같은 필드를 브라우저가 쓰게 하면 결제 없이 확정된다.
   예약의 `status` 는 결제가 아니라 예약 자체의 상태(확정 · 취소)다
