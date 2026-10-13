@@ -244,7 +244,7 @@ export interface AccountListOptions {
  * | `sent` | 소유자에게 보냈다 |
  * | `failed` | 보내지 못했다(채널 실패·네트워크·미선언 키). 기능 동작은 이미 끝났으므로 그대로 둔다 |
  * | `skipped` | 보낼 채널이나 수신처가 없다 |
- * | `disabled` | 소유자가 이 알림을 꺼 두었다 — 새 선언의 기본값이다 |
+ * | `disabled` | 소유자가 이 알림을 꺼 두었다(새 선언은 켜진 채로 시작한다) |
  * | `limited` | 발송 한도에 걸렸다 |
  */
 export type OwnerNotifyStatus = 'sent' | 'failed' | 'skipped' | 'disabled' | 'limited'
@@ -260,6 +260,29 @@ export interface OwnerNotifyResult {
   error?: { status?: number; message: string }
 }
 
+/** 관리자 알림 채널. 앞에서부터 보내고 첫 성공에서 멈춘다 — 새 알림은 `['alimtalk', 'email']`. */
+export type OwnerNotifyChannel = 'alimtalk' | 'email'
+
+/** 관리자 알림 설정 한 줄. 정본은 플랫폼이라 콘솔·CLI 로 바꾼 값과 같다(aiapp-service#954). */
+export interface OwnerNotificationSetting {
+  key: string
+  label: string
+  feature: string | null
+  fields: { name: string; label: string | null }[]
+  enabled: boolean
+  channels: OwnerNotifyChannel[]
+  updated_at: string
+}
+
+/** 알림 받는 곳 — 앱 화면용이라 **가린 값**이다(`jj***@mbaas.kr` · `010-****-7122`).
+ * `phone` 이 null 이면 알림톡은 건너뛰고 다음 채널로 간다. 출처는 `setting`(직접 지정) · `account`(가입 계정). */
+export interface OwnerNotifyRecipient {
+  email: string | null
+  email_source: 'setting' | 'account'
+  phone: string | null
+  phone_source: 'setting' | 'account'
+}
+
 /** 커스텀 결제 상태 — 결제 상태의 정본은 이 값이다. 자기 컬렉션에 복사해 둔 값을 믿지 않는다. */
 export type PaymentStatus = 'CREATED' | 'PAID' | 'CANCELLED'
 
@@ -272,6 +295,10 @@ export interface ServicePayment {
   amount: number
   item_name: string | null
   status: PaymentStatus
+  /** 자리 판단용 결제 상태 — `PAID` · `UNPAID`(결제창만 열고 떠남 · 결제 실패) · `CANCELLED` (aiapp-service#932) */
+  payment_status?: 'PAID' | 'UNPAID' | 'CANCELLED'
+  /** 이 결제가 끝났나(`PAID`). 정원 판정은 이 값이 아니라 확정 트랜잭션의 `guard` 로 한다 */
+  occupying?: boolean
   /** `test` 면 테스트 결제(실제 청구 없음), `live` 면 실결제. 판매자 승인 상태로 서버가 정한다. */
   payment_mode: 'test' | 'live'
   /** 결제위젯 클라이언트 키 — 브라우저에 그대로 넘긴다(공개 키). */
@@ -699,15 +726,31 @@ function buildSdk(ctx: RequestContext) {
         return { result: 'failed', error: { status, message } }
       }
     },
+
+    // 아래 셋은 관리자 페이지의 「알림 설정」용이다(aiapp-service#954). 정본은 플랫폼 한 곳이라 콘솔·CLI 와
+    // 같은 값을 읽고 바꾼다 — 앱 컬렉션에 켬/끔을 따로 두면 두 값이 어긋난다.
+    // **서버는 부른 serverFn 이 소유자 전용인지 모른다.** `access: 'owner'` serverFn 에서만 부른다.
+    // owner() 와 달리 **던진다** — 설정 화면은 실패를 사장님께 보여 줘야 한다.
+
+    /** 선언된 알림과 켬/끔·채널 순서. */
+    list: async (): Promise<OwnerNotificationSetting[]> =>
+      (await call<{ items: OwnerNotificationSetting[] }>('GET', '/service/notifications')).items,
+
+    /** 켜기·끄기·채널 순서. 지원하지 않는 채널·번호 없는 알림톡은 400, 미선언 키는 404 로 던진다. */
+    update: (key: string, change: { enabled?: boolean; channels?: OwnerNotifyChannel[] }) =>
+      call<OwnerNotificationSetting>('PATCH', `/service/notifications/${encodeURIComponent(key)}`, change),
+
+    /** 알림 받는 곳(가린 값). 바꾸는 곳은 플랫폼 문의 알림 설정이다 — 앱에서는 보여 주기만 한다. */
+    recipient: () => call<OwnerNotifyRecipient>('GET', '/service/notifications/recipient'),
   }
 
   // 커스텀 결제(aiapp-service#900). **금액은 serverFn 이 정한다** — 자기 원장에서 계산한 값을
   // 넘기고, 브라우저가 보낸 금액은 절대 쓰지 않는다. 세션 금액이 서버에 박히므로 위젯에서 금액을
   // 바꿔도 승인 때 거절된다.
   //
-  // **승인도 serverFn 이 한다.** 토스 successUrl 로 돌아온 paymentKey 를 받아 `confirm` 하고,
-  // `status === 'PAID'` 일 때만 같은 요청 안에서 자기 원장(예약 확정 등)을 갱신한다. 결제 상태를
-  // 컬렉션 필드에 두고 브라우저가 쓰게 하면 위변조된다 — 상태는 `get` 이 정본이다.
+  // **승인도 serverFn 이 한다.** 토스 successUrl 로 돌아온 paymentKey 를 받아 `confirm` 하고, 같은
+  // 요청 안에서 자기 원장(예약 확정 등)을 갱신한다. 확정할 수 없으면(정원 초과) `cancel` 로 환불한다 —
+  // 보상 트랜잭션. 결제 상태를 컬렉션 필드에 두고 브라우저가 쓰게 하면 위변조된다 — 상태는 `get` 이 정본이다.
   //
   // 결제자는 **이 요청의 로그인 회원**으로 고정한다. 결제자를 인자로 받으면 다른 회원 이름으로
   // 결제가 만들어진다. 비로그인이면 만들 수 없다.
@@ -731,8 +774,23 @@ function buildSdk(ctx: RequestContext) {
       call<ServicePayment>('GET', `/service/payments/sessions/${encodeURIComponent(orderNo)}`),
 
     /**
+     * 결제 여러 건 — 원장 여러 줄의 결제 상태를 한 번에 붙인다(aiapp-service#932). 건마다 `get` 하면
+     * 줄 수만큼 왕복한다. 서버 한도(100건)를 넘으면 나눠 부른다. 없는 번호 · 다른 프로젝트 결제는 빠진다.
+     */
+    list: async (orderNos: string[]) => {
+      const unique = [...new Set(orderNos)]
+      const out: ServicePayment[] = []
+      for (let i = 0; i < unique.length; i += 100) {
+        const q = new URLSearchParams()
+        for (const no of unique.slice(i, i + 100)) q.append('order_no', no)
+        out.push(...(await call<ServicePayment[]>('GET', `/service/payments/sessions?${q}`)))
+      }
+      return out
+    },
+
+    /**
      * 승인. `paymentKey` · `amount` 는 토스 successUrl 쿼리 값이다. 금액이 세션과 다르면 400.
-     * `status === 'PAID'` 를 확인한 뒤에 자기 원장을 확정한다(가상계좌 입금 대기는 `CREATED`).
+     * 돌아오면 `PAID` 다 — 가상계좌(입금 대기)는 받지 않아 서버가 토스에서 취소하고 400 을 던진다.
      */
     confirm: (orderNo: string, payment: { paymentKey: string; amount: number }) =>
       call<ServicePayment>('POST', `/service/payments/sessions/${encodeURIComponent(orderNo)}/confirm`, {

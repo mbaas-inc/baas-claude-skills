@@ -331,8 +331,8 @@ export async function requireOperator(sdk: OperatorSdk, ctx: ServerCtx) {
 
 #### 있으면 쓰고, 백엔드는 그 **위의 규칙**만 담당한다
 
-커스텀 컬렉션은 네이티브 결과(주문 id·예약 id)를 `reference` 로 연결한다. 네이티브가 슬롯
-선점·결제·알림을 하고, 당신은 그 위의 도메인 규칙을 쓴다.
+커스텀 컬렉션은 네이티브 결과(주문 id·예약 id)를 `reference` 로 연결한다. 네이티브가 정원
+관리·결제·알림을 하고, 당신은 그 위의 도메인 규칙을 쓴다.
 
 #### 예외 — 한 트랜잭션으로 묶어야 할 때
 
@@ -342,7 +342,7 @@ export async function requireOperator(sdk: OperatorSdk, ctx: ServerCtx) {
 예: 「예약을 만들면서 회차권 잔여를 1 깎는다. 잔여가 0이면 예약도 생기면 안 된다」 —
 예약이 네이티브에 있으면 두 변경이 갈라져 중간 상태가 남는다. 이럴 때만 커스텀으로 간다.
 
-**그리고 그 사실을 사용자에게 알린다.** 네이티브를 안 쓰면 슬롯 선점·결제 연동·운영 콘솔
+**그리고 그 사실을 사용자에게 알린다.** 네이티브를 안 쓰면 정원 관리·결제 연동·운영 콘솔
 같은 것을 함께 잃는데, 그건 사용자가 알고 선택할 일이다.
 
 ### serverFn 이 throw 하면 — 프레임워크가 이렇게 응답한다
@@ -859,36 +859,93 @@ return { status: 'booked' }
   이 표면으로 만들 수 없으니 **그 사실을 사용자에게 알린다**
 - **네이티브 문의하기는 이미 소유자에게 메일로 간다.** 같은 사건을 또 선언하지 마라 — 두 번 받는다
 
-#### 3. 등록하고, **받는 곳과 끄는 법을 알린다**
+#### 3. 등록하고, **받는 곳과 바꾸는 법을 알린다**
 
 `node backend/extract.mjs` 가 수렴(`baas collection converge --file backend/schema.json`)으로
 선언을 서버에 올린다. 등록은 멱등이고, **지우지 않으며, 이미 있는 알림의 켜짐·채널을 바꾸지
 않는다.**
 
-**새 알림은 켜진 채(ON, 채널 `email`)로 시작한다** — 사용자가 「알려 줘」라고 요청해서 만든
-알림이고, 받는 사람은 늘 프로젝트 관리자 본인이다(aiapp-service#923). 다시 켤지 묻지 않는다.
-등록한 뒤 이렇게 마무리한다:
+**새 알림은 켜진 채, 채널 순서 `알림톡 → 이메일` 로 시작한다** — 사용자가 「알려 줘」라고 요청해서
+만든 알림이고, 받는 사람은 늘 프로젝트 관리자 본인이다(aiapp-service#923 · #942). 앞 채널부터 보내고
+첫 성공에서 멈추므로, 보통은 **카카오 알림톡으로 오고** 번호가 없거나 알림톡을 못 보내면 이메일로 온다.
+다시 켤지 묻지 않는다. 등록한 뒤 이렇게 마무리한다:
 
-1. `baas notification list` 로 켜짐을 **실행해서** 확인한다. 같은 키를 사용자가 예전에 꺼 뒀다면
+1. `baas notification list` 로 켜짐·채널을 **실행해서** 확인한다. 같은 키를 사용자가 예전에 꺼 뒀다면
    꺼진 채 남아 있다(선언은 켜짐을 바꾸지 않는다) — 그때만 "예전에 꺼 두신 알림이에요. 다시 켤까요?"
    라고 묻고, 켜겠다고 하면 `baas notification enable <key>`
-2. 사용자에게 말한다 — "알림을 만들었어요. 프로젝트 관리자 계정 이메일로 받아요. 그만 받고 싶으면
-   말씀해 주세요, 끌 수 있어요."
+2. 사용자에게 말한다 — "알림을 만들었어요. 가입하신 연락처로 카카오 알림톡이 먼저 가고, 안 되면
+   가입 이메일로 가요. 끄거나 이메일을 먼저 받게 바꿀 수 있고, 원하시면 관리자 페이지에 알림 설정도
+   넣어 드릴게요."
 
-받는 곳은 늘 프로젝트 관리자(소유자) 계정이라 따로 조회하지 않는다. 이메일·전화번호를 채팅에 옮겨
-적지 마라 — 개인정보가 대화 기록에 남는다.
+받는 사람은 늘 프로젝트 관리자(소유자) 본인이라 따로 조회하지 않는다. 연락처는 기본이 **가입 계정의 이메일 ·
+휴대폰**이고, 사용자가 다른 곳으로 받겠다고 하면 아래 표의 `inquiry setting` 으로 바꾼다. 이메일·전화번호를
+채팅에 옮겨 적지 마라 — 개인정보가 대화 기록에 남는다.
+
+**설정의 정본은 플랫폼 한 곳이다.** 알림마다 켬/끔과 채널 순서가 플랫폼에 저장되고, 아래 명령(채팅)과
+관리자 페이지(4번) 둘 다 **같은 값**을 바꾼다. 앱 컬렉션에 알림 켬/끔을 따로 두지 마라 — 두 값이 어긋나
+「화면은 켜짐인데 안 온다」가 된다.
 
 | 명령 | 쓰임 |
 |---|---|
 | `baas notification list` | 선언된 알림과 켜짐·채널 |
 | `baas notification enable <key>` / `disable <key>` | 켜기·끄기. 그만 받으려면 선언을 지우지 말고 끈다(선언을 지워도 서버에서 지워지지 않는다) |
-| `baas notification channels <key> email[,alimtalk]` | 받을 채널 |
-| `baas notification recipient` | 받는 이메일·전화번호와 그 출처 |
+| `baas notification channels <key> email,alimtalk` | 채널 순서 — 앞 채널부터 보내고 첫 성공에서 멈춘다. `email` 하나만 두면 이메일만 |
+| `baas notification recipient` | 받는 이메일·전화번호와 그 출처(`account` 가입 계정 · `setting` 따로 지정) |
+| `baas inquiry setting update --notify-email <주소>` | 받는 이메일 바꾸기. `""` 면 가입 계정 이메일로 되돌린다 |
+| `baas inquiry setting update --from-json '{"notify_phone":"010…"}'` | 받는 휴대폰(알림톡) 바꾸기. `""` 면 가입 계정 번호로 되돌린다 |
+
+받는 곳을 바꾸는 길은 **이 채팅(명령)뿐이다** — 콘솔 · 앱에 그 화면이 없다. 이 값은 **문의 알림과 함께 쓴다**:
+바꾸면 문의 접수 알림도 같은 곳으로 간다. 바꾸기 전에 그 사실을 사용자에게 말한다.
 | `baas notification logs` | 최근 발송 결과 — 「알림이 안 와요」는 이걸 **실행해서** 본다 |
 
-**알림톡을 켜기 전에만** `recipient` 로 전화번호가 등록돼 있는지 확인하고, 번호를 그대로 보여 주지
-말고 끝자리만 보여 주며 **그 번호가 맞는지 사용자에게 확인받는다.** 번호가 없으면 서버가 거절한다. 알림톡은 아직 열리지 않았을 수 있다 — 거절되면
-이메일로 받도록 안내한다.
+켬/끔·채널은 사용자가 **직접 요청했을 때만** 바꾼다. 채널에 알림톡을 넣거나 알림톡만 남길 때는 먼저
+`recipient` 로 전화번호가 등록돼 있는지 확인하고, 번호를 그대로 보여 주지 말고 끝자리만 보여 주며 **그
+번호가 맞는지 사용자에게 확인받는다.** 번호가 없으면 서버가 거절한다(400).
+
+#### 4. 관리자 페이지의 「알림 설정」 — 요청이 있을 때만
+
+「관리자 페이지에서 알림을 켜고 끄게 해 줘」 같은 요청이 오면, 관리자 화면에 알림 목록과 토글·채널
+순서를 넣는다. 미리 만들어 두지 않는다 — 관리자 페이지는 사용자가 요청한 기능으로 구성된다.
+
+서버 SDK 의 `notify.list` · `notify.update` · `notify.recipient` 로 만든다. **이 셋은 관리자 페이지 전용이다.**
+
+- **serverFn 은 반드시 `access: 'owner'`.** 서버(`/service/notifications`)는 주입 토큰과 프로젝트만 보고,
+  그 serverFn 을 누가 불렀는지는 모른다. 소유자 판정은 플랫폼 디스패처가 하고(`isProjectOwner`)
+  `access: 'owner'` 가 그 값으로 막는다 — 이 선언을 빠뜨리면 손님·회원이 사장님 알림을 끌 수 있다
+- **손님 화면 코드에서 부르지 마라.** 브라우저에서는 열리지도 않는다(서버 간 전용)
+- `notify.owner` 와 달리 **실패를 던진다** — 지원하지 않는 채널·번호 없는 알림톡은 400, 선언되지 않은 키는
+  404. 메시지를 화면에 그대로 보여 준다
+- 받는 곳(`recipient`)은 **가린 값**이다(`jj***@mbaas.kr` · `010-****-7122`). 보여 주기만 한다. 출처
+  (`email_source` · `phone_source`)로 「가입 계정」 · 「따로 지정」을 붙여 준다. **화면에 「어디서 바꿀 수 있다」를
+  적지 마라** — 콘솔 · 앱에 바꾸는 화면이 없다(실측 2026-10-13: 「문의 설정에서 바꿉니다」라고 적어 사용자가
+  없는 메뉴를 찾았다). 바꾸는 길은 채팅의 `inquiry setting` 명령(3번 표)뿐이다
+
+```ts
+// src/services/notifySettings.ts — 관리자 페이지 「알림 설정」
+import { serverFn } from './serverFn'
+import type { OwnerNotificationSetting, OwnerNotifyChannel, OwnerNotifyRecipient, OwnerNotifySdk,
+  OwnerNotificationKey } from '../types/notifications'
+
+type NotifySettings = { items: OwnerNotificationSetting[]; recipient: OwnerNotifyRecipient }
+
+export const getNotifySettings = serverFn<void, NotifySettings>(async (_input, ctx) => {
+  const sdk = ctx.sdk as OwnerNotifySdk
+  const [items, recipient] = await Promise.all([sdk.notify.list(), sdk.notify.recipient()])
+  return { items, recipient }
+}, { access: 'owner' })
+
+export const updateNotifySetting = serverFn<
+  { key: OwnerNotificationKey; enabled?: boolean; channels?: OwnerNotifyChannel[] },
+  OwnerNotificationSetting
+>(async (input, ctx) => {
+  const sdk = ctx.sdk as OwnerNotifySdk
+  return sdk.notify.update(input.key, { enabled: input.enabled, channels: input.channels })
+}, { access: 'owner' })
+```
+
+화면에는 알림마다 이름(`label`)·켬/끔 토글·채널 순서를 두고, 위에 「카카오 알림톡 010-****-7122 → 안 되면
+jj***@mbaas.kr」처럼 받는 곳을 보여 준다. `recipient.phone` 이 `null` 이면 "알림 받을 번호가 없어 이메일로만
+가요"라고 알린다.
 
 ### 결제 — 금액은 DB 에서 읽고, 승인은 serverFn 이 한다 (`sdk.payments`)
 
@@ -913,25 +970,111 @@ return { status: 'booked' }
               {"name":"deposit","type":"number","required":true} ] }
 ```
 
+**자리는 결제가 끝난 뒤에 센다.** 결제하기 때 자리를 올려 두면 결제창만 열고 떠난 손님이 자리를 묶고,
+그걸 풀 배치가 필요해진다. 대신 승인 뒤 정원을 넘으면 **결제를 되돌린다**(보상 트랜잭션). 순서는 셋이다.
+
+| 단계 | 하는 일 | 실패하면 |
+|---|---|---|
+| 결제 | `payments.confirm` — 토스 승인. 세션이 `PAID` 가 된다 | 던진다. 청구 없음, 되돌릴 것 없음 |
+| 확정 | 한 트랜잭션: 자리 `increment` + 정원 `guard` · 예약 `create`(`order_no` unique) | 정원 초과 · 중복 예약 → 보상 |
+| 보상 | `payments.cancel` — 전액 환불 | — |
+
+```jsonc
+// backend/schema.json — 주문서 · 예약 · 자리. 브라우저는 셋 다 쓰지 못한다(serverFn 만 쓴다)
+{ "name": "checkouts", "label": "주문서", "access": {"read":"service","create":"service","update":"service","delete":"service"},
+  "fields": [ {"name":"order_no","type":"string","required":true,"unique":true},
+              {"name":"account_id","type":"string","required":true},
+              {"name":"service_id","type":"string","required":true},
+              {"name":"slot_id","type":"string","required":true} ] },
+{ "name": "bookings", "label": "예약", "access": {"read":"service","create":"service","update":"service","delete":"service"},
+  "fields": [ {"name":"order_no","type":"string","required":true,"unique":true},
+              {"name":"slot_account_key","type":"string","required":true,"unique":true},
+              {"name":"account_id","type":"string","required":true},
+              {"name":"slot_id","type":"string","required":true},
+              {"name":"status","type":"string","required":true} ] }
+```
+
 ```ts
 // src/services/deposit.ts
-export const startDeposit = serverFn<{ serviceId: string; slot: string }, DepositStart>(async (input, ctx) => {
+type Checkout = { order_no: string; account_id: string; service_id: string; slot_id: string }
+type Booking = { order_no: string; account_id: string; slot_id: string; status: string }
+
+// 결제하기 — 자리는 잡지 않는다. 무엇을 얼마에 결제하는지(주문서)만 남긴다
+export const startDeposit = serverFn<{ serviceId: string; slotId: string }, DepositStart>(async (input, ctx) => {
   const svc = await ctx.sdk.dyncol.get<Service>('services', input.serviceId)   // 금액은 DB 에서
   if (!svc) throw new ServerFnError('없는 시술이에요', 404)
-  if (!(await holdSlot(ctx, input.slot))) throw new ServerFnError('이미 마감된 시간이에요', 409)
   const pay = await ctx.sdk.payments.create({ amount: svc.data.deposit, itemName: `${svc.data.name} 예약금` })
-  await saveBooking(ctx, { slot: input.slot, serviceId: input.serviceId, orderNo: pay.order_no })  // PENDING
+  await ctx.sdk.dyncol.create('checkouts', { order_no: pay.order_no, account_id: ctx.accountId,
+                                             service_id: input.serviceId, slot_id: input.slotId })
   return { order_no: pay.order_no, amount: pay.amount, client_key: pay.client_key,
            item_name: pay.item_name, payment_mode: pay.payment_mode }
 }, { access: 'member' })
 
+// 승인 — 결제 → 확정 → (넘치면) 보상
 export const confirmDeposit = serverFn<{ orderNo: string; paymentKey: string; amount: number }, { status: string }>(
   async (input, ctx) => {
-    const pay = await ctx.sdk.payments.confirm(input.orderNo, { paymentKey: input.paymentKey, amount: input.amount })
-    if (pay.status !== 'PAID') return { status: 'waiting' }      // 가상계좌 입금 대기
-    await confirmBookingByOrder(ctx, input.orderNo)                // 같은 요청 안에서 원장 확정
+    // 결제자 확인 — 플랫폼은 프로젝트만 보고 누가 불렀는지는 모른다. 주문서 주인이 요청한 회원인지 여기서 본다
+    const { items: [checkout] } = await ctx.sdk.dyncol.list<Checkout>('checkouts', { filter: { order_no: input.orderNo }, limit: 1 })
+    if (!checkout || checkout.data.account_id !== ctx.accountId) throw new ServerFnError('주문을 찾을 수 없어요', 403)
+    await ctx.sdk.payments.confirm(input.orderNo, { paymentKey: input.paymentKey, amount: input.amount })  // PAID 아니면 던진다
+    return settleDeposit(ctx, input.orderNo)
+  }, { access: 'member', authorizes: true })
+
+/** 확정 · 보상 — 몇 번 불러도 결과가 같다. 승인 뒤 끊긴 결제는 이걸 다시 부르면 마무리된다 */
+async function settleDeposit(ctx: ServerCtx, orderNo: string, compensate = true): Promise<{ status: string }> {
+  const pay = await ctx.sdk.payments.get(orderNo)
+  if (pay.status !== 'PAID') return { status: pay.status === 'CANCELLED' ? 'refunded' : 'unpaid' }
+  const { items: [checkout] } = await ctx.sdk.dyncol.list<Checkout>('checkouts', { filter: { order_no: orderNo }, limit: 1 })
+  if (!checkout) throw new ServerFnError('없는 주문서예요', 404)
+  const c = checkout.data
+  try {
+    await ctx.sdk.dyncol.transaction([
+      { op: 'increment', collection: 'slots', target: { id: c.slot_id }, field: 'booked', by: 1,
+        guard: { booked: { lte: { field: 'capacity' } } }, label: 'slot' },
+      // order_no unique — 두 번째 호출은 여기서 막혀 자리를 두 번 세지 않는다(위 increment 도 함께 되돌아간다)
+      { op: 'create', collection: 'bookings', label: 'booking',
+        data: { order_no: orderNo, account_id: c.account_id, slot_id: c.slot_id, status: 'confirmed',
+                slot_account_key: `${c.slot_id}:${c.account_id}` } },
+    ])
     return { status: 'confirmed' }
-  }, { access: 'member' })
+  } catch (e) {
+    if (errorStatus(e) !== 409) throw e
+    const failed = errorDetail(e)?.failed as { label?: string } | undefined
+    if (!failed) {   // unique 위반 — 이미 확정했거나(같은 order_no), 같은 시간을 이미 예약했다
+      const { items } = await ctx.sdk.dyncol.list('bookings', { filter: { order_no: orderNo }, limit: 1 })
+      if (items.length) return { status: 'confirmed' }   // 멱등
+    }
+    if (!compensate) return { status: failed?.label === 'slot' ? 'full' : 'duplicate' }   // 사장님이 고른다
+    // 보상 — 결제는 됐는데 확정할 수 없다. 환불한다(이미 취소됐으면 그대로 돌아온다)
+    await ctx.sdk.payments.cancel(orderNo, failed?.label === 'slot' ? '정원 마감 — 자동 환불' : '중복 예약 — 자동 환불')
+    return { status: 'refunded' }
+  }
+}
+
+// 사장님 관리 화면 — 결제됐는데 예약이 없는 주문(승인 뒤 끊긴 결제)을 보여 준다. 조회는 아무것도 바꾸지 않는다
+export const listUnsettledDeposits = serverFn<void, { orderNo: string; slotId: string; amount: number }[]>(
+  async (_input, ctx) => {
+    const { items: checkouts } = await ctx.sdk.dyncol.list<Checkout>('checkouts', { sort: '-created_at', limit: 100 })
+    const nos = checkouts.map((c) => c.data.order_no)
+    // 같은 주문번호의 예약만 가져와 대조한다 — 「최근 예약 100건」과 대조하면 오래된 확정 건을 미확정으로 본다
+    const { items: bookings } = await ctx.sdk.dyncol.list<Booking>('bookings', { filter: { order_no: { in: nos } }, limit: 100 })
+    const done = new Set(bookings.map((b) => b.data.order_no))
+    const open = checkouts.filter((c) => !done.has(c.data.order_no))
+    const paid = new Map((await ctx.sdk.payments.list(open.map((c) => c.data.order_no)))
+      .filter((p) => p.status === 'PAID').map((p) => [p.order_no, p.amount]))
+    return open.filter((c) => paid.has(c.data.order_no))
+      .map((c) => ({ orderNo: c.data.order_no, slotId: c.data.slot_id, amount: paid.get(c.data.order_no)! }))
+  }, { access: 'owner' })
+
+// 사장님이 고른다 — 확정을 다시 시도하거나(자리 있으면 예약, 없으면 그대로 알림) 환불한다
+export const resolveDeposit = serverFn<{ orderNo: string; action: 'settle' | 'refund' }, { status: string }>(
+  async (input, ctx) => {
+    if (input.action === 'refund') {
+      await ctx.sdk.payments.cancel(input.orderNo, '사장님 처리 — 환불')
+      return { status: 'refunded' }
+    }
+    return settleDeposit(ctx, input.orderNo, false)   // 자리가 없으면 환불하지 않고 'full' 로 돌려준다
+  }, { access: 'owner' })
 ```
 
 - **브라우저에서는 id 만 받는다.** `input.amount` · `input.price` 처럼 금액이 든 입력으로 `create` 하지 마라.
@@ -939,16 +1082,37 @@ export const confirmDeposit = serverFn<{ orderNo: string; paymentKey: string; am
 - **금액 컬렉션을 기본 접근(선언 없음)으로 두지 마라.** 기본은 「로그인 회원이 행을 만들 수 있다」라서, 회원이
   1원짜리 시술을 만들고 그 id 로 결제하면 ② 를 지켜도 뚫린다. 금액 수정은 `access: 'owner'` serverFn 으로 연다
 - **결제자는 요청한 회원이다.** `create` 는 인자로 결제자를 받지 않는다 — `access: 'member'` 로 둔다
-- **결제 상태를 컬렉션 필드로 판정하지 마라.** 원장에는 `order_no` 만 두고, 상태는 `payments.get` 이
-  정본이다. `paid: true` 같은 필드를 브라우저가 쓰게 하면 결제 없이 확정된다
-- **`confirm` 이 `PAID` 일 때만 확정한다.** 실패는 던진다(알림과 반대) — 잡아서 성공으로 바꾸지 마라
-- 취소 · 환불은 `payments.cancel(orderNo, 사유)`. 결제 전이면 세션만 닫힌다. 원장 취소와 같은 요청에서 부른다
-- 결제하지 않고 이탈한 세션은 서버 정리 배치가 닫는다(30분 경과 기준). 원장의 PENDING 은 **스스로 만료**시킨다 —
-  만료 전에 `payments.get` 으로 상태를 확인하고 `CREATED` 면 `payments.cancel` 로 함께 닫는다
+- **주문번호로 무언가를 하는 손님 serverFn 은 주문서 주인부터 확인한다**(승인 · 상세 · 영수증 · 손님 취소).
+  플랫폼의 `payments.confirm` · `get` · `cancel` 은 **프로젝트만** 확인하고 어느 회원이 불렀는지는 모른다.
+  주문번호는 복귀 주소 쿼리에 실리는 값이라 비밀이 아니다 — 확인을 빠뜨리면 로그인한 아무 회원이 남의 주문을
+  보고, 손님 취소가 있으면 남의 예약을 취소 · 환불시킨다. 주문서 `account_id` 와 `ctx.accountId` 가 다르면
+  403 을 던지고 `authorizes: true` 를 선언한다(위 `confirmDeposit`). 사장님 전용(`access: 'owner'`)은 제외
+- **결제 상태를 컬렉션 필드로 판정하지 마라.** 주문서에는 `order_no` 만 두고, 상태는 `payments.get` ·
+  `payments.list` 가 정본이다. `paid: true` 같은 필드를 브라우저가 쓰게 하면 결제 없이 확정된다.
+  예약의 `status` 는 결제가 아니라 예약 자체의 상태(확정 · 취소)다
+- **자리를 결제하기 때 올리지 마라(`holdSlot` 금지).** 결제창만 열고 떠난 손님이 자리를 묶는다. 주문서는
+  자리를 잡지 않으니 떠난 주문서는 지우지도, 만료시키지도 않는다 — 정리 배치가 없다
+- **정원은 확정 단계의 `guard` 로만 판정한다.** `payments.list` 로 세서 확인한 뒤 확정하면 동시 결제 두 건이 같은
+  마지막 자리를 통과한다. 넘친 쪽은 보상 단계가 환불한다 — 플랫폼은 이 정원을 모르므로 대신 환불해 주지 않는다
+- **`settleDeposit` 은 멱등이어야 한다.** 승인은 됐는데 확정 전에 끊기면(serverFn 중단, 플랫폼이 승인 뒤 저장에
+  실패해 웹훅이 PAID 로 복구) 결제만 있고 예약이 없다. `order_no` unique 가 두 번 세는 것을 막으니 다시 부르면 된다
+- **끊긴 결제는 손님이 복귀 화면에 있을 때 끝낸다.** `confirmDeposit` 이 실패(5xx · 네트워크)하면 복귀 화면이
+  같은 값으로 몇 번(간격을 늘려 3회 정도) 다시 부른다. 플랫폼 저장 실패는 웹훅이 몇 초 안에 PAID 로 복구하므로
+  재시도한 `confirm` 은 PAID 를 받고 확정으로 넘어간다. 400(금액 불일치 · 가상계좌 · 취소된 결제)은 다시 부르지 않는다
+- **그래도 남은 것은 사장님이 처리한다.** 손님이 그 사이 창을 닫으면 결제만 남는다 — 관리 화면에
+  `listUnsettledDeposits` 로 보여 주고 `resolveDeposit` 버튼(확정 / 환불)을 둔다. **조회가 확정 · 환불을 하게
+  만들지 마라** — 목록을 열 때마다 돈이 움직이면 예측할 수 없고, 동시에 열면 경합한다. 손님 쪽 목록에는 이런
+  주문을 「결제 확인 중」으로만 보여 준다
+- **가상계좌는 받지 않는다.** 입금 대기로 끝난 승인은 플랫폼이 토스에서 취소하고 400 을 던진다 —
+  `status: 'waiting'` 같은 입금 대기 분기를 만들지 마라
+- **`confirm` 실패는 던진다**(알림과 반대) — 잡아서 성공으로 바꾸지 마라
+- 확정된 예약 취소는 앞의 「예약 취소」 패턴(단건 `update(…, { if: { status: 'confirmed' } })` → 승자만 자리
+  `increment(-1)`)에 `payments.cancel(orderNo, 사유)` 를 이어 부른다. 결제 전 주문서는 취소할 것이 없다
 - `payment_mode` 가 `test` 면 **테스트 결제**다 — 실제로 청구되지 않는다. 판매자 승인 전 프로젝트는 모두
   test 다. 화면에 「테스트 결제」 안내를 띄우고, 사용자에게도 그렇게 알린다
 - 프론트는 `usePayment().beginWidget(startDeposit 의 응답, 셀렉터)` 로 위젯을 띄우고, 복귀 페이지에서
-  `getRedirectResult()` 값을 `confirmDeposit` 에 넘긴다(위젯 규칙은 `baas-integration-sdk` 결제 공통 규약)
+  `getRedirectResult()` 값을 `confirmDeposit` 에 넘긴다(위젯 규칙은 `baas-integration-sdk` 결제 공통 규약).
+  `refunded` 가 오면 「마감돼 결제를 취소했어요」를 보여 준다
 
 ### 파일 업로드 — 누가 올리나는 serverFn 이 정한다 (`sdk.storage.presign`)
 
@@ -1169,7 +1333,8 @@ try { ... } catch (e) {
 - [ ] 네이티브를 안 쓰기로 했으면 그 이유를 사용자에게 알렸다
 - [ ] 외부 연동이 있으면 **키를 먼저 요청**했다
 - [ ] 관리자 알림은 `schema.json` 에 선언했고, 동작이 **성공한 뒤** serverFn 에서만 `notify.owner` 를 불렀다
-- [ ] 새 알림이 **켜진 채 관리자 이메일로 온다**는 것과 끄는 법을 사용자에게 알렸고, `baas notification list` 로 켜짐을 확인했다
+- [ ] 새 알림이 **켜진 채 카카오 알림톡 → 안 되면 이메일**로 온다는 것과 끄기·순서 바꾸기·관리자 페이지 설정을 사용자에게 알렸고, `baas notification list` 로 켜짐을 확인했다
+- [ ] 관리자 페이지에 알림 설정을 넣었다면 그 serverFn 이 **`access: 'owner'`** 이고, 앱 컬렉션에 알림 켬/끔을 따로 두지 않았다
 - [ ] 본문이 403 을 던지는 함수에 `authorizes: true` 를 선언했다
 - [ ] 역할 표를 만들었으면 **첫 행을 넣는 경로**를 정하고 사용자에게 알렸다
 - [ ] 브리프에서 **구현하지 않은 항목**을 보고에 적었다 (스케줄처럼 아직 제공되지 않는 것 포함)

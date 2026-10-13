@@ -24,9 +24,12 @@ const BOILERPLATE = path.join(HERE, '..', 'boilerplate')
 function invoke(envelope) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'probe-'))
   fs.cpSync(BOILERPLATE, root, { recursive: true })
+  // envelope 은 코드 문자열에 끼우지 않고 파일로 넘긴다(CodeQL js/bad-code-sanitization)
+  fs.writeFileSync(path.join(root, 'data.json'), JSON.stringify(envelope))
   fs.writeFileSync(path.join(root, 'run.mjs'), `
+    const DATA = JSON.parse(await (await import('node:fs/promises')).readFile(new URL('./data.json', import.meta.url), 'utf8'))
     const { lambdaHandler } = await import('./src/platform/adapters.ts')
-    const out = await lambdaHandler(${JSON.stringify(envelope)})
+    const out = await lambdaHandler(DATA)
     console.log('__OUT__' + JSON.stringify(out))
   `)
   // `sdk.ts` 가 모듈 로드 시점에 요구한다 — 플랫폼이 주입하는 값이라 하네스가 대신 준다.
