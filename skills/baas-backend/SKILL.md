@@ -859,36 +859,85 @@ return { status: 'booked' }
   이 표면으로 만들 수 없으니 **그 사실을 사용자에게 알린다**
 - **네이티브 문의하기는 이미 소유자에게 메일로 간다.** 같은 사건을 또 선언하지 마라 — 두 번 받는다
 
-#### 3. 등록하고, **받는 곳과 끄는 법을 알린다**
+#### 3. 등록하고, **받는 곳과 바꾸는 법을 알린다**
 
 `node backend/extract.mjs` 가 수렴(`baas collection converge --file backend/schema.json`)으로
 선언을 서버에 올린다. 등록은 멱등이고, **지우지 않으며, 이미 있는 알림의 켜짐·채널을 바꾸지
 않는다.**
 
-**새 알림은 켜진 채(ON, 채널 `email`)로 시작한다** — 사용자가 「알려 줘」라고 요청해서 만든
-알림이고, 받는 사람은 늘 프로젝트 관리자 본인이다(aiapp-service#923). 다시 켤지 묻지 않는다.
-등록한 뒤 이렇게 마무리한다:
+**새 알림은 켜진 채, 채널 순서 `알림톡 → 이메일` 로 시작한다** — 사용자가 「알려 줘」라고 요청해서
+만든 알림이고, 받는 사람은 늘 프로젝트 관리자 본인이다(aiapp-service#923 · #942). 앞 채널부터 보내고
+첫 성공에서 멈추므로, 보통은 **카카오 알림톡으로 오고** 번호가 없거나 알림톡을 못 보내면 이메일로 온다.
+다시 켤지 묻지 않는다. 등록한 뒤 이렇게 마무리한다:
 
-1. `baas notification list` 로 켜짐을 **실행해서** 확인한다. 같은 키를 사용자가 예전에 꺼 뒀다면
+1. `baas notification list` 로 켜짐·채널을 **실행해서** 확인한다. 같은 키를 사용자가 예전에 꺼 뒀다면
    꺼진 채 남아 있다(선언은 켜짐을 바꾸지 않는다) — 그때만 "예전에 꺼 두신 알림이에요. 다시 켤까요?"
    라고 묻고, 켜겠다고 하면 `baas notification enable <key>`
-2. 사용자에게 말한다 — "알림을 만들었어요. 프로젝트 관리자 계정 이메일로 받아요. 그만 받고 싶으면
-   말씀해 주세요, 끌 수 있어요."
+2. 사용자에게 말한다 — "알림을 만들었어요. 가입하신 연락처로 카카오 알림톡이 먼저 가고, 안 되면
+   가입 이메일로 가요. 끄거나 이메일을 먼저 받게 바꿀 수 있고, 원하시면 관리자 페이지에 알림 설정도
+   넣어 드릴게요."
 
 받는 곳은 늘 프로젝트 관리자(소유자) 계정이라 따로 조회하지 않는다. 이메일·전화번호를 채팅에 옮겨
 적지 마라 — 개인정보가 대화 기록에 남는다.
+
+**설정의 정본은 플랫폼 한 곳이다.** 알림마다 켬/끔과 채널 순서가 플랫폼에 저장되고, 아래 명령(채팅)과
+관리자 페이지(4번) 둘 다 **같은 값**을 바꾼다. 앱 컬렉션에 알림 켬/끔을 따로 두지 마라 — 두 값이 어긋나
+「화면은 켜짐인데 안 온다」가 된다.
 
 | 명령 | 쓰임 |
 |---|---|
 | `baas notification list` | 선언된 알림과 켜짐·채널 |
 | `baas notification enable <key>` / `disable <key>` | 켜기·끄기. 그만 받으려면 선언을 지우지 말고 끈다(선언을 지워도 서버에서 지워지지 않는다) |
-| `baas notification channels <key> email[,alimtalk]` | 받을 채널 |
+| `baas notification channels <key> email,alimtalk` | 채널 순서 — 앞 채널부터 보내고 첫 성공에서 멈춘다. `email` 하나만 두면 이메일만 |
 | `baas notification recipient` | 받는 이메일·전화번호와 그 출처 |
 | `baas notification logs` | 최근 발송 결과 — 「알림이 안 와요」는 이걸 **실행해서** 본다 |
 
-**알림톡을 켜기 전에만** `recipient` 로 전화번호가 등록돼 있는지 확인하고, 번호를 그대로 보여 주지
-말고 끝자리만 보여 주며 **그 번호가 맞는지 사용자에게 확인받는다.** 번호가 없으면 서버가 거절한다. 알림톡은 아직 열리지 않았을 수 있다 — 거절되면
-이메일로 받도록 안내한다.
+켬/끔·채널은 사용자가 **직접 요청했을 때만** 바꾼다. 채널에 알림톡을 넣거나 알림톡만 남길 때는 먼저
+`recipient` 로 전화번호가 등록돼 있는지 확인하고, 번호를 그대로 보여 주지 말고 끝자리만 보여 주며 **그
+번호가 맞는지 사용자에게 확인받는다.** 번호가 없으면 서버가 거절한다(400).
+
+#### 4. 관리자 페이지의 「알림 설정」 — 요청이 있을 때만
+
+「관리자 페이지에서 알림을 켜고 끄게 해 줘」 같은 요청이 오면, 관리자 화면에 알림 목록과 토글·채널
+순서를 넣는다. 미리 만들어 두지 않는다 — 관리자 페이지는 사용자가 요청한 기능으로 구성된다.
+
+서버 SDK 의 `notify.list` · `notify.update` · `notify.recipient` 로 만든다. **이 셋은 관리자 페이지 전용이다.**
+
+- **serverFn 은 반드시 `access: 'owner'`.** 서버(`/service/notifications`)는 주입 토큰과 프로젝트만 보고,
+  그 serverFn 을 누가 불렀는지는 모른다. 소유자 판정은 플랫폼 디스패처가 하고(`isProjectOwner`)
+  `access: 'owner'` 가 그 값으로 막는다 — 이 선언을 빠뜨리면 손님·회원이 사장님 알림을 끌 수 있다
+- **손님 화면 코드에서 부르지 마라.** 브라우저에서는 열리지도 않는다(서버 간 전용)
+- `notify.owner` 와 달리 **실패를 던진다** — 지원하지 않는 채널·번호 없는 알림톡은 400, 선언되지 않은 키는
+  404. 메시지를 화면에 그대로 보여 준다
+- 받는 곳(`recipient`)은 **가린 값**이다(`jj***@mbaas.kr` · `010-****-7122`). 보여 주기만 한다 — 받는 곳을
+  바꾸는 곳은 플랫폼 설정이고 앱에서 바꾸지 않는다
+
+```ts
+// src/services/notifySettings.ts — 관리자 페이지 「알림 설정」
+import { serverFn } from './serverFn'
+import type { OwnerNotificationSetting, OwnerNotifyChannel, OwnerNotifyRecipient, OwnerNotifySdk,
+  OwnerNotificationKey } from '../types/notifications'
+
+type NotifySettings = { items: OwnerNotificationSetting[]; recipient: OwnerNotifyRecipient }
+
+export const getNotifySettings = serverFn<void, NotifySettings>(async (_input, ctx) => {
+  const sdk = ctx.sdk as OwnerNotifySdk
+  const [items, recipient] = await Promise.all([sdk.notify.list(), sdk.notify.recipient()])
+  return { items, recipient }
+}, { access: 'owner' })
+
+export const updateNotifySetting = serverFn<
+  { key: OwnerNotificationKey; enabled?: boolean; channels?: OwnerNotifyChannel[] },
+  OwnerNotificationSetting
+>(async (input, ctx) => {
+  const sdk = ctx.sdk as OwnerNotifySdk
+  return sdk.notify.update(input.key, { enabled: input.enabled, channels: input.channels })
+}, { access: 'owner' })
+```
+
+화면에는 알림마다 이름(`label`)·켬/끔 토글·채널 순서를 두고, 위에 「카카오 알림톡 010-****-7122 → 안 되면
+jj***@mbaas.kr」처럼 받는 곳을 보여 준다. `recipient.phone` 이 `null` 이면 "알림 받을 번호가 없어 이메일로만
+가요"라고 알린다.
 
 ### 결제 — 금액은 DB 에서 읽고, 승인은 serverFn 이 한다 (`sdk.payments`)
 
@@ -1268,7 +1317,8 @@ try { ... } catch (e) {
 - [ ] 네이티브를 안 쓰기로 했으면 그 이유를 사용자에게 알렸다
 - [ ] 외부 연동이 있으면 **키를 먼저 요청**했다
 - [ ] 관리자 알림은 `schema.json` 에 선언했고, 동작이 **성공한 뒤** serverFn 에서만 `notify.owner` 를 불렀다
-- [ ] 새 알림이 **켜진 채 관리자 이메일로 온다**는 것과 끄는 법을 사용자에게 알렸고, `baas notification list` 로 켜짐을 확인했다
+- [ ] 새 알림이 **켜진 채 카카오 알림톡 → 안 되면 이메일**로 온다는 것과 끄기·순서 바꾸기·관리자 페이지 설정을 사용자에게 알렸고, `baas notification list` 로 켜짐을 확인했다
+- [ ] 관리자 페이지에 알림 설정을 넣었다면 그 serverFn 이 **`access: 'owner'`** 이고, 앱 컬렉션에 알림 켬/끔을 따로 두지 않았다
 - [ ] 본문이 403 을 던지는 함수에 `authorizes: true` 를 선언했다
 - [ ] 역할 표를 만들었으면 **첫 행을 넣는 경로**를 정하고 사용자에게 알렸다
 - [ ] 브리프에서 **구현하지 않은 항목**을 보고에 적었다 (스케줄처럼 아직 제공되지 않는 것 포함)

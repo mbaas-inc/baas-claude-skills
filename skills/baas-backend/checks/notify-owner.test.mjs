@@ -27,20 +27,20 @@ const TSC = path.join(BOILERPLATE, 'node_modules', 'typescript', 'bin', 'tsc')
  * 골격의 SDK 를 그대로 띄워 `notify.owner` 를 한 번 부른다. `fetch` 는 `respond` 로 바꿔 끼운다.
  * 반환: { out: 결과 값, calls: 보낸 요청, threw, stderr }
  */
-function callNotify(respond) {
+function callNotify(respond, expr = "sdk.notify.owner('reservation.created', { name: '홍길동', people: '4명' })") {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'notify-'))
   fs.cpSync(BOILERPLATE, root, { recursive: true, filter: (src) => !src.includes('node_modules') })
   fs.writeFileSync(path.join(root, 'run.mjs'), `
     const calls = []
     globalThis.fetch = async (url, init) => {
-      calls.push({ url, method: init.method, headers: init.headers, body: JSON.parse(init.body) })
+      calls.push({ url, method: init.method, headers: init.headers, body: init.body === undefined ? undefined : JSON.parse(init.body) })
       return (${respond})()
     }
     const { buildSdk } = await import('./src/platform/sdk.ts')
     const sdk = buildSdk({ token: 'tok', projectId: 'p1', requestId: 'r1' })
     let out = null, threw = false
-    try { out = await sdk.notify.owner('reservation.created', { name: '홍길동', people: '4명' }) }
-    catch { threw = true }
+    try { out = await ${expr} }
+    catch (e) { threw = { status: e.status, message: e.message } }
     console.log('__OUT__' + JSON.stringify({ out, calls, threw }))
   `)
   const res = spawnSync(process.execPath, ['--experimental-strip-types', 'run.mjs'],
@@ -112,6 +112,16 @@ export async function bad() {
   await sdk.notify.owner('reservation.created', { name: 'a', people: 'b', phone: 'c' })
   // @ts-expect-error — 선언한 값을 빠뜨렸다
   await sdk.notify.owner('reservation.created', { name: 'a' })
+  // @ts-expect-error — 설정도 선언한 키만 바꾼다
+  await sdk.notify.update('reservation.craeted', { enabled: false })
+  // @ts-expect-error — 채널은 alimtalk · email 뿐이다
+  await sdk.notify.update('reservation.created', { channels: ['sms'] })
+}
+export async function settings() {
+  const rows = await sdk.notify.list()
+  await sdk.notify.update('reservation.created', { enabled: !rows[0].enabled, channels: ['email', 'alimtalk'] })
+  const to = await sdk.notify.recipient()
+  return to.phone ?? to.email
 }
 `)
   // 앱 트리를 흉내 낸다 — 백엔드 런타임 타입(node 등)을 끌어오지 않는다.
@@ -140,6 +150,13 @@ export const result: Same<gen.OwnerNotifyResult, platform.OwnerNotifyResult> = t
 export const value: Same<gen.OwnerNotifyValue, platform.OwnerNotifyValue> = true
 type PlatformOwner = platform.Sdk['notify']['owner']
 export const returns: Same<Awaited<ReturnType<PlatformOwner>>, gen.OwnerNotifyResult> = true
+export const channel: Same<gen.OwnerNotifyChannel, platform.OwnerNotifyChannel> = true
+export const setting: Same<gen.OwnerNotificationSetting, platform.OwnerNotificationSetting> = true
+export const recipient: Same<gen.OwnerNotifyRecipient, platform.OwnerNotifyRecipient> = true
+type PlatformNotify = platform.Sdk['notify']
+export const listed: Same<Awaited<ReturnType<PlatformNotify['list']>>, gen.OwnerNotificationSetting[]> = true
+export const updated: Same<Awaited<ReturnType<PlatformNotify['update']>>, gen.OwnerNotificationSetting> = true
+export const recipientOut: Same<Awaited<ReturnType<PlatformNotify['recipient']>>, gen.OwnerNotifyRecipient> = true
 `)
   fs.writeFileSync(path.join(root, 'tsconfig.json'), JSON.stringify({
     compilerOptions: { strict: true, target: 'ES2023', module: 'esnext', moduleResolution: 'bundler',
@@ -149,4 +166,46 @@ export const returns: Same<Awaited<ReturnType<PlatformOwner>>, gen.OwnerNotifyRe
   }))
   const res = spawnSync(process.execPath, [TSC, '-p', root], { encoding: 'utf8' })
   assert.equal(res.status, 0, `${res.stdout}${res.stderr}`)
+})
+
+// ── 알림 설정 (aiapp-service#954) ─────────────────────────────────────────
+// 관리자 페이지의 「알림 설정」이 부른다. 정본은 플랫폼이라 콘솔 · CLI 와 같은 값을 바꾼다.
+// owner() 와 달리 실패를 **던진다** — 설정 화면은 왜 안 바뀌었는지 사장님께 보여야 한다.
+
+test('설정 목록 — GET /service/notifications 의 items', () => {
+  const items = [{ key: 'reservation.created', label: '새 예약', feature: null, fields: [], enabled: true,
+    channels: ['alimtalk', 'email'], updated_at: '2026-10-13T10:00:00' }]
+  const r = callNotify(`() => new Response(JSON.stringify({ data: { items: ${JSON.stringify(items)} } }), { status: 200 })`,
+    'sdk.notify.list()')
+  assert.equal(r.threw, false)
+  assert.deepEqual(r.out, items)
+  const [c] = r.calls
+  assert.equal(c.url, 'http://baas.test/service/notifications')
+  assert.equal(c.method, 'GET')
+  assert.equal(c.headers['x-baas-project-id'], 'p1')
+})
+
+test('켬/끔 · 채널 순서 — PATCH 에 바꾸려는 값만 싣는다', () => {
+  const r = callNotify(`() => new Response(JSON.stringify({ data: { key: 'reservation.created', enabled: false } }), { status: 200 })`,
+    "sdk.notify.update('reservation.created', { enabled: false, channels: ['email', 'alimtalk'] })")
+  assert.equal(r.threw, false)
+  const [c] = r.calls
+  assert.equal(c.url, 'http://baas.test/service/notifications/reservation.created')
+  assert.equal(c.method, 'PATCH')
+  assert.deepEqual(c.body, { enabled: false, channels: ['email', 'alimtalk'] })
+})
+
+test('번호 없는 알림톡 · 모르는 키는 던진다 — 서버 문구 그대로', () => {
+  const r = callNotify(`() => new Response(JSON.stringify({ message: '알림톡을 받을 휴대폰 번호가 없습니다' }), { status: 400 })`,
+    "sdk.notify.update('reservation.created', { channels: ['alimtalk'] })")
+  assert.deepEqual(r.threw, { status: 400, message: '알림톡을 받을 휴대폰 번호가 없습니다' })
+})
+
+test('받는 곳 — GET /service/notifications/recipient (가린 값)', () => {
+  const to = { email: 'jj***@mbaas.kr', email_source: 'account', phone: '010-****-7122', phone_source: 'account' }
+  const r = callNotify(`() => new Response(JSON.stringify({ data: ${JSON.stringify(to)} }), { status: 200 })`,
+    'sdk.notify.recipient()')
+  assert.deepEqual(r.out, to)
+  assert.equal(r.calls[0].url, 'http://baas.test/service/notifications/recipient')
+  assert.equal(r.calls[0].method, 'GET')
 })
