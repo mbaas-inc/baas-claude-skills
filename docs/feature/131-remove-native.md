@@ -77,7 +77,7 @@ sequenceDiagram
 
 - ⑦ 사라진 1.x 훅 호출은 실행 시점에 막지 않는다. 스킬 안내로만 막고, AI Studio 쪽 채널 선택(mbaas-inc/mBaas_AI_Studio#680)이 1.x 표면을 쓰는 앱을 1.x 채널에 남긴다.
 - `getPurchaseTerms` 는 아직 `/public/store/{pid}/terms` 를 부른다. 서버가 store 밖으로 옮기면 함께 바꾼다.
-- `stage` 병합은 `sdk-cd` 가 2.0 을 `next` 채널로 배포한다. 2.0 전용 채널(`v2`·`next-v2`)로 배포하도록 `sdk-cd` 를 맞추기 전에는 병합하지 않는다.
+- `sdk-cd` 는 메이저로 채널을 나눈다(1.x `next`·`v1`, 2.x `next-v2`·`v2`). 태그 경로 `sdk-release.yml` 은 여전히 기본 채널이 `v1` 이라 2.x 태그를 밀면 1.x 운영 별칭을 덮는다 — 쓰지 않는다.
 
 ## 변경 이력
 
