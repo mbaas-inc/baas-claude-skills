@@ -37,6 +37,7 @@
  *   0  정상 (최신이거나, 적용 가능하거나, 적용 성공)
  *   2  충돌 — 사람이 봐야 한다
  *   3  봉투 계약 버전이 바뀌었다 — 디스패처와 짝이라 자동 적용하지 않는다
+ *   4  프로젝트 serverFn 이 정본에서 사라진 서버 SDK 표면(2.0: sdk.reservation · sdk.board)을 쓴다
  *   1  오류
  */
 
@@ -46,7 +47,30 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-const EXIT = { OK: 0, ERROR: 1, CONFLICT: 2, CONTRACT: 3 }
+const EXIT = { OK: 0, ERROR: 1, CONFLICT: 2, CONTRACT: 3, REMOVED_SURFACE: 4 }
+
+/**
+ * 2.0 에서 서버 SDK 에서 빠진 표면. 이걸 쓰는 serverFn 이 있는데 골격을 덮으면 다음 추출의
+ * 타입 검사에서 깨진다 — 그 전에 멈추고 어느 파일인지 알린다(2.0 고정 기능 제거).
+ */
+const REMOVED_SURFACE = /\.(reservation\.(list|get|changeStatus)|board\.(createPost|updatePost))\s*\(/
+
+function removedSurfaceUsers(projectRoot) {
+  const dir = path.join(projectRoot, 'src', 'services')
+  if (!fs.existsSync(dir)) return []
+  const hits = []
+  const walk = (cur) => {
+    for (const e of fs.readdirSync(cur, { withFileTypes: true })) {
+      const abs = path.join(cur, e.name)
+      if (e.isDirectory()) walk(abs)
+      else if (/\.ts$/.test(e.name) && !/\.client\.ts$/.test(e.name)) {
+        if (REMOVED_SURFACE.test(fs.readFileSync(abs, 'utf8'))) hits.push(path.relative(projectRoot, abs))
+      }
+    }
+  }
+  walk(dir)
+  return hits
+}
 
 /** 기록 위치. 워크스페이스와 함께 S3 로 보존된다. */
 const RECORD_REL = path.join('.mbaas', 'backend-skeleton.json')
@@ -295,6 +319,14 @@ function main(argv) {
     console.error('디스패처(aiapp-service)와 짝이라 골격만 올리면 백엔드가 첫 요청부터 거부한다.')
     console.error('배포 순서를 정한 뒤 사람이 적용한다.')
     return EXIT.CONTRACT
+  }
+
+  const removedUsers = removedSurfaceUsers(projectRoot)
+  if (removedUsers.length > 0) {
+    console.error('정본 서버 SDK 에서 빠진 표면(sdk.reservation · sdk.board)을 쓰는 serverFn 이 있다.')
+    console.error('골격을 덮으면 타입 검사가 깨진다. 이 데이터를 컬렉션으로 옮긴 뒤 다시 실행한다:')
+    for (const f of removedUsers) console.error(`  ✗ ${f}`)
+    return EXIT.REMOVED_SURFACE
   }
 
   if (!apply) {

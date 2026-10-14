@@ -20,23 +20,6 @@ export {
 } from "./signup";
 export { requestSmsLoginCode, loginWithSms, signupWithSms } from "./smsLogin";
 export {
-  listPosts,
-  getPost,
-  createPost,
-  updatePost,
-  deletePost,
-} from "./board";
-export {
-  listNoticePosts,
-  getNoticePost,
-  listFaqPosts,
-  getFaqPost,
-  listComments,
-  createComment,
-  updateComment,
-  deleteComment,
-} from "./notice";
-export {
   listRecords,
   getRecord,
   createRecord,
@@ -52,43 +35,7 @@ export {
 } from "./collection";
 export { uploadFile, uploadToTarget } from "./storage";
 export { getPurchaseTerms, beginPaymentWidget, getPaymentRedirectResult } from "./payment";
-export { registerRecipient } from "./recipient";
-export { getInquiryConfig, submitInquiry } from "./inquiry";
 export { normalizePhone, formatPhone } from "./phone";
-export { listSurveys, getSurvey, submitSurveyResponse } from "./survey";
-export {
-  listTargets,
-  getTarget,
-  getAvailableSlots,
-  getSlotRange,
-  createBooking,
-  prepareBooking,
-  startBooking,
-  confirmBooking,
-  listMyBookings,
-  getBooking,
-  updateBooking,
-  cancelBooking,
-  beginReservationWidgetCheckout,
-  getReservationCheckoutContext,
-  clearReservationCheckoutContext,
-} from "./reservation";
-export {
-  getStoreConfig,
-  listProducts,
-  listCategories,
-  getProduct,
-  prepareOrder,
-  startOrder,
-  confirmOrder,
-  listMyOrders,
-  getOrder,
-  confirmPurchase,
-  cancelOrder,
-  beginStoreWidgetCheckout,
-  getStoreCheckoutContext,
-  clearStoreCheckoutContext,
-} from "./store";
 export { SDK_VERSION } from "../version";
 export type {
   Envelope,
@@ -98,15 +45,6 @@ export type {
   AuthState,
 } from "./types";
 export type {
-  BoardPost,
-  PostListResult,
-  PostListOptions,
-  PostCreateInput,
-  BoardSettings,
-  CategoryGroup,
-  PostCategories,
-} from "./board";
-export type {
   AuthConfig,
   SignupTerms,
   TermsDocument,
@@ -115,7 +53,6 @@ export type {
   CompleteProfileInput,
 } from "./signup";
 export type { SmsCodeSent, SmsLoginResult, SmsSignupInput, SmsSignupResult } from "./smsLogin";
-export type { Comment } from "./notice";
 export type {
   DynRecord,
   DynRecordDetail,
@@ -146,19 +83,3 @@ export type {
   CustomPaymentWidgetHandle,
   PaymentRedirectResult,
 } from "./payment";
-export type { RecipientInput } from "./recipient";
-export type { InquiryConfig, InquiryInput, InquiryResult } from "./inquiry";
-export type { Survey } from "./survey";
-export type {
-  ReservationTarget,
-  ReservationWidgetCheckoutParams,
-  ReservationWidgetHandle,
-  ReservationCheckoutContext,
-} from "./reservation";
-export type {
-  StoreConfig,
-  Product,
-  StoreWidgetCheckoutParams,
-  StoreWidgetHandle,
-  StoreCheckoutContext,
-} from "./store";
