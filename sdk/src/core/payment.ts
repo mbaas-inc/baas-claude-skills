@@ -10,7 +10,8 @@ export interface PurchaseTerms {
   [key: string]: unknown;
 }
 
-/** 표준 구매약관 조회(프로젝트 공통) — 결제 진입 전 content 표시 + 동의용. */
+/** 표준 구매약관 조회(프로젝트 공통) — 결제 진입 전 content 표시 + 동의용.
+ *  TODO(2.0): 경로가 아직 store 네임스페이스다 — 서버가 store 와 무관한 경로로 옮기면 함께 바꾼다. */
 export const getPurchaseTerms = () =>
   request<PurchaseTerms>(`/public/store/${getProjectId()}/terms`);
 

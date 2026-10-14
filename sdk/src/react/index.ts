@@ -5,20 +5,9 @@
 import * as core from "../core/index";
 import { AuthProvider, useAuth, RequireAuth } from "./AuthProvider";
 import { useLogin, useSignup, useSmsLogin, useLogout } from "./hooks";
-import { useBoard } from "./useBoard";
 import { useCollection } from "./useCollection";
 import { useFileUpload } from "./useFileUpload";
-import {
-  usePayment,
-  useRecipient,
-  useInquiry,
-  useNotice,
-  useFaq,
-  useComments,
-  useSurvey,
-  useReservation,
-  useStore,
-} from "./moreHooks";
+import { usePayment } from "./moreHooks";
 
 export const BaasSDK = {
   version: core.SDK_VERSION,
@@ -45,12 +34,6 @@ export const BaasSDK = {
   requestSmsLoginCode: core.requestSmsLoginCode,
   loginWithSms: core.loginWithSms,
   signupWithSms: core.signupWithSms,
-  // board (dynamic)
-  listPosts: core.listPosts,
-  getPost: core.getPost,
-  createPost: core.createPost,
-  updatePost: core.updatePost,
-  deletePost: core.deletePost,
   // collection (동적 컬렉션 레코드)
   listRecords: core.listRecords,
   getRecord: core.getRecord,
@@ -62,50 +45,13 @@ export const BaasSDK = {
   // storage (파일 업로드 — presign→S3 PUT, cdn_url 반환)
   uploadFile: core.uploadFile,
   uploadToTarget: core.uploadToTarget,
-  // notice/faq/comments
-  listNoticePosts: core.listNoticePosts,
-  getNoticePost: core.getNoticePost,
-  listFaqPosts: core.listFaqPosts,
-  getFaqPost: core.getFaqPost,
-  listComments: core.listComments,
-  createComment: core.createComment,
-  updateComment: core.updateComment,
-  deleteComment: core.deleteComment,
   // phone (형식 유틸 — formatPhone: 입력 자동 하이픈 / normalizePhone: 전송 정규화)
   normalizePhone: core.normalizePhone,
   formatPhone: core.formatPhone,
-  // recipient / inquiry / survey / reservation / store
-  registerRecipient: core.registerRecipient,
-  getInquiryConfig: core.getInquiryConfig,
-  submitInquiry: core.submitInquiry,
-  listSurveys: core.listSurveys,
-  getSurvey: core.getSurvey,
-  submitSurveyResponse: core.submitSurveyResponse,
-  listTargets: core.listTargets,
-  getTarget: core.getTarget,
-  getAvailableSlots: core.getAvailableSlots,
-  getSlotRange: core.getSlotRange,
-  createBooking: core.createBooking,
-  prepareBooking: core.prepareBooking,
-  confirmBooking: core.confirmBooking,
-  listMyBookings: core.listMyBookings,
-  getBooking: core.getBooking,
-  updateBooking: core.updateBooking,
-  cancelBooking: core.cancelBooking,
-  // payment (결제 공통 — 약관 조회 · 커스텀 결제 위젯. 금액은 store/reservation/커스텀 백엔드 소유)
+  // payment (결제 공통 — 약관 조회 · 커스텀 결제 위젯. 금액은 커스텀 백엔드(serverFn) 소유)
   getPurchaseTerms: core.getPurchaseTerms,
   beginPaymentWidget: core.beginPaymentWidget,
   getPaymentRedirectResult: core.getPaymentRedirectResult,
-  getStoreConfig: core.getStoreConfig,
-  listProducts: core.listProducts,
-  listCategories: core.listCategories,
-  getProduct: core.getProduct,
-  prepareOrder: core.prepareOrder,
-  confirmOrder: core.confirmOrder,
-  listMyOrders: core.listMyOrders,
-  getOrder: core.getOrder,
-  confirmPurchase: core.confirmPurchase,
-  cancelOrder: core.cancelOrder,
   // react hooks
   AuthProvider,
   useAuth,
@@ -114,23 +60,13 @@ export const BaasSDK = {
   useSignup,
   useSmsLogin,
   useLogout,
-  useBoard,
   useCollection,
   useFileUpload,
   usePayment,
-  useRecipient,
-  useInquiry,
-  useNotice,
-  useFaq,
-  useComments,
-  useSurvey,
-  useReservation,
-  useStore,
 };
 
 export {
-  AuthProvider, useAuth, RequireAuth, useLogin, useSignup, useSmsLogin, useLogout, useBoard, useCollection,
-  useFileUpload,
-  usePayment, useRecipient, useInquiry, useNotice, useFaq, useComments, useSurvey, useReservation, useStore,
+  AuthProvider, useAuth, RequireAuth, useLogin, useSignup, useSmsLogin, useLogout, useCollection,
+  useFileUpload, usePayment,
 };
 export * from "../core/index";

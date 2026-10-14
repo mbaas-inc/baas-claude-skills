@@ -52,9 +52,9 @@ test('서비스 경로로 부르고 분류 기본값은 images', () => {
 })
 
 test('비로그인(소유자 전용 serverFn)이어도 발급 — 권한은 serverFn 의 access 가 정한다', () => {
-  const r = run(OK, `(sdk) => sdk.storage.presign({ filename: 'a.png', contentType: 'image/png', size: 1, category: 'store' })`)
+  const r = run(OK, `(sdk) => sdk.storage.presign({ filename: 'a.png', contentType: 'image/png', size: 1, category: 'images' })`)
   assert.equal(r.error, null)
-  assert.equal(r.calls[0].body.category, 'store')
+  assert.equal(r.calls[0].body.category, 'images')
 })
 
 test('브라우저에 넘길 모양 — upload_url · content_type · cdn_url', () => {
