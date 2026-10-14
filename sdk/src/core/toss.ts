@@ -71,7 +71,7 @@ export function loadTossPayments(): Promise<TossPaymentsCtor> {
 
 /**
  * 결제위젯 공용 프리미티브 — clientKey·금액·컨테이너 셀렉터만 주면 결제수단/약관 위젯을 앱 DOM 에 렌더하고,
- * 결제 버튼에서 호출할 `requestPayment` 를 가진 handle 을 돌려준다. store/reservation 이 각자의 prepare 로
+ * 결제 버튼에서 호출할 `requestPayment` 를 가진 handle 을 돌려준다. 결제 세션을 만든 쪽(serverFn)의 응답으로
  * 주문(금액·orderId·clientKey)을 만든 뒤 이 함수를 호출한다.
  * (SDK 내부 전용 — 백엔드 prepare 없이 단독 호출하면 주문 없는 결제가 되므로 공개 표면으로 노출하지 않는다.)
  */

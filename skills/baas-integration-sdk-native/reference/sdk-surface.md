@@ -12,55 +12,38 @@ transport·envelope·project_id 주입은 SDK 내부가 처리한다 — 아래 
 
 | 호출 형태 | 실패 시 |
 |---|---|
-| **훅의 액션 함수** (`useBoard().submitPost`, `useStore().confirm`, `useLogin().login`, `useFileUpload().upload` …) | **throw 하지 않는다.** `null`(또는 `login`/`logout` 은 `false`) 을 resolve 하고 실패는 훅의 `error` state 에 담긴다 |
-| **예외 — `beginWidgetCheckout`** (store·reservation)| 이것만 **throw 한다**(내부 래퍼를 거치지 않음) → `try/catch` 필요 |
+| **훅의 액션 함수** (`useLogin().login`, `useFileUpload().upload` …) | **throw 하지 않는다.** `null`(또는 `login`/`logout` 은 `false`) 을 resolve 하고 실패는 훅의 `error` state 에 담긴다 |
+| **예외 — `usePayment().beginWidget`** | 이것만 **throw 한다**(내부 래퍼를 거치지 않음) → `try/catch` 필요 |
 | **훅 없는 top-level 함수** (`BaasSDK.uploadFile`, `uploadToTarget`, `changePassword`, `getAccountInfo` …) | `BaasError`(`.message` 한국어, `.errorCode`, `.status`) **throw** |
 
 ```tsx
 // ❌ 훅 액션에 try/catch — catch 가 실행되지 않아 실패가 성공처럼 보인다
-try { await submitPost(BOARD_ID, {title, content}); navigate("/board"); } catch { /* 절대 안 옴 */ }
+try { await login(id, pw); navigate("/"); } catch { /* 절대 안 옴 */ }
 
 // ✅ 반환값을 확인한다
-const ok = await submitPost(BOARD_ID, { title, content });
+const ok = await login(id, pw);
 if (!ok) return;              // error state 를 화면에 노출
-navigate("/board");
+navigate("/");
 ```
 
-### ② 반환값 vs 훅 state — **셋은 서로 다른 규약이다**
+### ② 반환값 vs 훅 state
 
 `fetch*` 를 호출한 뒤 무엇을 렌더에 쓸지는 훅마다 다르다. **표에 없는 이름을 구조분해하면
 `undefined` 라서 화면이 영구히 빈 상태가 된다.**
 
 **불변식: 훅에 state 가 있으면 `fetch*` 반환값 === 그 state 값이다.** 둘 중 무엇을 써도 같다.
-state 가 **없는** 함수만 반환값을 로컬 state 로 받으면 된다.
 
 | 훅 | 훅이 노출하는 state | `fetch*` 반환값 | 렌더에 쓸 것 |
 |---|---|---|---|
-| `useBoard` | `posts` = `{items,total}` · `post` | 같은 값 | state 또는 반환값 |
-| `useNotice`/`useFaq` | `posts` = `{items,total}` · `post` | 같은 값 | state 또는 반환값 |
-| `useComments` | `comments` = `{items,total}` | 같은 값 | state 또는 반환값 |
-| `useStore` | `config` · `products` = **배열** | 같은 값(배열) | state 또는 반환값 |
-| `useSurvey` | `surveys` = **배열** · `survey` | 같은 값(배열) | state 또는 반환값 |
-| `useReservation` | `targets` = 배열 | `fetchTargets` 는 같은 값 | state 또는 반환값 |
-| `useInquiry` | `config` | `fetchConfig` 는 같은 값 | state 또는 반환값 |
-| — **state 없음** — | | | |
-| `useReservation` | — | `fetchTarget` · `fetchSlots` · `myBookings` | **반환값을 로컬 state 로** |
-| `useStore` | — | `fetchProduct` · `myOrders` | **반환값을 로컬 state 로** |
-| `useInquiry` | — | `submit` → `{ accepted, message }` | **반환값**(`result.message` 를 그대로 노출) |
+| `useAuth` | `isLoggedIn` · `user` · `loading` | — | state |
+| `usePayment` | — | `fetchTerms` → `{ title, content, version }` | **반환값을 로컬 state 로** |
 
-**목록 형태가 두 가지인 이유**: 페이지네이션이 있는 조회(게시판·공지·댓글)는 총 개수가
-필요해 `{items, total}` 봉투를, 전량 조회(스토어 상품·설문·예약 대상)는 **배열**을 준다.
-
-**state 없는 함수는 백엔드 응답을 그대로 준다**(가공 없음) — 그래서 `fetchSlots` 는 `{target_id, date,
-slots}` 봉투이고 `fetchTarget` 은 `reservation_settings` 가 중첩된 객체다(각 절의 shape 참조).
-
-> v0.13.0 변경: 이전엔 `useStore().fetchProducts` / `useSurvey().fetchSurveys` 가 state 엔 배열을 넣고
-> **반환은 `{items}` 봉투**를 줘서 `(await fetchProducts()).map(...)` 이 `TypeError` 였다. 위 불변식으로
-> 통일했다 — 반환값을 쓰던 코드에서 `.items` 를 떼면 된다.
+> v2.0.0 변경: 게시판·공지/FAQ·댓글·설문·예약·스토어·문의·발송대상 훅이 SDK 에서 빠졌다.
+> 없는 훅을 부르면 `BaasSDK.useBoard is not a function` 으로 화면이 깨진다.
 
 ### ③ 훅 반환 컨테이너를 의존성 배열에 넣지 않는다
-`const c = useBoard()` 처럼 컨테이너를 통째로 들고 `[c]` 를 의존성에 넣으면 매 렌더 새 객체라
-**무한 재요청 + 영구 로딩**이 된다. 개별 함수만 구조분해한다(`const { fetchPosts } = useBoard()`).
+`const c = BaasSDK.useXxx()` 처럼 컨테이너를 통째로 들고 `[c]` 를 의존성에 넣으면 매 렌더 새 객체라
+**무한 재요청 + 영구 로딩**이 된다. 개별 함수만 구조분해한다.
 `useMemo` 로 우회되지 않는다(반환 객체에 매 호출 토글되는 `loading` 이 함께 담겨 있다).
 
 ---
@@ -307,27 +290,6 @@ await BaasSDK.completeProfile({
 5. 로그인 시작 시 `project_login_url` 에 `&next=/원래경로` 를 이어 붙이면 복귀 지점을 지정할 수
    있다. 생략하면 앱 루트로 돌아온다.
 
----
-
-## 게시판 (board)
-
-board_id 는 **프로비저닝 담당이 미리 생성**한 값을 코드 상수로 주입한다(생성 방식·CLI 문법은 이 문서 범위 밖).
-
-### `useBoard()`
-```tsx
-const { posts, post, loading, error, fetchPosts, fetchPost, submitPost, editPost, removePost } = BaasSDK.useBoard();
-
-await fetchPosts(BOARD_ID, { limit: 20, offset: 0, keyword });  // posts = { items: [...], total }
-await fetchPost(postId);                                        // post = { id, title, content, author_name, views, created_at }
-await submitPost(BOARD_ID, { title, content });                 // 로그인 필수
-await editPost(postId, { title, content });                     // 로그인 필수
-await removePost(postId);                                       // 로그인 필수
-```
-- `posts.items`가 빈 배열이면 "아직 글이 없습니다" 빈 상태 UI를 보여준다.
-- 목록/상세 읽기는 공개(비로그인 가능). 작성/수정/삭제는 로그인 필수 → 비로그인 시 로그인 유도.
-- 글 작성 성공 후 `fetchPosts`로 목록을 새로고침한다.
-
----
 
 ### `useLogout()` 외 계정
 ```tsx
@@ -337,174 +299,23 @@ SNS 계정은 비밀번호 변경 불가(서버가 에러 반환) — `error.mes
 
 ---
 
-## 발송대상 (recipient)
-
-뉴스레터 구독/예약 접수 등 "연락처(이름·전화)를 남기는" 폼. **문의·상담신청은 아래 `문의하기 (inquiry)` 를 쓴다**(연락처 목록이 아니라 문의 접수함으로 들어가고, 접수 여부·동의 문구를 소유자가 관리).
-```tsx
-const { register, loading, error } = BaasSDK.useRecipient();
-await register({ name, phone, description?, metadata? });  // metadata 는 객체 → SDK가 직렬화
-```
-UX: 제출 성공 시 "접수되었습니다" 안내, 폼 초기화. 인증 불필요.
-
----
-
-## 문의하기 (inquiry)
-
-비로그인 방문자가 이름·연락처(전화 **또는** 이메일)·내용을 남기는 "Contact us / 상담신청" 폼. 접수 여부·안내 문구·개인정보 동의 문구는 **서버(소유자 설정)가 내려준다** — 화면은 진입 시 `fetchConfig()` 로 읽어 분기하고, 문구를 코드에 박아 두지 않는다. 앱(SDK)이 설정을 바꾸는 API 는 없다 — 소유자 설정이라 프로비저닝 담당이 CLI 로 바꾼다.
-
-**이 기능이 하는 일과 하지 않는 일 (의도된 설계)**
-- 접수되면 문의 내용이 소유자의 알림 이메일(따로 정하지 않으면 가입 계정 이메일)로 바로 전송된다.
-- 소유자의 알림 전화번호(따로 정하지 않으면 가입 계정 전화번호)가 있으면, 메일이 왔으니 확인하라는 알림톡이 함께 간다. 알림톡에는 문의 내용이 없고, 메일이 나가지 않으면 알림톡도 가지 않는다.
-- 받은 문의는 그 메일로 확인한다. 앱 안에서 받은 문의를 조회·상태 변경하는 표면은 **제공하지 않는다.** 없는 것이 아니라 두지 않은 것이다.
-- 동의 문구 버전 기록 · 보존기간 파기 · 중복 접수 방지 · 위 알림은 이 기능을 쓸 때만 따라온다.
-
-**기획에 「받은 문의 관리」 같은 앱 내 관리 화면이 있으면**
-- 먼저 사용자에게 알린다: "문의는 메일로 받는 방식이라 앱 안 관리 화면이 없습니다."
-- 기본은 이 기능(폼 + 메일 알림)으로 만들고 관리 화면은 빼 둔다.
-
-**준비 작업 — 알림이 어디로 가는지 먼저 확인하고 알린다.** 접수 알림은 소유자가 따로 정하지 않으면 **가입 계정 이메일**로 간다(설정을 조회하면 지금 주소와, 그게 직접 정한 것인지 계정에서 따온 것인지가 함께 내려온다). 문의 폼을 넣을 때 사용자에게 그 주소를 알리고, **바꾸겠다고 할 때만** 바꾼다 — 묻지 않고 넘어가면 사장님은 문의가 어디로 오는지도, 바꿀 수 있다는 것도 모른 채 남는다. 실행 문법은 `baas <group> <action> --help`.
-```tsx
-const { config, fetchConfig, submit, loading, error } = BaasSDK.useInquiry();
-useEffect(() => { fetchConfig(); }, []);                     // config === 반환값 (아래 형태)
-
-if (config && !config.enabled) return <p>{config.disabled_message}</p>;   // 폼 자체를 숨김
-
-const result = await submit({
-  name, contact, email, content,                              // contact·email 중 하나 이상(클라 1차 검사, 서버도 400) — 빈 값은 SDK 가 생략
-  consent_agreed: agreed,                                     // 동의 체크박스 값. false 면 서버 400
-  consent_version: config.consent_version,                    // fetchConfig 로 받은 값을 그대로 echo(하드코딩 금지)
-});
-if (result) { showMessage(result.message); resetForm(); }    // "접수되었습니다" · "이미 접수되었습니다" 둘 다 성공 — message 그대로
-// result === null → error.message 그대로 노출(접수 중단·동의 누락·형식 오류·문구 버전 불일치 전부 한국어 문구)
-```
-```jsonc
-// config — GET /public/inquiry/{project_id}/config (소유자 설정이 없으면 서버 기본값)
-{
-  "enabled": true,                                   // false → disabled_message 만 표시, 폼 숨김
-  "disabled_message": "지금은 문의를 받지 않습니다",
-  "complete_message": "접수되었습니다",              // 참고값 — 실제 표시는 submit 반환 result.message
-  "consent_version": "1.0",                          // 예시값 — submit 의 consent_version 으로 그대로 전달(하드코딩 금지)
-  "consent_label": "개인정보 수집·이용에 동의합니다 (필수)",   // 체크박스 라벨
-  "consent_body": "- 수집 항목 — …\n- 이용 목적 — …\n…"     // 여러 줄 — split("\n") 후 줄 단위 <p>/<li> 로 렌더(한 줄로 합치지 않음)
-}
-```
-- **필드 규칙(서버 강제, 클라는 1차 검사만)**: `name` 1~64자(HTML 태그·줄바꿈 불가) · `contact` 숫자 9~11자리(하이픈 무관 — 전화 입력은 `onChange={e => setContact(BaasSDK.formatPhone(e.target.value))}`) · `email` 형식 · `content` 5~2000자 · `contact`/`email` 중 **하나 이상** · `consent_agreed === true`.
-- **중복 접수**: 같은 내용+같은 연락처를 5분 안에 다시 보내면 200 + `accepted: true` + `message: "이미 접수되었습니다"` 로 응답하고 저장하지 않는다. **에러가 아니다** — `result.message` 를 그대로 보여주면 끝. `accepted` 로 분기하지 않는다.
-- **로그인 무관**: 비로그인 전용 경로. `RequireAuth` 로 감싸거나 로그인을 유도하지 않는다. 크레딧 게이트 없음.
-- **에러**: 전부 `400 BAD_REQUEST`/`VALIDATION_ERROR` + 한국어 `message`(접수 중단이면 소유자의 `disabled_message` 가 그대로 옴, 문구 버전 불일치면 "…새로고침한 뒤 다시 시도해 주세요") → `error.message` 노출. `500`(동의 문구 원장 미준비)도 `error.message` 그대로. 엣지 속도제한(403) 가능 — 별도 처리 없음.
-- **UX**: `result` 비-null 이면 `result.message` 안내 + 폼 초기화. 허니팟·캡차 등 봇 방지 필드는 만들지 않는다(서버 범위 밖).
-- **발송대상(recipient) 과의 경계**: 문의/상담신청 → `inquiry`. 뉴스레터·구독·연락처 수집 → `recipient`. 한 폼에서 둘을 같이 호출하지 않는다.
-
----
-
-## 공지사항·FAQ (notice/faq)
-
-정적 게시판(공개 읽기 전용, board_id 불필요 — 프로젝트에 1개씩 고정).
-```tsx
-const { posts, post, loading, error, fetchPosts, fetchPost } = BaasSDK.useNotice(); // FAQ는 useFaq()
-await fetchPosts({ limit: 20, offset: 0, keyword, category, category_group });
-// posts = { items, total, board_settings }
-await fetchPost(postId);
-```
-
-### 카테고리(분류 그룹) — 있을 때만 렌더
-
-분류는 2단계다. 게시판이 그룹을 정의하고(`posts.board_settings.categories`), 게시글이 그중에서
-선택한다(`item.categories`).
-
-```ts
-board_settings.categories  // [{ name: "카테고리", values: ["결제", "계정"] }] | null
-item.categories            // { "카테고리": ["결제"] } | null
-```
-
-- **필터 UI는 `posts.board_settings.categories`가 있을 때만 렌더한다.** 관리자가 분류를 등록하지
-  않은 프로젝트에서는 둘 다 `null` — 하드코딩 금지.
-- 그룹 이름이 `"카테고리"`(기본값)면 표시에서 접두사를 생략한다(`결제`). 축이 둘 이상일 때만
-  `유형: 결제`처럼 그룹명을 붙인다.
-- 글 수가 적으면 전체를 받아 클라이언트에서 걸러도 되고, 목록이 길면 `category`(+`category_group`)로
-  서버 필터를 쓴다. `category_group`을 주면 그 그룹 안에서만 매칭한다.
-
----
-
-## 게시판 (board)
-
-board_id 는 **프로비저닝 담당이 생성**한 값을 코드 상수로 주입(게시판 종류는 FREE|REVIEW 등 — 생성은 이 문서 범위 밖).
-```tsx
-const { posts, post, loading, error, fetchPosts, fetchPost, submitPost, editPost, removePost } = BaasSDK.useBoard();
-await fetchPosts(BOARD_ID, { limit: 20, offset: 0, keyword, category, category_group });
-// posts = { items, total, board_settings }
-await fetchPost(postId);
-await submitPost(BOARD_ID, { title, content, categories });   // 로그인 필수
-await editPost(postId, { title, content, categories });       // 로그인 필수
-await removePost(postId);                          // 로그인 필수
-```
-- 목록/상세 읽기는 공개, 작성/수정/삭제는 로그인 필수 → 비로그인 시 로그인 유도.
-- 카테고리 구조·렌더 규칙은 공지/FAQ와 동일(위 "카테고리(분류 그룹)" 참조). 쓰기 시
-  `categories`는 `{ 그룹명: [값] }` 형태이며 **`board_settings.categories`의 부분집합**이어야 한다
-  — 벗어나면 서버가 400으로 거부한다.
-- `posts.items`가 비면 "아직 글이 없습니다" 빈 상태. 작성 성공 후 `fetchPosts` 재조회.
-- **작성자 식별 필드는 `author_id`(계정 UUID) 이며 `fetchPost`(상세)에만 있다. `fetchPosts`(목록)
-  응답에는 없다** — 목록에는 표시용 `author_name` 만 온다.
-
-### 후기 게시판 — 별점은 **네이티브가 들고 있다**
-
-「이용 후기」·「리뷰」·「만족도」 요구는 **REVIEW 종류의 게시판**으로 만든다. 별점은 게시글의
-`rating`(1~5) 필드이며 **같은 `useBoard()` 훅을 그대로 쓴다.**
-
-```tsx
-await submitPost(REVIEW_BOARD_ID, { title, content, rating: 5 })   // 1~5
-posts.items.map(p => p.rating)                                     // 없으면 null
-```
-
-- `rating` 은 **REVIEW 게시판에서만** 의미가 있다. 다른 종류에 보내면 서버가 무시하고, 읽으면 null 이다
-- **별점 때문에 후기를 따로 만들지 마라.** 실측(2026-09-17): 네이티브 후기 게시판이 있는데도
-  후기를 커스텀 백엔드으로 새로
-  구현했다 — 그러면 댓글·신고·관리자 숨김·운영 콘솔을 전부 잃는다
-- 평균 별점·분포 같은 **집계**는 이 표면에 없다. 목록을 받아 화면에서 계산하거나, 글 수가 많아
-  집계가 무거워지면 그때 백엔드 규칙으로 옮긴다
-  - 상세에서 본인 글 판정: `post.author_id === user.id` (`useAuth()` 의 `user`).
-  - **"내가 쓴 글 목록" 화면은 식별자 기반 필터가 불가능**하다. 그 화면이 요구되면 사람에게 제약을
-    보고한다 — `author_name` 비교는 동명이인을 구분하지 못하므로 권장하지 않는다.  - 수정/삭제 버튼 노출은 위 판정으로 좁히되, **실제 권한 경계는 서버(403)** 다.
-
-## 댓글 (comments)
-```tsx
-const { comments, loading, error, fetchComments, addComment, editComment, removeComment } = BaasSDK.useComments();
-await fetchComments(postId, "latest");     // 공개 읽기 → comments = { items: [...], total } (board.posts 와 동일 형태, 배열 아님)
-await addComment(postId, content);         // 로그인 필수
-await editComment(postId, commentId, content);
-await removeComment(postId, commentId);
-```
-
----
-
-## 설문조사 (survey)
-```tsx
-const { surveys, survey, loading, error, fetchSurveys, fetchSurvey, submitResponse } = BaasSDK.useSurvey();
-await fetchSurveys({ status: "OPEN" });   // surveys = 배열
-await fetchSurvey(surveyId);               // survey.form_url / share_code
-await submitResponse(surveyId, answers);   // 공개 제출
-```
-목록에서 각 항목의 `form_url`(있으면)로 외부 참여 페이지 이동도 가능. 응답 제출은 인증 불필요.
-
----
-
 ## 결제 (payment) — 공통 규약
 
-결제가 들어가는 **모든 흐름(스토어·예약, 그리고 결제를 붙이는 커스텀 화면)** 에 공통 적용된다.
-결제 실행(금액 확정 prepare / 시크릿키 정산 confirm / 위젯 렌더)은 **store·reservation 백엔드가 소유**한다
-(금액 권위·정산이 서버에 있어야 안전). 앱은 아래 공통 규칙만 지키면 된다.
+결제가 들어가는 **모든 화면**에 공통 적용된다. 결제 세션 생성(금액 확정)과 승인(confirm)은
+**커스텀 백엔드(serverFn)가 소유**한다(`baas-backend` 의 `sdk.payments` — 금액 권위·정산이 서버에 있어야 안전).
+앱은 serverFn 이 준 세션으로 위젯만 띄우고, 아래 공통 규칙을 지킨다.
 
 ### 위젯 인라인 단일 방식
-- 결제는 **결제위젯(인라인) 단일 방식**이다. `beginWidgetCheckout` 이 결제수단/약관 위젯을 앱 DOM(셀렉터 2개)에
+- 결제는 **결제위젯(인라인) 단일 방식**이다. `usePayment().beginWidget(session, …)` 이 결제수단/약관 위젯을 앱 DOM(셀렉터 2개)에
   렌더하므로 **결제 도중 앱 화면(헤더·뒤로가기)이 유지**된다(리다이렉트 결제 아님).
-- **결제 세션/주문(order_no)은 위젯 진입 시점(`beginWidgetCheckout`, 보통 약관 동의 후)에 생성된다** — SDK가 그때
-  백엔드 `start` 를 호출해 order_no 를 미리 확보한다. 앱은 `beginWidgetCheckout` → `handle.requestPayment` 만 호출.
+- **결제 세션/주문(order_no)은 위젯 진입 전에 serverFn 이 만든다**(보통 약관 동의 후 serverFn 호출). 앱은
+  serverFn 이 준 세션으로 `beginWidget` → `handle.requestPayment` 만 호출.
 - **⚠ `handle.requestPayment` 는 결제 버튼 클릭 핸들러 안에서 *동기로* 호출한다(앞에 `await` 등 비동기 작업 금지).**
   현대카드 등 팝업/앱카드 결제창은 사용자 제스처가 끊기면 안 뜬다 — 그래서 order_no 를 클릭 전에 미리 만들어 둔다.
-  (결제까지 안 간 주문/예약은 자리를 잡지 않고 목록에도 안 보인다 — 정리할 것이 없다.)
+  (자리·재고는 결제가 끝난 뒤 serverFn 이 확정한다 — 결제창만 열고 떠난 손님이 자리를 묶지 않는다.)
 - **결제 완료 = successUrl 복귀 → confirm.** 카드 · 간편결제 · 계좌이체만 받는다 — **가상계좌는 받지 않는다**(입금
-  대기로 끝나면 서버가 취소하고 오류를 돌려준다). 예약은 confirm 직전에 정원을 다시 확인하므로, 결제 사이 마감되면
-  청구 없이 오류가 온다 — 그 메시지를 그대로 보여 준다.
+  대기로 끝나면 서버가 취소하고 오류를 돌려준다). 승인 뒤 정원·재고를 넘으면 serverFn 이
+  결제를 취소하고 사유를 돌려준다 — 그 사유를 그대로 보여 준다.
 - `toss_client_key` 는 **결제위젯 키**(`test_gck_/live_gck_`)여야 한다(개별연동 `ck_` 키는 위젯 미지원).
 - 결제 복귀 라우트는 **평면 경로**(`/checkout-success` 등)로 둔다.
 - 결제창 닫힘/취소는 `code === "USER_CANCEL"` 에러 → 앱에서 무시(토스트 금지).
@@ -519,7 +330,7 @@ await submitResponse(surveyId, answers);   // 공개 제출
   회원별로 분리해야 할 이유가 생기면 **UUID 에서 하이픈을 뺀 32자**처럼 길이와 안정성을 함께
   만족시키는 값을 쓰고, 그럴 이유가 없으면 **그냥 넘기지 마라.**
 - **위젯 생명주기 주의**: 동의 토글 등으로 위젯 컨테이너(셀렉터 div)를 **조건부 언마운트**하면, 동의 해제 시
-  위젯 상태(ready 플래그·handle ref)를 **리셋**해 재동의 시 `beginWidgetCheckout` 를 다시 호출·재렌더해야 한다.
+  위젯 상태(ready 플래그·handle ref)를 **리셋**해 재동의 시 `beginWidget` 을 다시 호출·재렌더해야 한다.
   리셋 없이 "이미 렌더함" 가드만 두면 **재체크 시 빈 컨테이너로 위젯이 안 뜬다**(실측 결함). 컨테이너를 항상
   마운트하고 CSS로만 숨기는 방식도 가능.
 
@@ -532,12 +343,12 @@ const pay = BaasSDK.usePayment();
 const terms = await pay.fetchTerms();   // { title, content, version }
 // content 를 결제 버튼 위 약관 영역(접기/펼치기 권장)에 표시 + 동의 체크박스
 ```
-- **동의 체크 전에는 결제(`beginWidgetCheckout`)로 진입하지 말 것.** (서버 prepare 는 동의를 전제한다.)
-- 스토어·예약뿐 아니라 **결제를 붙이는 어떤 화면에서든** 이 동의 게이트를 둔다.
+- **동의 체크 전에는 결제(`beginWidget`)로 진입하지 말 것.**
+- **결제를 붙이는 어떤 화면에서든** 이 동의 게이트를 둔다.
 
 ### [필수] ② 통신판매중개업 고지 (푸터) — 웹 앱 전역 푸터에 1회
-스토어/결제가 있는 앱은 **웹 앱의 전역 푸터(앱 레이아웃 Footer)에 딱 1회** 아래 **통신판매중개업자(=플랫폼
-운영사) 고정 정보**를 표기한다(전자상거래법 제20조① 통신판매중개자 고지). **스토어 목록·상세·체크아웃 등
+결제가 있는 앱은 **웹 앱의 전역 푸터(앱 레이아웃 Footer)에 딱 1회** 아래 **통신판매중개업자(=플랫폼
+운영사) 고정 정보**를 표기한다(전자상거래법 제20조① 통신판매중개자 고지). **상품 목록·상세·결제 등
 페이지 컴포넌트마다 중복 배치하지 말 것** — 전역 레이아웃 Footer 한 곳이면 모든 페이지에서 노출된다(목록→상세
 이동 시 매번 따로 뜨면 안티패턴). **셀러/앱 운영주체(예: 협회·클라이언트)의 정보가 아니라 플랫폼 운영사
 정보이며, API로 내려오지 않으니 아래 문구를 그대로 넣는다.** 개별 셀러 신원정보는 노출하지 않는다.
@@ -556,8 +367,8 @@ const terms = await pay.fetchTerms();   // { title, content, version }
   앵커 텍스트는 `사업자정보확인`(`wrkr_no`=사업자번호 하이픈 제거). 신고번호 등 텍스트는 그대로 두고 링크만 덧붙인다.
 - 상호·사업자번호·신고번호·주소·연락처는 API로 내려오지 않는 플랫폼 운영사 고정 정보다(변경 시 이 스킬 문구 갱신).
 - **배치**: 전역 레이아웃이 모든 화면을 감싸면 그 Footer에 1회. **탭/비탭 라우트가 나뉘는 모바일 앱**은
-  공용 푸터 컴포넌트를 만들어 스토어/결제 화면에 **일관 배치**(모바일은 하단 탭바와 겹치지 않게). 어느 경우든
-  **스토어 페이지 컴포넌트마다 즉석 삽입은 금지**(목록→상세 중복 노출 안티패턴).
+  공용 푸터 컴포넌트를 만들어 결제 화면에 **일관 배치**(모바일은 하단 탭바와 겹치지 않게). 어느 경우든
+  **페이지 컴포넌트마다 즉석 삽입은 금지**(목록→상세 중복 노출 안티패턴).
 - **구조 권장(정돈된 커머스 푸터, 예: 네이버 스타일)**: `고지 문구 → 사업자정보(라벨·값 인라인, 구분점 ·) →
   고객센터(전화·이메일) → 저작권` 순으로 구획화한다. 밋밋한 `<p>` 나열보다 라벨을 흐리게·항목을 `·` 로 구분해
   가독성을 높인다.
@@ -569,152 +380,7 @@ const terms = await pay.fetchTerms();   // { title, content, version }
   ```
 
 ### 커스텀 화면에 결제를 붙일 때
-"돈이 실제로 움직이는" 결제의 금액은 **브라우저가 정하지 않는다.** 네이티브 스토어 · 예약은 그쪽
-`beginWidgetCheckout` 을 쓴다. 결제 화면엔 위 ①② 와 위젯 규칙을 동일 적용.
-
----
-
-## 예약 (reservation)
-
-슬롯/캘린더 기반. 무료·현장 예약은 즉시 생성, 카드 예약은 `beginWidgetCheckout`(위젯 인라인 — 위 **결제 공통 규약** 참조).
-```tsx
-const r = BaasSDK.useReservation();
-await r.fetchTargets();                          // 예약 대상 목록(공개) → 훅 state `targets` 에 담김
-await r.fetchTarget(targetId);                   // 대상 상세 — ⚠️ state 없음, 반환값을 로컬 state 로
-await r.fetchSlots(targetId, { date });          // 가용 슬롯 — ⚠️ state 없음 + 봉투 반환(아래)
-await r.book(targetId, { reserved_at, form_data, payment_method });  // 무료·현장 즉시 예약, 로그인 필수
-//   ⚠️ payment_method 는 유료 + 결제수단 복수 제공일 때 **필수**다(아래 "결제 경로 선택" 표).
-```
-
-**`fetchTarget()` 반환 shape — 가격·정원·소요시간은 평평하지 않고 `reservation_settings` 안에 중첩된다.**
-`target.price` / `target.capacity` 같은 평평한 필드는 **없다**(그렇게 쓰면 런타임 크래시):
-```jsonc
-{
-  "id": "...", "name": "도자기 기초 물레성형", "description": "...", "image_url": null,
-  "is_active": true, "display_order": 0,
-  "reservation_settings": {
-    "operating_hours": { "mon": [["10:00","18:00"]], /* … 요일별 */ },
-    "slot_policy":   { "slot_duration_min": 120, "slot_capacity": 4,
-                        "advance_booking_days": 30, "min_lead_time_min": 0 },
-    "payment_policy": { "amount": 45000, "online": true, "onsite": false },
-    "approval_policy": { "auto_confirm": true, "confirmation_message": "..." },
-    "user_policy":   { "cancel_deadline_min": 1440, "allow_self_modify": true, "max_active_per_user": 3 }
-  },
-  "reservation_form_schema": { "fields": [] }
-}
-```
-| 화면에 쓸 값 | 경로 |
-|---|---|
-| 참가비 | `target.reservation_settings.payment_policy.amount` |
-| 정원 | `target.reservation_settings.slot_policy.slot_capacity` |
-| 소요시간 | `target.reservation_settings.slot_policy.slot_duration_min` |
-| **제공 결제수단** | `payment_policy.online` · `payment_policy.onsite` → **예약 경로를 이 값으로 고른다**(아래) |
-
-### 결제 경로 선택 — `payment_policy` 를 읽어 분기한다 (한쪽으로 고정하지 말 것)
-
-**`online`/`onsite` 는 대상마다 다르고, 운영자가 콘솔에서 언제든 켜고 끈다.** 앱 생성 시점에 관측한
-값으로 경로를 고정하면 정책이 바뀌는 순간 조용히 깨진다 — 화면은 멀쩡히 그려지고 **예약 버튼만 죽는다.**
-매번 `fetchTarget()` 결과를 읽어 분기한다.
-
-| `amount` | `online` | `onsite` | 화면이 해야 할 것 |
-|---|---|---|---|
-| `0` | – | – | **무료** — `book(id, { reserved_at, form_data })` (`payment_method` 생략) |
-| `>0` | ✅ | ❌ | `beginWidgetCheckout` (위젯). **①구매약관 ②중개고지 푸터 필수** |
-| `>0` | ❌ | ✅ | `book(id, { …, payment_method: 'onsite' })` — 약관·푸터 불요(앱이 결제를 중개하지 않음) |
-| `>0` | ✅ | ✅ | **사용자에게 결제수단을 고르게 한다.** 고른 값이 `onsite` 면 `book(…, 'onsite')`, `online` 이면 위젯 |
-
-- ⚠️ **유료 + 복수 제공인데 `payment_method` 를 안 보내면 400** `"결제 방법을 선택해 주세요."` 다.
-  단일 제공일 때만 서버가 자동 선택한다 — 그래서 "지금 onsite 하나뿐"인 상태에서 만든 코드는
-  나중에 online 이 켜지는 순간 400 으로 죽는다.
-- ⚠️ **`book()` 에 `payment_method: 'online'` 을 보내면 400** `"카드 결제 예약은 결제하기를 거쳐 결제가
-  끝나야 확정됩니다."` — 카드는 반드시 `beginWidgetCheckout` 경로다(결제하기 때 예약을 만들고, 자리는 결제가
-  끝나야 센다).
-- 제공되지 않는 수단을 보내도 400 `"선택한 결제 방법은 제공되지 않습니다."`
-
-**`fetchSlots()` 반환 shape — 배열이 아니라 봉투이고, 시각 필드명은 `slot` 이다**(`reserved_at` 아님):
-```jsonc
-{ "target_id": "...", "date": "2026-08-03",
-  "slots": [ { "slot": "2026-08-03T10:00:00", "remaining": 4 },
-             { "slot": "2026-08-03T12:00:00", "remaining": 4 } ] }
-```
-```tsx
-const res = await r.fetchSlots(targetId, { date });
-setSlots(res?.slots ?? []);          // ✅ 언랩 — res ?? [] 로 받으면 .map 이 TypeError
-// 렌더: slots.map(s => new Date(s.slot).toLocaleTimeString(...))   // ✅ s.slot (s.reserved_at 아님)
-```
-⚠️ **응답 필드명(`slot`)과 요청 파라미터명(`reserved_at`)이 다르다** — 값의 출처만 바꾸고 파라미터
-이름은 유지한다:
-```tsx
-await r.beginWidgetCheckout(targetId, { reserved_at: selected.slot, form_data: {} , … });
-```
-정원이 찬 슬롯은 서버가 이미 제외하고 준다(앱에서 다시 거를 필요 없음).
-
-```tsx
-
-// 카드예약(위젯 인라인 — store 와 동일 계약). 앱에 결제수단/약관 컨테이너 div 2개를 두고:
-const w = await r.beginWidgetCheckout(targetId, {
-  reserved_at, form_data,
-  methodsSelector: "#toss-payment-methods", agreementSelector: "#toss-agreement" });
-//   customerKey 는 넘기지 않는다 — 넘기면 SDK 의 익명 키 폴백이 걸리지 않는다(아래 규칙).
-//   → 진입 시 SDK가 start(예약 PENDING+세션 생성, 자리는 아직 안 잡음) → 위젯 렌더(w.amount, w.orderId). 결제 버튼 클릭 시(동기):
-await w.requestPayment({
-  successUrl: `${location.origin}/reservation-payment-success`,
-  failUrl: `${location.origin}/reservation-payment-fail`, orderName: `${target.name} 예약` });
-// → 성공 시 successUrl 리다이렉트(paymentKey/amount 쿼리). order_no/reserved_at/form_data 는 SDK가
-//   sessionStorage 에 보관 → 복귀 페이지에서:
-const ctx = r.getCheckoutContext();  // { target_id, order_no, reserved_at, form_data }
-await r.confirm(ctx.target_id, { order_no: ctx.order_no, payment_key, amount, reserved_at: ctx.reserved_at, form_data: ctx.form_data });
-r.clearCheckoutContext();
-
-await r.myBookings();                            // 내 예약(로그인)
-await r.cancel(reservationId);
-```
-- 결제 복귀 라우트는 **평면 경로**(`/reservation-payment-success`, `/reservation-payment-fail`)로 둘 것.
-- 예약은 `prepareBooking` 응답 안에 `client_key`가 포함된다(store 는 config 로 별도). confirm 필드는 **store·예약 모두 `order_no`**(값은 토스 orderId) — `beginWidgetCheckout()`/`getCheckoutContext()` 가 세부 배선을 흡수한다.
-- 결제 방식(위젯 인라인)·`USER_CANCEL` 처리, **[필수] ①구매약관 동의 ②통신판매중개 고지 푸터**는 위
-  **"결제 (payment) — 공통 규약"** 을 따른다(예약 결제 화면에도 ①②를 동일 적용).
-
----
-
-## 스토어 (store)
-
-디지털 상품 판매. 결제 방식·**[필수] ①구매약관 동의 ②통신판매중개 고지 푸터**는 위 **"결제 (payment) — 공통 규약"** 참조.
-```tsx
-const { config, products, fetchConfig, fetchProducts, fetchProduct, ... } = BaasSDK.useStore();
-await fetchConfig();                      // → 훅 state `config`. store_enabled 확인 후 진입(false면 "준비 중")
-await fetchProducts({ category_id });     // → state `products` = 배열. 반환값도 같은 배열(v0.13.0)
-await fetchProduct(productId);            // ⚠️ state 없음 — 반환값을 로컬 state 로 받는다
-
-// [필수] 구매약관은 결제 공통 훅으로 — const terms = await BaasSDK.usePayment().fetchTerms();
-//   content 를 결제 영역 위에 표시 + 동의 체크(동의 전 결제 진입 금지). 위 "결제 공통 규약 ①" 참조.
-// 결제(위젯 인라인) — 앱 화면 안에서 결제(뒤로가기 유지, 위젯이 결제수단 선택 제공). 동의 완료 후:
-// 1) 앱에 결제수단/약관 컨테이너 div 2개를 두고, 준비 시작:
-const w = await s.beginWidgetCheckout({ productId, quantity: qty,
-  methodsSelector: "#toss-payment-methods", agreementSelector: "#toss-agreement" });
-//   customerKey 는 넘기지 않는다 — 넘기면 SDK 의 익명 키 폴백이 걸리지 않는다(아래 규칙).
-//    → 진입 시 SDK가 start(주문 PENDING+세션 생성) → 위젯 렌더(w.amount, w.orderNo).
-// 2) 결제 버튼 클릭 시(동기 — 앞에 await 금지, 현대카드 등 팝업 제스처 유지):
-await w.requestPayment({ successUrl: `${location.origin}/checkout-success`,
-  failUrl: `${location.origin}/checkout-fail`, orderName });
-//    → 성공 시 successUrl 리다이렉트(paymentKey/orderId/amount 쿼리).
-//    order_no/product_id/quantity 는 SDK가 sessionStorage 에 보관 → 복귀 페이지에서(terms_agreed 는 SDK가 처리):
-const ctx = s.getCheckoutContext();  // { order_no, product_id, quantity }
-await s.confirm({ order_no: ctx.order_no, payment_key, amount, product_id: ctx.product_id, quantity: ctx.quantity });
-s.clearCheckoutContext();
-
-await s.myOrders();                        // 내 주문(로그인) — ⚠️ state 없음, 반환값을 로컬 state 로
-await s.confirmPurchase(orderId);          // 구매확정(환불 불가 — 확인 다이얼로그 필수)
-await s.cancel(orderId, reason);           // 취소=전액 환불
-```
-목록 렌더는 state `products` 를 쓰면 된다(반환값도 같은 배열이라 어느 쪽이든 동일):
-```tsx
-const { products, fetchProducts } = BaasSDK.useStore();
-useEffect(() => { fetchProducts({}) }, [fetchProducts]);
-return (products ?? []).map(p => …);                        // 초기값은 null 이므로 가드
-```
-- 결제 방식(위젯 인라인)·복귀 경로·`USER_CANCEL` 처리, **[필수] ①구매약관 동의 ②통신판매중개 고지 푸터**는
-  위 **"결제 (payment) — 공통 규약"** 을 따른다(구매약관은 `usePayment().fetchTerms()`).
-- **구매확정하면 환불 불가** — 구매확정 전 확인 다이얼로그 필수. 취소는 전액 환불(부분 환불 없음).
+"돈이 실제로 움직이는" 결제의 금액은 **브라우저가 정하지 않는다.** 결제 화면엔 위 ①② 와 위젯 규칙을 동일 적용.
 
 ---
 
@@ -728,13 +394,11 @@ S3 로 직접 PUT 한다(큰 바이너리가 CloudFront/Lambda 우회, 413/403·
 const { upload, isUploading, error } = BaasSDK.useFileUpload();
 
 // <input type="file"> 의 File 을 그대로 넘긴다. category 기본 "images".
-const res = await upload(file);                 // → { cdn_url, download_url, key, file_id? } | null
+const res = await upload(file);                 // → { cdn_url, download_url, key } | null
 if (res) setImageUrl(res.cdn_url);              // <img src={imageUrl}> 로 표시
 ```
-- **category**(저장 분류, 기본 `images`): `images`(이미지 확장자 jpg/png/gif/webp·최대 10MB) |
-  `store` | `reservation` | `board_import` | `board_attachment`. 일반 이미지는 `images` 로 충분.
-- **반환**: `cdn_url`(인라인 표시용 `<img src>`) · `download_url`(첨부 다운로드) · `key`(S3 경로) ·
-  `file_id`(board_attachment 에서만 — 게시글 `file_ids` 연결용).
+- **category**(저장 분류, 기본 `images`): `images`(이미지 확장자 jpg/png/gif/webp·최대 10MB) 하나뿐이다.
+- **반환**: `cdn_url`(인라인 표시용 `<img src>`) · `download_url`(첨부 다운로드) · `key`(S3 경로).
 - 훅은 `isUploading`(로딩)·`error`(실패 시 `BaasError`)를 노출하고 실패 시 `null` 반환(에러 표시 방식은 앱 UX 소관).
 - 훅 없이 직접 호출: `await BaasSDK.uploadFile(file, { category })` (성공 시 결과 resolve, 실패 시 throw).
 - `upload` 는 **로그인 회원**(프로젝트 소속)으로 올린다. `<input accept="image/*">` 로 클라 사전 필터 권장.
@@ -750,7 +414,7 @@ if (res) setImageUrl(res.cdn_url);              // <img src={imageUrl}> 로 표�
 | errorCode | HTTP | 의미 | 사용 주의 |
 |-----------|------|------|----------|
 | `VALIDATION_ERROR` | 400 | 입력이 규칙 위반 | 상세는 `.message` |
-| `BAD_REQUEST` | 400 | 요청이 규칙 위반(문의하기: 접수 중단·동의 누락·동의 문구 버전 불일치·연락처/이메일 둘 다 없음) | 상세는 `.message` — 그대로 노출 |
+| `BAD_REQUEST` | 400 | 요청이 규칙 위반 | 상세는 `.message` — 그대로 노출 |
 | `INVALID_USER` | 400 | 로그인 자격증명 불일치 | 로그인 맥락 |
 | `UNAUTHORIZED` | 401 | 미인증(로그인 안 됨) | `useAuth`의 비로그인 401은 **정상**(에러 처리 금지) |
 | `TOKEN_EXPIRED`/`INVALID_TOKEN` | 401 | 세션 만료·무효 | 재로그인 유도 대상 |

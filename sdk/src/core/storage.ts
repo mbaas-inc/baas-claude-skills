@@ -20,13 +20,8 @@ export interface UploadTarget {
   key: string;
 }
 
-/** 저장 분류 — images 는 이미지 확장자·최대 10MB. board_attachment 는 File 레코드(file_id) 생성. */
-export type UploadCategory =
-  | "images"
-  | "store"
-  | "reservation"
-  | "board_import"
-  | "board_attachment";
+/** 저장 분류 — images 는 이미지 확장자·최대 10MB. (2.0: 고정 기능 전용 분류 store·reservation·board_* 제거) */
+export type UploadCategory = "images";
 
 export interface UploadOptions {
   /** 저장 분류 (기본 "images") */
@@ -36,7 +31,7 @@ export interface UploadOptions {
 }
 
 export interface UploadResult extends UploadTarget {
-  /** board_attachment 카테고리에서만 반환되는 게시글 연결용 File id */
+  /** (레거시) 서버가 게시글 첨부용 File id 를 줄 때만 채워진다. 2.0 에서는 쓰지 않는다. */
   file_id?: number;
 }
 

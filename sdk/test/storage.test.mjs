@@ -54,7 +54,7 @@ test("uploadFile — presign 발급 후 S3 직접 PUT, cdn_url 반환", async ()
   assert.equal(res.key, "storage/images/logo.png");
 });
 
-test("uploadFile — 커스텀 category 전달", async () => {
+test("uploadFile — category 명시 전달", async () => {
   init({ projectId: PROJECT });
   let body;
   globalThis.fetch = async (url, opts) => {
@@ -65,8 +65,8 @@ test("uploadFile — 커스텀 category 전달", async () => {
     return { status: 200, ok: true };
   };
   const blob = new Blob([new Uint8Array([1])], { type: "image/jpeg" });
-  await uploadFile(blob, { filename: "b.jpg", category: "store" });
-  assert.equal(body.category, "store");
+  await uploadFile(blob, { filename: "b.jpg", category: "images" });
+  assert.equal(body.category, "images");
 });
 
 test("uploadFile — S3 PUT 실패 시 throw", async () => {

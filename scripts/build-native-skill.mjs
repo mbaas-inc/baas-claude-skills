@@ -40,9 +40,9 @@ const FENCE = /[ \t]*<!--collection:start-->[\s\S]*?<!--collection:end-->[ \t]*\
  */
 const CUTS = {
   "SKILL.md frontmatter (제공 기능)":
-    ", 동적 컬렉션(사용자 정의 데이터 모델 — 스키마 정의 + 레코드 CRUD, 고정 기능에 없는 임의 도메인 데이터를 DB처럼 다룸)",
+    ", 동적 컬렉션(사용자 정의 데이터 모델 — 게시판·공지·FAQ·후기·댓글·문의·신청·상품 목록 등 모든 업무 데이터를 스키마 + 레코드 CRUD로 다룸)",
   "SKILL.md frontmatter (Use when)":
-    ", 그리고 위 고정 기능(인증·발송대상·문의·게시판·설문·예약·스토어)에 없는 어떤 도메인 데이터든 저장·조회·목록·CRUD가 필요할 때(동적 컬렉션 — 예: 메뉴·포트폴리오·재고·예약목록·고객·일정 등 무엇이든)",
+    ", 그리고 게시판·공지·FAQ·후기·댓글·문의 폼·예약 신청·메뉴·포트폴리오·고객·일정 등 어떤 도메인 데이터든 저장·조회·목록·CRUD가 필요할 때(동적 컬렉션)",
 };
 
 /** features.json 의 프로즈 값 절단 — `<경로>` → 잘라낼 문자열들. */
@@ -52,8 +52,7 @@ const JSON_CUTS = {
     " · 올릴 수 있는 사람이 정해진 업로드(사장님 관리 화면 사진 등)는 serverFn 이 sdk.storage.presign 으로 받은 대상을 useFileUpload().uploadTo(target, file) 로 올림 — 앱 회원 로그인 불필요, 권한은 serverFn access(관리 화면 업로드를 upload 로 만들고 401 에 회원 로그인 안내 금지)",
   ],
   "data_flow.payment": [
-    "·커스텀",
-    " — 커스텀 원장 결제(예약금 등)는 금액을 DB(컬렉션)에 두고 serverFn 이 읽어 sdk.payments 로 세션 생성·승인하고 앱은 usePayment().beginWidget(serverFn 이 준 세션)+getRedirectResult() 결과를 serverFn 에 넘기기만(앱은 결제 대상 id 만 보내고 금액을 만들지 않음·승인은 브라우저가 하지 않음·payment_mode=test 면 테스트 결제 안내, 금액·결제상태를 커스텀 필드에 두고 클라가 쓰는 것 금지=위변조)",
+    " — 금액을 DB(컬렉션)에 두고 serverFn 이 읽어 sdk.payments 로 세션 생성·승인하고 앱은 usePayment().beginWidget(serverFn 이 준 세션)+getRedirectResult() 결과를 serverFn 에 넘기기만(앱은 결제 대상 id 만 보내고 금액을 만들지 않음·승인은 브라우저가 하지 않음·payment_mode=test 면 테스트 결제 안내, 금액·결제상태를 커스텀 필드에 두고 클라가 쓰는 것 금지=위변조)",
   ],
 };
 
