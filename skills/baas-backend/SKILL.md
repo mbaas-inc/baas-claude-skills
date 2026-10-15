@@ -1122,7 +1122,7 @@ export const addGalleryPhoto = serverFn<{ cdnUrl: string }, { id: string }>(asyn
 - 프론트는 `useFileUpload().uploadTo(presignGalleryPhoto 의 응답, file)` 로 파일을 올리고, 돌려받은
   `cdn_url` 을 `addGalleryPhoto` 에 넘긴다. 앱 회원 로그인이 없어도 된다 — 소유자 인증은 serverFn 이 받는다
 - **분류(`category`)는 `images`(기본) · `store` · `reservation`** 만 받는다. 게시판 첨부는 게시판 기능 몫이라
-  여기서 발급하지 않는다. `images` 는 이미지 확장자 · 최대 10MB, 실행 파일은 분류와 상관없이 거절(400 을 던진다)
+  여기서 발급하지 않는다. `images` 는 이미지 확장자 · 최대 100MB, 실행 파일은 분류와 상관없이 거절(400 을 던진다)
 - 받은 주소는 **곧 만료되는 일회용**이다. 저장해 두지 말고, 올린 뒤 남길 것은 `cdn_url` 이다
 - 회원이 자기 프로필 사진을 올리는 것처럼 **로그인 회원이면 누구나** 올리는 업로드는 serverFn 없이
   브라우저 `useFileUpload().upload` 로 충분하다
@@ -1149,7 +1149,7 @@ export const viewPhotos = serverFn<{ visitId: string }, { file_id: string; url: 
 
 - 프론트는 `useFileUpload().uploadTo(presignPhoto 의 응답, file)` 로 올리고, **`file_id` 만** 원장에 저장한다.
   열람 주소는 곧 만료되므로 저장하지 말고 화면에 보일 때마다 받는다
-- 형식은 `image/jpeg` · `png` · `webp` · `heic` · `application/pdf`, 최대 10MB. `size` 는 실제 바이트 수 —
+- 형식은 `image/jpeg` · `png` · `webp` · `heic` · `application/pdf`, 최대 100MB. `size` 는 실제 바이트 수 —
   다른 크기로 올리면 저장소가 서명 불일치로 거절한다
 - 원장에서 파일을 빼면 `storage.private.remove(fileIds)` 로 지운다(멱등). 프로젝트를 지우면 함께 보관 이동된다
 

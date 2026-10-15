@@ -397,7 +397,7 @@ const { upload, isUploading, error } = BaasSDK.useFileUpload();
 const res = await upload(file);                 // → { cdn_url, download_url, key } | null
 if (res) setImageUrl(res.cdn_url);              // <img src={imageUrl}> 로 표시
 ```
-- **category**(저장 분류, 기본 `images`): `images`(이미지 확장자 jpg/png/gif/webp·최대 10MB) 하나뿐이다.
+- **category**(저장 분류, 기본 `images`): `images`(이미지 확장자 jpg/png/gif/webp·최대 100MB) 하나뿐이다.
 - **반환**: `cdn_url`(인라인 표시용 `<img src>`) · `download_url`(첨부 다운로드) · `key`(S3 경로).
 - 훅은 `isUploading`(로딩)·`error`(실패 시 `BaasError`)를 노출하고 실패 시 `null` 반환(에러 표시 방식은 앱 UX 소관).
 - 훅 없이 직접 호출: `await BaasSDK.uploadFile(file, { category })` (성공 시 결과 resolve, 실패 시 throw).
