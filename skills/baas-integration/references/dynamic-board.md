@@ -547,7 +547,7 @@ interface CommentHiddenUpdate {
 }
 
 // 제한사항:
-// - 파일당 최대 10MB
+// - 파일당 최대 100MB
 // - 실행 파일 차단: .exe, .bat, .cmd, .sh, .ps1, .vbs, .js, .jar 등
 ```
 

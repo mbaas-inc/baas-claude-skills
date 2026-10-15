@@ -815,7 +815,7 @@ export async function toggleBoardCommentHidden(commentId, isHidden) {
 }
 
 /**
- * 게시판 파일 업로드 (로그인 필수, 파일당 10MB 제한)
+ * 게시판 파일 업로드 (로그인 필수, 파일당 100MB 제한)
  *
  * presigned URL 방식: 작은 JSON으로 업로드 URL을 발급받고 파일은 S3로 직접 PUT 한다.
  * (큰 바이너리가 CloudFront Function 경로를 못 지나 413/403 나는 문제 해소)

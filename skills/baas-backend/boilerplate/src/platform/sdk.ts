@@ -292,10 +292,10 @@ export interface PrivateUploadTarget {
   file_id: string
 }
 
-/** 비공개 파일 형식 — 사진(카메라 원본 HEIC 포함)과 PDF. 최대 10MB */
+/** 비공개 파일 형식 — 사진(카메라 원본 HEIC 포함)과 PDF. 최대 100MB */
 export type PrivateContentType = 'image/jpeg' | 'image/png' | 'image/webp' | 'image/heic' | 'application/pdf'
 
-/** 업로드 분류 — 커스텀 백엔드가 쓰는 것만. images 는 이미지 확장자·최대 10MB. */
+/** 업로드 분류 — 커스텀 백엔드가 쓰는 것만. images 는 이미지 확장자·최대 100MB. */
 export type StorageCategory = 'images'
 
 /**
