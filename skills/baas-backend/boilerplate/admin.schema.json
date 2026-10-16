@@ -1,0 +1,1922 @@
+{
+ "$comment": "AI Studio ai_studio_function/src/studio_function/manage/spec.py 의 AdminSpec 에서 생성한 파일 — 손으로 고치지 마라. 재생성: AI Studio 의 ai_studio_function/scripts/export_admin_spec_schema.py",
+ "$defs": {
+  "Action": {
+   "additionalProperties": false,
+   "properties": {
+    "label": {
+     "type": "string"
+    },
+    "call": {
+     "pattern": "^[A-Za-z_][\\w]*(\\.[A-Za-z_][\\w]*)+$",
+     "type": "string"
+    },
+    "when": {
+     "additionalProperties": true,
+     "type": "object"
+    },
+    "confirm": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "style": {
+     "enum": [
+      "default",
+      "danger"
+     ],
+     "type": "string"
+    },
+    "input": {
+     "items": {
+      "$ref": "#/$defs/ActionInput"
+     },
+     "type": "array"
+    }
+   },
+   "required": [
+    "label",
+    "call"
+   ],
+   "type": "object"
+  },
+  "ActionInput": {
+   "additionalProperties": false,
+   "properties": {
+    "name": {
+     "type": "string"
+    },
+    "label": {
+     "type": "string"
+    },
+    "type": {
+     "enum": [
+      "text",
+      "textarea",
+      "richtext",
+      "number",
+      "money",
+      "select",
+      "date"
+     ],
+     "type": "string"
+    },
+    "options": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "$ref": "#/$defs/Reference"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "required": {
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "name",
+    "label"
+   ],
+   "type": "object"
+  },
+  "AgendaW": {
+   "additionalProperties": false,
+   "properties": {
+    "type": {
+     "const": "agenda",
+     "type": "string"
+    },
+    "title": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "collection": {
+     "type": "string"
+    },
+    "date": {
+     "type": "string"
+    },
+    "time": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "group": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "group_label": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "capacity": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/Capacity"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "columns": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "filter": {
+     "additionalProperties": true,
+     "type": "object"
+    },
+    "ranges": {
+     "items": {
+      "enum": [
+       "1w",
+       "2w",
+       "1m"
+      ],
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "join": {
+     "items": {
+      "$ref": "#/$defs/Join"
+     },
+     "type": "array"
+    }
+   },
+   "required": [
+    "type",
+    "collection",
+    "date"
+   ],
+   "type": "object"
+  },
+  "Archive": {
+   "additionalProperties": false,
+   "properties": {
+    "set": {
+     "additionalProperties": true,
+     "type": "object"
+    }
+   },
+   "required": [
+    "set"
+   ],
+   "type": "object"
+  },
+  "BreakdownW": {
+   "additionalProperties": false,
+   "properties": {
+    "type": {
+     "const": "breakdown",
+     "type": "string"
+    },
+    "title": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "collection": {
+     "type": "string"
+    },
+    "group_by": {
+     "type": "string"
+    },
+    "op": {
+     "enum": [
+      "count",
+      "sum"
+     ],
+     "type": "string"
+    },
+    "field": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "filter": {
+     "additionalProperties": true,
+     "type": "object"
+    },
+    "format": {
+     "enum": [
+      "number",
+      "money"
+     ],
+     "type": "string"
+    },
+    "join": {
+     "items": {
+      "$ref": "#/$defs/Join"
+     },
+     "type": "array"
+    }
+   },
+   "required": [
+    "type",
+    "collection",
+    "group_by"
+   ],
+   "type": "object"
+  },
+  "BulkDef": {
+   "additionalProperties": false,
+   "properties": {
+    "label": {
+     "type": "string"
+    },
+    "set": {
+     "anyOf": [
+      {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "call": {
+     "anyOf": [
+      {
+       "pattern": "^[A-Za-z_][\\w]*(\\.[A-Za-z_][\\w]*)+$",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "delete": {
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "when": {
+     "additionalProperties": true,
+     "type": "object"
+    },
+    "input": {
+     "items": {
+      "$ref": "#/$defs/ActionInput"
+     },
+     "type": "array"
+    },
+    "confirm": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "style": {
+     "enum": [
+      "default",
+      "danger"
+     ],
+     "type": "string"
+    }
+   },
+   "required": [
+    "label"
+   ],
+   "type": "object"
+  },
+  "Capacity": {
+   "additionalProperties": false,
+   "properties": {
+    "collection": {
+     "type": "string"
+    },
+    "field": {
+     "type": "string"
+    },
+    "match": {
+     "type": "string"
+    },
+    "value": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "collection",
+    "field",
+    "match",
+    "value"
+   ],
+   "type": "object"
+  },
+  "Children": {
+   "additionalProperties": false,
+   "properties": {
+    "collection": {
+     "type": "string"
+    },
+    "field": {
+     "type": "string"
+    },
+    "match": {
+     "type": "string"
+    },
+    "columns": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "title": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "form": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "order_by": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "min": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "max": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "defaults": {
+     "additionalProperties": true,
+     "type": "object"
+    },
+    "save": {
+     "anyOf": [
+      {
+       "pattern": "^[A-Za-z_][\\w]*(\\.[A-Za-z_][\\w]*)+$",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "required": [
+    "collection",
+    "field",
+    "columns"
+   ],
+   "type": "object"
+  },
+  "DeleteDef": {
+   "additionalProperties": false,
+   "properties": {
+    "label": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "confirm": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "archive": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/Archive"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "call": {
+     "anyOf": [
+      {
+       "pattern": "^[A-Za-z_][\\w]*(\\.[A-Za-z_][\\w]*)+$",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "when": {
+     "additionalProperties": true,
+     "type": "object"
+    }
+   },
+   "type": "object"
+  },
+  "Detail": {
+   "additionalProperties": false,
+   "properties": {
+    "fields": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "json": {
+     "additionalProperties": {
+      "$ref": "#/$defs/FieldUi"
+     },
+     "type": "object"
+    },
+    "related": {
+     "items": {
+      "$ref": "#/$defs/Related"
+     },
+     "type": "array"
+    },
+    "actions": {
+     "items": {
+      "$ref": "#/$defs/Action"
+     },
+     "type": "array"
+    },
+    "join": {
+     "items": {
+      "$ref": "#/$defs/Join"
+     },
+     "type": "array"
+    },
+    "edit": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "delete": {
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "$ref": "#/$defs/DeleteDef"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "children": {
+     "items": {
+      "$ref": "#/$defs/Children"
+     },
+     "type": "array"
+    },
+    "history": {
+     "type": "boolean"
+    },
+    "thread": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/Thread"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "ExportDef": {
+   "additionalProperties": false,
+   "properties": {
+    "fields": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    }
+   },
+   "required": [
+    "fields"
+   ],
+   "type": "object"
+  },
+  "FieldDef": {
+   "additionalProperties": false,
+   "properties": {
+    "name": {
+     "type": "string"
+    },
+    "label": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "ui": {
+     "anyOf": [
+      {
+       "enum": [
+        "text",
+        "textarea",
+        "richtext",
+        "number",
+        "money",
+        "select",
+        "radio",
+        "toggle",
+        "date",
+        "time",
+        "phone",
+        "email",
+        "reference",
+        "rows",
+        "object",
+        "weekly_hours",
+        "tags",
+        "csv_days"
+       ],
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "of": {
+     "anyOf": [
+      {
+       "additionalProperties": {
+        "anyOf": [
+         {
+          "enum": [
+           "string",
+           "number",
+           "money",
+           "boolean",
+           "color"
+          ],
+          "type": "string"
+         },
+         {
+          "$ref": "#/$defs/OfField"
+         }
+        ]
+       },
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "reference": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/Reference"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "help": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "visible_when": {
+     "additionalProperties": true,
+     "type": "object"
+    }
+   },
+   "required": [
+    "name"
+   ],
+   "type": "object"
+  },
+  "FieldUi": {
+   "additionalProperties": false,
+   "properties": {
+    "ui": {
+     "enum": [
+      "weekly_hours",
+      "rows",
+      "csv_days",
+      "object",
+      "tags",
+      "text"
+     ],
+     "type": "string"
+    },
+    "of": {
+     "anyOf": [
+      {
+       "additionalProperties": {
+        "anyOf": [
+         {
+          "enum": [
+           "string",
+           "number",
+           "money",
+           "boolean",
+           "color"
+          ],
+          "type": "string"
+         },
+         {
+          "$ref": "#/$defs/OfField"
+         }
+        ]
+       },
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "required": [
+    "ui"
+   ],
+   "type": "object"
+  },
+  "FilterDef": {
+   "additionalProperties": false,
+   "properties": {
+    "field": {
+     "type": "string"
+    },
+    "label": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "multiple": {
+     "type": "boolean"
+    },
+    "presets": {
+     "items": {
+      "enum": [
+       "today",
+       "7d",
+       "30d",
+       "this_month",
+       "last_month"
+      ],
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "reference": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/Reference"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "required": [
+    "field"
+   ],
+   "type": "object"
+  },
+  "Form": {
+   "additionalProperties": false,
+   "properties": {
+    "collection": {
+     "type": "string"
+    },
+    "fields": {
+     "anyOf": [
+      {
+       "items": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "$ref": "#/$defs/FieldDef"
+         },
+         {
+          "$ref": "#/$defs/Group"
+         }
+        ]
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "defaults": {
+     "additionalProperties": true,
+     "type": "object"
+    },
+    "readonly": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "save": {
+     "anyOf": [
+      {
+       "pattern": "^[A-Za-z_][\\w]*(\\.[A-Za-z_][\\w]*)+$",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "messages": {
+     "additionalProperties": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "submit_label": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "required": [
+    "collection"
+   ],
+   "type": "object"
+  },
+  "FormRef": {
+   "additionalProperties": false,
+   "properties": {
+    "form": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "form"
+   ],
+   "type": "object"
+  },
+  "Group": {
+   "additionalProperties": false,
+   "properties": {
+    "group": {
+     "type": "string"
+    },
+    "columns": {
+     "enum": [
+      1,
+      2
+     ],
+     "type": "integer"
+    },
+    "collapsed": {
+     "type": "boolean"
+    },
+    "fields": {
+     "items": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "$ref": "#/$defs/FieldDef"
+       }
+      ]
+     },
+     "type": "array"
+    }
+   },
+   "required": [
+    "group",
+    "fields"
+   ],
+   "type": "object"
+  },
+  "ImportDef": {
+   "additionalProperties": false,
+   "properties": {
+    "fields": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "key": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "mode": {
+     "enum": [
+      "create",
+      "upsert"
+     ],
+     "type": "string"
+    },
+    "max_rows": {
+     "maximum": 10000,
+     "minimum": 1,
+     "type": "integer"
+    }
+   },
+   "required": [
+    "fields"
+   ],
+   "type": "object"
+  },
+  "Join": {
+   "additionalProperties": false,
+   "properties": {
+    "field": {
+     "type": "string"
+    },
+    "collection": {
+     "type": "string"
+    },
+    "match": {
+     "type": "string"
+    },
+    "show": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "field",
+    "collection",
+    "show"
+   ],
+   "type": "object"
+  },
+  "ListW": {
+   "additionalProperties": false,
+   "properties": {
+    "type": {
+     "const": "list",
+     "type": "string"
+    },
+    "title": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "collection": {
+     "type": "string"
+    },
+    "columns": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "tabs": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/Tabs"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "filter": {
+     "additionalProperties": true,
+     "type": "object"
+    },
+    "sort": {
+     "type": "string"
+    },
+    "page_size": {
+     "maximum": 100,
+     "minimum": 1,
+     "type": "integer"
+    },
+    "join": {
+     "items": {
+      "$ref": "#/$defs/Join"
+     },
+     "type": "array"
+    },
+    "actions": {
+     "items": {
+      "$ref": "#/$defs/Action"
+     },
+     "type": "array"
+    },
+    "editable": {
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      }
+     ]
+    },
+    "search": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "filters": {
+     "items": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "$ref": "#/$defs/FilterDef"
+       }
+      ]
+     },
+     "type": "array"
+    },
+    "create": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/FormRef"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "edit": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/FormRef"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "delete": {
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "$ref": "#/$defs/DeleteDef"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "bulk": {
+     "items": {
+      "$ref": "#/$defs/BulkDef"
+     },
+     "type": "array"
+    },
+    "export": {
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "$ref": "#/$defs/ExportDef"
+      }
+     ]
+    },
+    "order_by": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "import": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/ImportDef"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "required": [
+    "type",
+    "collection",
+    "columns"
+   ],
+   "type": "object"
+  },
+  "OfField": {
+   "additionalProperties": false,
+   "properties": {
+    "type": {
+     "enum": [
+      "string",
+      "number",
+      "money",
+      "boolean",
+      "color"
+     ],
+     "type": "string"
+    },
+    "label": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "required": [
+    "type"
+   ],
+   "type": "object"
+  },
+  "Page": {
+   "additionalProperties": false,
+   "properties": {
+    "title": {
+     "type": "string"
+    },
+    "widgets": {
+     "items": {
+      "discriminator": {
+       "mapping": {
+        "agenda": "#/$defs/AgendaW",
+        "breakdown": "#/$defs/BreakdownW",
+        "list": "#/$defs/ListW",
+        "panel": "#/$defs/PanelW",
+        "settings": "#/$defs/SettingsW",
+        "stat": "#/$defs/StatW",
+        "timeline": "#/$defs/TimelineW",
+        "trend": "#/$defs/TrendW"
+       },
+       "propertyName": "type"
+      },
+      "oneOf": [
+       {
+        "$ref": "#/$defs/ListW"
+       },
+       {
+        "$ref": "#/$defs/StatW"
+       },
+       {
+        "$ref": "#/$defs/AgendaW"
+       },
+       {
+        "$ref": "#/$defs/TimelineW"
+       },
+       {
+        "$ref": "#/$defs/SettingsW"
+       },
+       {
+        "$ref": "#/$defs/BreakdownW"
+       },
+       {
+        "$ref": "#/$defs/TrendW"
+       },
+       {
+        "$ref": "#/$defs/PanelW"
+       }
+      ]
+     },
+     "type": "array"
+    }
+   },
+   "required": [
+    "title",
+    "widgets"
+   ],
+   "type": "object"
+  },
+  "PanelW": {
+   "additionalProperties": false,
+   "properties": {
+    "type": {
+     "const": "panel",
+     "type": "string"
+    },
+    "title": {
+     "type": "string"
+    },
+    "description": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "call": {
+     "pattern": "^[A-Za-z_][\\w]*(\\.[A-Za-z_][\\w]*)+$",
+     "type": "string"
+    },
+    "input": {
+     "items": {
+      "$ref": "#/$defs/ActionInput"
+     },
+     "type": "array"
+    },
+    "submit_label": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "required": [
+    "type",
+    "title",
+    "call"
+   ],
+   "type": "object"
+  },
+  "Reference": {
+   "additionalProperties": false,
+   "properties": {
+    "collection": {
+     "type": "string"
+    },
+    "match": {
+     "type": "string"
+    },
+    "show": {
+     "type": "string"
+    },
+    "filter": {
+     "additionalProperties": true,
+     "type": "object"
+    },
+    "search": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "multiple": {
+     "type": "boolean"
+    },
+    "columns": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    }
+   },
+   "required": [
+    "collection",
+    "show"
+   ],
+   "type": "object"
+  },
+  "Related": {
+   "additionalProperties": false,
+   "properties": {
+    "collection": {
+     "type": "string"
+    },
+    "field": {
+     "type": "string"
+    },
+    "match": {
+     "type": "string"
+    },
+    "columns": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "title": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "join": {
+     "items": {
+      "$ref": "#/$defs/Join"
+     },
+     "type": "array"
+    },
+    "sort": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "required": [
+    "collection",
+    "field",
+    "columns"
+   ],
+   "type": "object"
+  },
+  "Resources": {
+   "additionalProperties": false,
+   "properties": {
+    "collection": {
+     "type": "string"
+    },
+    "match": {
+     "type": "string"
+    },
+    "show": {
+     "type": "string"
+    },
+    "filter": {
+     "additionalProperties": true,
+     "type": "object"
+    }
+   },
+   "required": [
+    "collection",
+    "show"
+   ],
+   "type": "object"
+  },
+  "SettingsW": {
+   "additionalProperties": false,
+   "properties": {
+    "type": {
+     "const": "settings",
+     "type": "string"
+    },
+    "title": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "collection": {
+     "type": "string"
+    },
+    "fields": {
+     "additionalProperties": {
+      "$ref": "#/$defs/FieldUi"
+     },
+     "type": "object"
+    },
+    "save": {
+     "anyOf": [
+      {
+       "pattern": "^[A-Za-z_][\\w]*(\\.[A-Za-z_][\\w]*)+$",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "required": [
+    "type",
+    "collection"
+   ],
+   "type": "object"
+  },
+  "StatSource": {
+   "additionalProperties": false,
+   "properties": {
+    "collection": {
+     "type": "string"
+    },
+    "op": {
+     "enum": [
+      "count",
+      "sum"
+     ],
+     "type": "string"
+    },
+    "field": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "filter": {
+     "additionalProperties": true,
+     "type": "object"
+    }
+   },
+   "required": [
+    "collection"
+   ],
+   "type": "object"
+  },
+  "StatW": {
+   "additionalProperties": false,
+   "properties": {
+    "type": {
+     "const": "stat",
+     "type": "string"
+    },
+    "label": {
+     "type": "string"
+    },
+    "source": {
+     "$ref": "#/$defs/StatSource"
+    },
+    "minus": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/StatSource"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "format": {
+     "enum": [
+      "number",
+      "money"
+     ],
+     "type": "string"
+    }
+   },
+   "required": [
+    "type",
+    "label",
+    "source"
+   ],
+   "type": "object"
+  },
+  "Tabs": {
+   "additionalProperties": false,
+   "properties": {
+    "field": {
+     "type": "string"
+    },
+    "counts": {
+     "type": "boolean"
+    },
+    "all": {
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "field"
+   ],
+   "type": "object"
+  },
+  "Thread": {
+   "additionalProperties": false,
+   "properties": {
+    "title": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "collection": {
+     "type": "string"
+    },
+    "field": {
+     "type": "string"
+    },
+    "match": {
+     "type": "string"
+    },
+    "body": {
+     "type": "string"
+    },
+    "author": {
+     "type": "string"
+    },
+    "owner_value": {
+     "type": "string"
+    },
+    "at": {
+     "type": "string"
+    },
+    "reply": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/ThreadReply"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "required": [
+    "collection",
+    "field",
+    "body",
+    "author"
+   ],
+   "type": "object"
+  },
+  "ThreadReply": {
+   "additionalProperties": false,
+   "properties": {
+    "call": {
+     "pattern": "^[A-Za-z_][\\w]*(\\.[A-Za-z_][\\w]*)+$",
+     "type": "string"
+    },
+    "input": {
+     "type": "string"
+    },
+    "label": {
+     "type": "string"
+    },
+    "placeholder": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "required": [
+    "call"
+   ],
+   "type": "object"
+  },
+  "TimelineW": {
+   "additionalProperties": false,
+   "properties": {
+    "type": {
+     "const": "timeline",
+     "type": "string"
+    },
+    "title": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "collection": {
+     "type": "string"
+    },
+    "resource": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "resources": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/Resources"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "unit": {
+     "enum": [
+      "minute",
+      "day"
+     ],
+     "type": "string"
+    },
+    "date": {
+     "type": "string"
+    },
+    "start": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "duration": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "duration_minutes": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "end": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "label": {
+     "type": "string"
+    },
+    "status": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "filter": {
+     "additionalProperties": true,
+     "type": "object"
+    },
+    "hours": {
+     "maxItems": 2,
+     "minItems": 2,
+     "prefixItems": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "integer"
+      }
+     ],
+     "type": "array"
+    },
+    "days": {
+     "maximum": 62,
+     "minimum": 1,
+     "type": "integer"
+    }
+   },
+   "required": [
+    "type",
+    "collection",
+    "unit",
+    "date",
+    "label"
+   ],
+   "type": "object"
+  },
+  "TrendW": {
+   "additionalProperties": false,
+   "properties": {
+    "type": {
+     "const": "trend",
+     "type": "string"
+    },
+    "title": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "collection": {
+     "type": "string"
+    },
+    "date": {
+     "type": "string"
+    },
+    "unit": {
+     "enum": [
+      "day",
+      "month"
+     ],
+     "type": "string"
+    },
+    "span": {
+     "maximum": 24,
+     "minimum": 2,
+     "type": "integer"
+    },
+    "op": {
+     "enum": [
+      "count",
+      "sum"
+     ],
+     "type": "string"
+    },
+    "field": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "filter": {
+     "additionalProperties": true,
+     "type": "object"
+    },
+    "format": {
+     "enum": [
+      "number",
+      "money"
+     ],
+     "type": "string"
+    }
+   },
+   "required": [
+    "type",
+    "collection",
+    "date"
+   ],
+   "type": "object"
+  }
+ },
+ "additionalProperties": false,
+ "properties": {
+  "version": {
+   "const": 1,
+   "type": "integer"
+  },
+  "title": {
+   "type": "string"
+  },
+  "hidden": {
+   "items": {
+    "type": "string"
+   },
+   "type": "array"
+  },
+  "owner_content": {
+   "items": {
+    "type": "string"
+   },
+   "type": "array"
+  },
+  "labels": {
+   "additionalProperties": {
+    "additionalProperties": {
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "type": "object"
+  },
+  "values": {
+   "additionalProperties": {
+    "additionalProperties": {
+     "additionalProperties": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "type": "object"
+   },
+   "type": "object"
+  },
+  "formats": {
+   "additionalProperties": {
+    "additionalProperties": {
+     "enum": [
+      "money",
+      "phone",
+      "date",
+      "datetime",
+      "time",
+      "color",
+      "markdown"
+     ],
+     "type": "string"
+    },
+    "type": "object"
+   },
+   "type": "object"
+  },
+  "messages": {
+   "additionalProperties": {
+    "type": "string"
+   },
+   "type": "object"
+  },
+  "menu": {
+   "items": {
+    "type": "string"
+   },
+   "type": "array"
+  },
+  "pages": {
+   "additionalProperties": {
+    "$ref": "#/$defs/Page"
+   },
+   "type": "object"
+  },
+  "details": {
+   "additionalProperties": {
+    "$ref": "#/$defs/Detail"
+   },
+   "type": "object"
+  },
+  "forms": {
+   "additionalProperties": {
+    "$ref": "#/$defs/Form"
+   },
+   "type": "object"
+  }
+ },
+ "required": [
+  "version",
+  "title",
+  "menu",
+  "pages"
+ ],
+ "type": "object"
+}

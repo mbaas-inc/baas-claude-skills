@@ -20,6 +20,7 @@ import ts from 'typescript'
 import fs from 'node:fs'
 import path from 'node:path'
 
+import { checkAdminSpec } from './admin-spec.mjs'
 import { convergeSchema, readSchema, renderNotificationTypes, renderTypes } from './schema.mjs'
 
 // 프로젝트 루트에서 실행한다: `node backend/extract.mjs`
@@ -37,6 +38,8 @@ const TYPES_OUT = path.join(ROOT, 'src', 'types', 'collections.ts')
 const NOTIFY_TYPES_OUT = path.join(ROOT, 'src', 'types', 'notifications.ts')
 // 함수별 접근 선언. 공개 표면을 한 파일로 검토할 수 있게 한다.
 const ACCESS_OUT = path.join(ROOT, 'backend', 'serverfn-access.json')
+// 관리 화면 명세. 사람이(에이전트가) 쓰는 파일이고, 추출기는 검사만 한다.
+const ADMIN_SPEC = path.join(ROOT, 'backend', 'admin.json')
 
 /** 서버로 넘어가면 안 되는 import. 확장자와 경로 관례 둘 다 본다. */
 const CLIENT_ONLY = [/\.(tsx|jsx|css)$/, /\/components\//, /^react$/, /^react-dom/]
@@ -569,7 +572,28 @@ try {
   process.exit(1)
 }
 
+// ── 관리 화면 명세 ────────────────────────────────────────────────────────
+// AI Studio 관리 화면이 이 명세로 사장님 화면을 그린다. 틀리면 화면 전체가 거부되는데 사장님이 열고서야
+// 알게 된다 — 여기서 같은 규칙으로 먼저 세운다(admin-spec.mjs). serverFn 이 없는 앱도 명세가 동작을
+// 부르면 그 이름이 없다는 것을 알려야 하므로 빈 매니페스트로 본다.
+function checkAdminSpecFile(access) {
+  if (!fs.existsSync(ADMIN_SPEC)) return
+  const { errors } = checkAdminSpec(fs.readFileSync(ADMIN_SPEC, 'utf8'), {
+    collections: schema ? schema.collections : null,
+    serviceOps: serviceGrants,
+    access,
+  })
+  if (errors.length > 0) {
+    console.error('관리 화면 명세(backend/admin.json) 오류 — 빌드를 중단한다\n')
+    for (const e of errors) console.error(`  ✗ ${e}`)
+    console.error(`\n총 ${errors.length}건. 고친 뒤 다시 추출하라.`)
+    process.exit(1)
+  }
+  console.log(`관리 화면 명세 확인 → backend/admin.json${schema ? '' : ' (schema.json 이 없어 컬렉션·칸 대조는 건너뛰었다)'}`)
+}
+
 if (extracted.length === 0) {
+  checkAdminSpecFile({})
   console.log('serverFn 없음 — backend/ 를 만들지 않는다 (정적 배포 유지)')
   process.exit(0)
 }
@@ -628,6 +652,7 @@ const accessManifest = Object.fromEntries(
     ])),
 )
 fs.writeFileSync(ACCESS_OUT, `${JSON.stringify(accessManifest, null, 2)}\n`)
+checkAdminSpecFile(accessManifest)
 const publicFns = Object.entries(accessManifest).filter(([, a]) => a.access === 'public').map(([k]) => k)
 console.log(
   `접근 선언 ${Object.keys(accessManifest).length}개 → backend/serverfn-access.json` +
