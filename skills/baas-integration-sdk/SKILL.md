@@ -59,49 +59,34 @@ SDK는 CDN에서 로드되고 앱의 React 인스턴스를 공유한다. 이 배
 **인증 상태는 앱 루트에서 1회만 조회한다. 화면마다 조회하지 않는다.**
 
 - 앱 루트를 `BaasSDK.AuthProvider`로 감싸고, 화면은 `BaasSDK.useAuth()`로 읽기만 한다.
-- 로그인 필수 화면은 `BaasSDK.RequireAuth`로 감싼다. **단 소유자·관리자 화면은 예외다.**
-  프로젝트 소유자는 통합회원이라 이 프로젝트의 회원 조회에서 반드시 탈락하고 `isLoggedIn` 이
-  **항상 false** 다. 관리자 화면을 이 가드로 감싸면 소유자는 앱 자체 로그인 폼으로 튕기는데,
-  그 폼으로는 통합회원이 원리상 로그인되지 않아 **막다른 길**이 된다(실측 2026-09-17: 출시된
-  앱의 `/admin` 이 이 상태였다). 관리자 화면은 **누구나 열 수 있게 두고 서버가 403 으로**
-  가린다 — 소유자를 플랫폼 로그인으로 보내는 진입 화면은 `baas-backend` 스킬의
-  「소유자가 들어오는 길」을 따른다.
+- 로그인 필수 화면은 `BaasSDK.RequireAuth`로 감싼다.
+- **앱에는 사장님 관리 화면이 없다.** 사장님은 AI Studio 관리 화면에서 운영한다(`backend/admin.json`,
+  `baas-backend` 「관리 화면」 절). 앱 안에 `/admin` 경로·관리자 셸·「사장님 계정으로 로그인」 링크를 만들지
+  않는다 — 소유자는 통합회원이라 앱 로그인으로는 들어올 수 없고, 들어올 이유도 없다.
 - 회원 전용 화면으로 가는 메뉴·링크(내 예약·마이페이지 등)는 `isLoggedIn` 일 때만 보인다 — 가드는 들어오는 것만 막는다(`reference/sdk-surface.md` 「메뉴·링크 노출도 같은 기준」).
 - 로그인/로그아웃은 `useLogin()`/`useLogout()` — 성공 시 전역 상태가 자동 갱신된다(내부적으로 refetch/clear). 기획에 휴대전화 로그인이 있으면 로그인·가입을 `useSmsLogin()` 한 화면으로 만든다 — 프로젝트 설정은 필요 없다(`reference/sdk-surface.md` 휴대전화 로그인 절). 인증번호는 카카오톡 알림톡으로 먼저, 보내지 못하면 문자로 간다(플랫폼 규칙) — 화면 이름은 「휴대전화 로그인」, 입력 안내는 「카카오톡 또는 문자로 받은 인증번호」.
 - **비로그인 상태의 401은 에러가 아닌 정상 신호다.** 에러 UI·강제 리다이렉트 금지. `useAuth()`가 `{isLoggedIn:false}`로 알려준다.
 - 로그인 후 다른 API의 401은 세션 만료 → 재로그인 유도.
 
-## 관리자 화면은 **셸을 분리한다**
+## 위임 운영자 화면은 **셸을 분리한다**
 
-소유자·운영자 화면(`/admin` 등)을 손님 화면과 같은 레이아웃 안에 넣지 마라. 라우트만 나누고
-헤더·푸터를 공유하면 관리 콘솔에 **손님용 네비게이션과 마케팅 CTA 가 그대로 남는다.**
+사장님이 임명한 운영자(지점 담당자 등)가 앱 안에서 쓰는 화면을 만들 때만 해당한다. 손님 화면과 같은
+레이아웃 안에 넣지 마라 — 라우트만 나누고 헤더·푸터를 공유하면 운영 화면에 손님용 네비게이션과 「로그인 /
+회원가입」 같은 마케팅 CTA 가 그대로 남는다(실측 2026-09-17).
 
 ```tsx
-// ❌ 실측된 결과(2026-09-17 출시본): 관리자 화면 상단에 「로그인 / 회원가입」 버튼이 남았다
-<div>
-  <SiteHeader />                       {/* 소개·공지사항·FAQ·… + 로그인/회원가입 */}
-  <main><Routes>… <Route path="/admin" element={<Admin/>}/> …</Routes></main>
-  <SiteFooter />                       {/* 뉴스레터 구독 + 회사 정보 */}
-</div>
-
-// ✅ 셸을 갈라 놓는다
 <Routes>
-  <Route element={<SiteLayout/>}>  {/* 손님: 헤더·푸터 */}
+  <Route element={<SiteLayout/>}>      {/* 손님: 헤더·푸터 */}
     <Route path="/" element={<Home/>}/>
-    …
   </Route>
-  <Route element={<AdminLayout/>}>  {/* 운영: 최소 크롬 + 「사이트로 돌아가기」 */}
-    <Route path="/admin" element={<Admin/>}/>
+  <Route element={<StaffLayout/>}>     {/* 운영자: 최소 크롬 + 「사이트로 돌아가기」 */}
+    <Route path="/staff" element={<RequireAuth><Staff/></RequireAuth>}/>
   </Route>
 </Routes>
 ```
 
-**미관 문제가 아니다.** 소유자는 통합회원이라 그 프로젝트의 회원이 아니고, 관리 화면 본문은
-「사장님 계정으로 로그인」으로 안내하는데 **헤더는 회원가입을 권한다** — 소유자가 그 버튼을
-누르면 정확히 막다른 길로 돌아간다. 인증 설계를 레이아웃이 부분적으로 무효화한다.
-
-관리자 셸에 두는 것: 화면 제목, **누구 권한으로 열렸는지**, 그리고 「사이트로 돌아가기」.
-손님용 네비게이션·로그인/회원가입 버튼·뉴스레터·회사 정보 푸터는 두지 않는다.
+운영자는 이 프로젝트의 **회원**이라 `RequireAuth` 로 감싸고, 권한은 serverFn(`member` + `authorizes`)이
+판정한다. 사장님 화면(전체 목록·승인·설정)은 여기 만들지 않는다 — AI Studio 관리 화면 몫이다.
 
 ## 데이터 저장
 
@@ -165,16 +150,28 @@ v2.0 에서 고정 기능(게시판·공지/FAQ·댓글·설문·예약·스토�
 | 자유게시판·커뮤니티 | `posts`(title·content·category enum) | 회원끼리 보고 쓰면 직접. 비로그인 열람이 필요하면 조회만 serverFn(`access:'public'`) |
 | 후기(별점) | `reviews`(rating number 1~5·content·대상 `reference`) | 위와 같음. 「예약한 사람만 후기」면 serverFn |
 | 댓글·답글 | 트리 패턴(`post_id`·`parent_id`) | 위와 같음 |
-| 공지·FAQ | `notices`·`faqs`(title·content·category enum·pinned) | **소유자만 쓰고 누구나 읽는다** → 쓰기 `access:'owner'`, 읽기 `access:'public'` serverFn |
-| 문의·상담신청·연락처·뉴스레터 | `inquiries`(name·phone·email·content·consent_version) | **비로그인 제출** → 제출 `access:'public'` serverFn + `notify.owner`, 목록은 `access:'owner'` |
+| 공지·FAQ | `notices`·`faqs`(title·body 마크다운·category enum·pinned·published) | **소유자만 쓰고 누구나 읽는다** → 읽기 `access:'public'` serverFn. 쓰기는 AI Studio 관리 화면(서식 편집기)이 한다 — 앱에 작성 화면을 만들지 않는다. 본문은 「마크다운 본문 렌더」로 그린다 |
+| 문의·상담신청·연락처·뉴스레터 | `inquiries`(name·phone·email·content·consent_version) + 대화 `inquiry_messages` | **비로그인 제출** → 제출 `access:'public'` serverFn + `notify.owner`. 답장은 사장님이 관리 화면에서 보내고(마크다운), 회원이 자기 문의를 다시 볼 때 답장을 「마크다운 본문 렌더」로 그린다 |
 | 설문 | `survey_responses`(설문 정의는 코드 상수 또는 소유자 컬렉션) | 회원 응답이면 직접, 비로그인 응답이면 serverFn |
 | 예약 | 슬롯·예약 컬렉션 | **정원·중복이 규칙** → serverFn(`transaction` + `guard`) |
 | 상품·주문 | 상품 컬렉션 + 주문 원장 | 상품 공개 조회·주문·결제 모두 serverFn(`sdk.payments`) |
 
 - 카테고리는 필드 `options`(닫힌 enum)로 선언한다. 자유 입력을 enum 에 넣지 않는다.
-- 소유자 화면(공지 작성·문의 목록·예약 관리)은 소유자가 통합회원이라 `RequireAuth` 로 감싸지 않는다(인증 절).
+- 사장님 화면(공지 작성·문의 목록·예약 관리)은 앱에 만들지 않는다 — AI Studio 관리 화면 몫이다(인증 절).
 
 <!--collection:end-->
+## 마크다운 본문 렌더 — 공지·답장 본문
+
+관리 화면의 서식 편집기가 쓰는 본문(공지 `body`, 문의 답장 등)은 **마크다운 글자**다. 손님 화면은 이렇게 그린다.
+
+- **마크다운 렌더러로 그리고 원본 HTML 은 버린다.** `dangerouslySetInnerHTML`·`innerHTML` 로 넣지 마라 — 본문
+  하나가 그 앱의 쿠키로 스크립트를 돌린다. 예전 게시판 지침의 「HTML 본문을 그대로 넣는다」는 이 본문에 쓰지 않는다
+- 렌더러가 프로젝트에 없으면 HTML 을 만들지 않는 렌더러(`react-markdown` 기본값처럼 원본 HTML 을 그리지 않는 것)를
+  쓴다. 패키지를 더할 수 없으면 줄바꿈만 살린 글자(`white-space: pre-line`)로 보여 준다 — 직접 HTML 로 바꾸지 마라
+- **링크는 `http`·`https`·`mailto` 만, 사진은 `https` 주소만** 연다. `javascript:` 같은 주소는 글자로 남긴다
+- 사진 주소는 그 앱 저장소(`…/_file/storage/…`)다. 따로 내려받거나 다시 올리지 않는다
+- 목록에는 기호를 걷어낸 첫 줄 요약을 쓰고, 전문은 상세에서 그린다
+
 ## UI/UX 생성 원칙
 
 - 로딩·에러·빈 상태를 항상 UI로 표현한다(훅의 `loading`/`error` 사용). 사용자가 멈춘 화면을 보지 않게 한다.

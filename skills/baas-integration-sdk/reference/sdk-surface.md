@@ -124,8 +124,8 @@ const { isLoggedIn, user, loading, error, refetch, clear } = BaasSDK.useAuth();
   - **공개 화면 안의 회원 행동은 숨기지 않는다** — 둘러보다가 「예약하기」·「글쓰기」를 누르는 순간 로그인을
     요구하는 것은 정상 흐름이다(버튼 문구를 「로그인하고 예약하기」처럼 바꿔 알린다). 숨기는 것은 **회원 전용
     화면으로 가는 진입 메뉴**뿐이다.
-  - 관리자 화면 링크는 이 규칙이 아니라 `isProjectOwner` 기준이다(`baas-backend` 「관리자 화면은 누구 권한으로
-    열렸는지 보여 준다」).
+  - 사장님 관리 화면으로 가는 링크는 두지 않는다 — 사장님은 AI Studio 관리 화면에서 운영한다(`baas-backend`
+    「관리 화면」 절).
 
 ### `useLogin()` / `useSignup()` / `useLogout()` (휴대전화 로그인은 `useSmsLogin()` — 아래 절)
 ```tsx
@@ -589,9 +589,10 @@ await BaasSDK.useCollection().submitRecord("products", { name, image_url: res.cd
 <!--collection:start-->
 ### 올릴 수 있는 사람이 정해진 업로드 — `uploadTo`
 
-사장님 관리 화면의 사진처럼 **누가 올리는지 정해진 업로드**는 커스텀 백엔드(serverFn)가 업로드 주소를
-받아 넘기고, 앱은 그 주소로 올리기만 한다(aiapp-service#904). 앱 회원 로그인이 필요 없다 — 소유자 인증 ·
-권한 판정은 serverFn 의 `access` 가 한다(serverFn 쪽은 `baas-backend` 「파일 업로드」 절).
+운영자가 올리는 매장 사진처럼 **누가 올리는지 정해진 업로드**는 커스텀 백엔드(serverFn)가 업로드 주소를
+받아 넘기고, 앱은 그 주소로 올리기만 한다(aiapp-service#904). 권한 판정은 serverFn 의 `access`·`authorizes` 가
+한다(serverFn 쪽은 `baas-backend` 「파일 업로드」 절). 사장님 관리 화면의 사진(공지 본문 등)은 AI Studio 가 직접
+올리므로 앱이 만들 것이 없다.
 
 ```tsx
 const { uploadTo, isUploading, error } = BaasSDK.useFileUpload();
@@ -602,7 +603,7 @@ if (res) await addGalleryPhoto({ cdnUrl: res.cdn_url });
 ```
 - 실패 규약은 `upload` 와 같다(throw 없이 `null` + 훅 `error`). 훅 없이는 `BaasSDK.uploadToTarget(target, file)`(throw).
 - serverFn 이 준 `content_type` 그대로 올린다(서명이 그 값에 묶여 있다 — 바꾸면 S3 가 403).
-- 관리 화면 업로드를 `upload` 로 만들고 401 에 「회원으로 로그인」을 안내하지 마라 — 소유자는 회원이 아니다.
+- 권한이 정해진 업로드를 `upload` 로 만들지 마라 — `upload` 는 로그인 회원이면 누구나 올린다.
 <!--collection:end-->
 
 ---

@@ -1,5 +1,5 @@
 {
-  "version": "2.0.0-native",
+  "version": "2.1.0-native",
   "sdk": "@mbaas/baas-web-sdk",
   "sdk_global": "window.BaasSDK",
   "surface_ref": "reference/sdk-surface.md",

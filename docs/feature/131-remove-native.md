@@ -51,10 +51,10 @@ sequenceDiagram
 |---|---|---|---|
 | ① 기능 목록 | `skills/baas-integration-sdk/features.json` · `"groups"` (L53-L312) | 수정 | 그룹은 account·collection·payment·storage 넷. collection 키워드에 게시판·공지·FAQ·문의·예약 신청 등을 넣어 그 요청이 컬렉션으로 매핑되게 했다 |
 | ① 훅→그룹 매핑 | `skills/baas-integration-sdk/features.json` · `"hook_groups"` (L8-L45) | 수정 | 고정 기능 훅 매핑 삭제 — manifest 자동 동기화의 정본 |
-| ② 고정 기능 없음 | `skills/baas-integration-sdk/SKILL.md` · `데이터 저장` (L106-L117) | 수정 | 사라진 훅 이름과 `is not a function` 경고, 임의 저장소 금지 |
-| ② 예전 기능 → 컬렉션 | `skills/baas-integration-sdk/SKILL.md` · `예전 고정 기능을 컬렉션으로` (L158-L177) | 신규 | 기능별 컬렉션 설계와 「브라우저 직접 / serverFn」 구분 표 |
+| ② 고정 기능 없음 | `skills/baas-integration-sdk/SKILL.md` · `데이터 저장` (L91-L102) | 수정 | 사라진 훅 이름과 `is not a function` 경고, 임의 저장소 금지 |
+| ② 예전 기능 → 컬렉션 | `skills/baas-integration-sdk/SKILL.md` · `예전 고정 기능을 컬렉션으로` (L143-L162) | 신규 | 기능별 컬렉션 설계와 「브라우저 직접 / serverFn」 구분 표 |
 | ② 회원 인증만 네이티브 | `skills/baas-backend/SKILL.md` · `회원 인증만 네이티브다` (L320-L335) | 수정 | 「네이티브에 이미 있는 것을 다시 만들지 마라」와 그 예외 절을 대체 |
-| ③ 소유자 화면 | `skills/baas-backend/SKILL.md` · `소유자 화면` (L756-L779) | 수정 | `sdk.reservation`·`sdk.board` 대신 `access:'owner'` serverFn + dyncol |
+| ③ 소유자 화면 | `skills/baas-backend/SKILL.md` · `관리 화면 — 사장님 동작은` (L678-L714) | 수정 | `sdk.reservation`·`sdk.board` 대신 `access:'owner'` serverFn + dyncol |
 | ③ serverFn 선언 | `skills/baas-backend/boilerplate/src/serverFn.ts` · `serverFn()` (L73-L80) | 기존 | 규칙이 붙은 데이터의 진입점 |
 | ③ 서버 SDK 표면 | `skills/baas-backend/boilerplate/src/platform/sdk.ts` · `buildSdk()` (L318-L790) | 수정 | `reservation`·`board` 와 그 타입 삭제. 반환은 dyncol·account·secrets·notify·payments·storage·ctx |
 | ③ 서버 업로드 분류 | `skills/baas-backend/boilerplate/src/platform/sdk.ts` · `StorageCategory` (L299) | 수정 | `'images'` 하나 |

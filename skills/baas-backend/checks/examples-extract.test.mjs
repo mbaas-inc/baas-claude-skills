@@ -63,3 +63,9 @@ test('order-stock: 펼친 재고 차감까지 update, 주문은 create', () => {
   assert.deepEqual(r.grants.menu_stock, { update: ['service'] })
   assert.deepEqual(r.grants.orders, { create: ['service'] })
 })
+
+test('booking.server: 사장님 동작은 owner 이고 관리 화면이 부를 수 있는 이름이다', () => {
+  const r = extractExample('booking.server.ts')
+  assert.deepEqual(r.grants.bookings, { read: ['service'], update: ['service'] })
+  assert.deepEqual(r.grants.slots, { update: ['service'] })
+})

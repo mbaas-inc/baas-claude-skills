@@ -113,8 +113,8 @@ const { isLoggedIn, user, loading, error, refetch, clear } = BaasSDK.useAuth();
   - **공개 화면 안의 회원 행동은 숨기지 않는다** — 둘러보다가 「예약하기」·「글쓰기」를 누르는 순간 로그인을
     요구하는 것은 정상 흐름이다(버튼 문구를 「로그인하고 예약하기」처럼 바꿔 알린다). 숨기는 것은 **회원 전용
     화면으로 가는 진입 메뉴**뿐이다.
-  - 관리자 화면 링크는 이 규칙이 아니라 `isProjectOwner` 기준이다(`baas-backend` 「관리자 화면은 누구 권한으로
-    열렸는지 보여 준다」).
+  - 사장님 관리 화면으로 가는 링크는 두지 않는다 — 사장님은 AI Studio 관리 화면에서 운영한다(`baas-backend`
+    「관리 화면」 절).
 
 ### `useLogin()` / `useSignup()` / `useLogout()` (휴대전화 로그인은 `useSmsLogin()` — 아래 절)
 ```tsx

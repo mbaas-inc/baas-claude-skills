@@ -77,7 +77,7 @@ export const claim = serverFn<ClaimInput, ClaimResult>(async (input, ctx) => {
 |---|---|---|
 | `public` | 아무것도 막지 않는다 | 비로그인도 봐야 하는 목록·조회 |
 | `member` | 비로그인이면 **401** | 로그인이 필요한 모든 것 |
-| `owner`  | 소유자가 아니면 **403** | 프로젝트 소유자 전용 |
+| `owner`  | 소유자가 아니면 **403** | 프로젝트 소유자 전용 — **AI Studio 관리 화면이 부르는 사장님 동작**(「관리 화면」 절) |
 
 **② `authorizes` — 본문이 추가로 판정한다는 사실**
 
@@ -111,7 +111,7 @@ export const listBranchReservations = serverFn<Input, Result>(async (input, ctx)
 
 | 경로 | 언제 |
 |---|---|
-| 앱 안 소유자 화면 | 운영자가 수시로 바꾼다 — 지점 담당자 교체, 권한 회수 |
+| 관리 화면(`backend/admin.json`) | 운영자가 수시로 바꾼다 — 지점 담당자 교체, 권한 회수. 역할 표를 관리 화면 목록·폼으로 열거나, 규칙이 있으면 `access:'owner'` 동작 serverFn 으로 연다 |
 | 프로비저닝 담당자가 CLI 로 | 초기 몇 건이고 바뀔 일이 드물다 |
 
 ```bash
@@ -132,7 +132,8 @@ baas collection record create staff \
 node backend/extract.mjs
 ```
 
-이 한 명령이 추출부터 번들까지 끝낸다. 생성물 다섯 — 직접 고치지 마라(다음 추출에서 덮인다):
+이 한 명령이 추출부터 번들까지 끝낸다. `backend/admin.json`(관리 화면 명세)이 있으면 같은 명령이 그 명세도
+검사하고, 틀리면 빌드를 세운다(「관리 화면」 절). 생성물 다섯 — 직접 고치지 마라(다음 추출에서 덮인다):
 
 | 생성물 | 쓰임 |
 |---|---|
@@ -324,8 +325,8 @@ v2.0 에서 고정 기능(게시판·공지/FAQ·댓글·설문·예약·스토�
 
 | 예전 기능 | 이 역할이 만드는 것 |
 |---|---|
-| 공지·FAQ | `notices`·`faqs` 컬렉션(`service` 전용) + 쓰기 `access:'owner'`, 읽기 `access:'public'` serverFn |
-| 문의·상담신청·연락처 | `inquiries` 컬렉션(`service` 전용) + 제출 `access:'public'` serverFn → 성공 뒤 `notify.owner`, 목록은 `access:'owner'` |
+| 공지·FAQ | `notices`·`faqs` 컬렉션(`service` 전용, 본문은 마크다운) + 읽기 `access:'public'` serverFn. **쓰기는 관리 화면이 직접 한다** — `admin.json` 의 `owner_content` 에 올리고 목록·폼(`richtext`)을 연다. 쓰기 serverFn 을 따로 만들지 않는다 |
+| 문의·상담신청·연락처 | `inquiries`(`service` 전용, 상태·`submitted_at`) + 대화 컬렉션(`inquiry_messages`, 숨김) + 제출 `access:'public'` serverFn → 성공 뒤 `notify.owner`. 답장·종료는 `access:'owner'` serverFn(`adminReply`·`adminClose`), 화면은 `admin.json` 상세의 `thread` |
 | 예약 | 슬롯·예약 컬렉션 + `transaction`(정원 `guard` · 중복 unique) — `examples/slot-booking.ts` |
 | 상품·주문·결제 | 상품·주문 컬렉션 + `sdk.payments` — 「결제」 절 |
 | 게시판·후기·댓글 | 회원끼리 보고 쓰면 브라우저 `useCollection` 으로 충분하다. 비로그인 열람·「구매자만 후기」 같은 규칙이 붙을 때만 serverFn |
@@ -645,100 +646,20 @@ async function requireOperator(sdk: Sdk, ctx: ServerCtx): Promise<Role> {
 - **소유자만 할 수 있는 일**(운영자 임명·해제, 위험한 일괄 처리)은 `role === 'owner'` 로 가른다.
 - 이 값은 **데이터 접근을 넓히지 않는다.** dyncol 인가는 `service` grants 만 보므로, 소유자라고
   해서 코드가 부르지 않은 컬렉션이 열리지는 않는다.
+- **관리 화면은 `access:'owner'` 함수만 부른다.** 위임 운영자(`delegate`) 경로가 필요한 함수(`member` +
+  `authorizes`)는 앱 화면에서 운영자가 쓰는 함수다 — 관리 화면 명세의 `call` 에 넣지 않는다.
 
-#### 관리자 화면은 **누구 권한으로 열렸는지** 보여 준다
+#### 앱에는 관리 화면이 없다 — 사장님은 AI Studio 관리 화면에서 운영한다
 
-소유자 판정의 근거는 **브라우저에 남아 있는 플랫폼 세션**이다. 그래서 기기를 함께 쓰면
-(매장 공용 태블릿 등) 사장님이 로그인해 둔 브라우저에서 다른 사람이 손님으로 로그인해도
-관리자 화면이 열린다. 플랫폼이 이걸 막지 않는 이유는, 막으려면 사장님이 자기 앱을 손님으로
-써 보는 정상 동작까지 같이 막히기 때문이다.
+**앱 안에 `/admin` 경로·관리자 셸·사장님 모드 배지·소유자 로그인 링크를 만들지 마라.** 사장님의 운영
+화면(목록·통계·일정·설정·처리 버튼)은 AI Studio 관리 화면이 `backend/admin.json` 명세로 그린다
+(「관리 화면」 절). 앱 화면은 손님(과 위임 운영자)만 쓴다.
 
-대신 **상태를 화면에 드러내라.** 설명할 수 없는 화면이 사고를 만든다.
-
-- 관리자 화면 상단에 `사장님 모드` 배지와 **누구인지**(`sdk.account.get(ctx.accountId)` 의
-  이름, 없으면 "프로젝트 소유자")를 표시한다
-- 손님 화면에서 관리자 화면으로 가는 링크는 `ctx.isProjectOwner` 가 true 일 때만 노출한다 —
-  숨기는 게 인가는 아니지만, 안 보이면 우연히 들어가지 않는다
-- 관리자 화면에 "여기서 나가기" 를 둔다. 프로젝트 로그아웃은 플랫폼 세션을 지우지 않으므로,
-  로그아웃했는데 관리자 화면이 열려 있는 상태가 생긴다 — 그때 돌아갈 곳이 있어야 한다
-- **레이아웃도 가른다.** 손님 셸(헤더·푸터) 안에 관리자 화면을 넣으면 관리 콘솔에 손님용
-  네비게이션과 「로그인 / 회원가입」 버튼이 남아, 본문이 「사장님 계정으로 로그인」이라고
-  안내하는 옆에서 헤더가 회원가입을 권한다(2026-09-17 실측). 규칙은 `baas-integration-sdk`
-  스킬의 「관리자 화면은 셸을 분리한다」에 있다 — 화면을 쓰는 쪽이 그 스킬이다
-
-#### 소유자가 **들어오는 길**을 반드시 만들어라
-
-`ctx.isProjectOwner` 가 false 일 때 "소유자 계정으로 로그인해 주세요" 라고만 적으면
-**할 수 없는 일을 지시하는 것**이다(실측 2026-09-17). 앱의 회원 로그인은 프로젝트 회원용이고
-소유자는 통합회원이라 그 폼으로는 **원리상 로그인되지 않는다.**
-
-소유자는 플랫폼 로그인으로 보낸 뒤 되돌아오게 한다.
-
-```tsx
-// 관리자 화면에서 ctx.isProjectOwner === false 일 때
-//
-// 이 값은 **UUID** 다 — AI Studio 가 `index.html` 에 프로젝트 UUID 를 심는다. 서버는 UUID 와
-// 슬러그를 모두 받으므로 읽은 값을 **그대로** 넘긴다(슬러그로 바꾸려 들지 마라).
-const projectRef = document.querySelector('meta[name="baas-project-id"]')?.getAttribute('content')
-const consoleHost = location.hostname.endsWith('.aiapp.help') ? 'baas.aiapp.help' : 'baas.jjunmo.link'
-
-// 라벨은 **지금 로그인 상태에 따라 갈린다.** 회원으로 로그인한 사람에게 "로그인" 이라고
-// 하면 이미 한 일을 다시 하라는 말이 된다.
-//
-// `AuthProvider` 가 앱 루트에서 1회 조회해 둔 전역 상태를 **읽기만** 한다 — 여기서 인증을
-// 다시 확인하지 않는다. 앱 루트에 Provider 가 없으면 그것부터 두라(네이티브 표면 참조).
-const { isLoggedIn } = BaasSDK.useAuth()
-const label = isLoggedIn ? '사장님 계정으로 전환' : '사장님 계정으로 로그인'
-
-// `next` 는 **통째로 인코딩한다.** 안 하면 `?to=` 의 `?` 가 `next` 를 끊어 `/login` 의 별개
-// 파라미터가 되고 돌아올 경로가 조용히 사라진다 — 기본값이 `/admin` 이라 겉으로는 동작해
-// 보이므로 `?to=/admin/orders` 로 바꾸는 순간에야 드러난다.
-const next = encodeURIComponent(`/account/enter-app/${projectRef}?to=/admin`)
-
-<a href={`https://${consoleHost}/login?next=${next}`}>
-  {label}
-</a>
-// 로그인 → 플랫폼이 소유권을 확인하고 **이 화면으로 되돌려보낸다**(커스텀 도메인 포함)
-```
-
-##### 라우터를 함께 고쳐라 — `RequireAuth` 로 감싸면 위 링크가 전부 무의미하다
-
-링크를 관리자 화면 **안에** 두는 것만으로는 부족하다. **라우트 정의는 다른 파일에 있고 보통
-이전 턴에 이미 작성돼 있다.** 관리자 화면을 손볼 때 라우터를 함께 열지 않으면 이게 남는다:
-
-```tsx
-// ❌ 실측된 실패(2026-09-17 출시본). 소유자는 진입 화면을 **한 번도 보지 못했다**
-<Route path="/admin" element={
-  <RequireAuth fallback={<Navigate to="/login" replace />}><AdminPage/></RequireAuth>
-}/>
-
-// ✅ 누구나 열 수 있게 두고, 내용은 서버가 403 으로 가린다
-<Route path="/admin" element={<AdminPage/>}/>
-```
-
-소유자는 통합회원이라 `useAuth()` 의 `isLoggedIn` 이 **항상 false** 다. `RequireAuth` 는
-페이지가 마운트되기도 전에 앱 자체 `/login`(회원 폼)으로 보내고, 그 폼으로는 통합회원이
-원리상 로그인되지 않는다 — 진입 화면에 **도달할 방법 자체가 사라진다.** 페이지를 아무리 잘
-만들어도 실행되지 않으므로, 이 결함은 화면을 보고는 못 찾고 라우터를 열어야 보인다.
-
-축이 다르다: `RequireAuth` 는 「로그인 안 했으면 못 들어감」이고, 관리자 화면은 **로그인한
-회원도 소유자가 아니면 못 보는** 화면이다. 인가는 클라이언트가 아니라 서버가 한다.
-
-> 이 규칙은 **`baas-integration-sdk` 스킬에도 같은 내용이 있다**(「로그인 필수 화면은
-> `RequireAuth` 로 감싼다」의 예외 항목). 라우트를 실제로 쓰는 것은 그쪽 스킬이므로, 한쪽만
-> 고치면 두 지침이 어긋나 에이전트가 라우트를 쓰는 순간의 지침을 따른다 — 실제로 그렇게
-> 어긋나 있었다(2026-09-17). 고칠 때는 **둘 다** 고쳐라.
-
-**「관리자 콘솔로 이동」 같은 문구는 쓰지 마라.** 목적지가 다른 콘솔이 아니라 **지금 보고 있는
-이 화면**이다 — 인증만 하고 제자리로 돌아온다. 떠나는 것처럼 적으면 사용자가 하던 일을
-잃을까 봐 누르지 않는다.
-
-- **앱이 자체 로그인 폼으로 통합회원을 인증하려 하지 마라.** 통합회원은 여러 프로젝트를
-  소유하므로, 앱 도메인이 그 자격을 쥐면 **다른 프로젝트까지 권한이 번진다.** 앱은 보내기만 한다
-- `next` 는 상대 경로다. 목적지 주소는 플랫폼이 DB 에서 만든다 — 앱이 정하면 오픈 리다이렉터가 된다
-- 돌아올 경로는 `?to=/admin/orders` 처럼 **앱 안의 상대 경로**다(기본 `/admin`)
-- 식별자는 `<meta name="baas-project-id">` 값을 **그대로** 넘긴다. 서버가 UUID·슬러그를 모두
-  받으므로 앱이 형식을 판단할 필요가 없다
+- 데이터 읽기는 관리 화면이 사장님 본인 권한으로 컬렉션을 직접 읽는다 — 목록용 `access:'owner'` 조회
+  serverFn 을 따로 만들지 않는다
+- 상태를 바꾸는 일(확정·취소·답장)은 `access:'owner'` serverFn 으로 만들고 명세의 동작(`call`)으로 연결한다
+- 예전 앱 안 관리자 화면 지침(사장님 모드 배지, `enter-app` 로그인 링크, `/admin` 라우트를 `RequireAuth`
+  밖에 두기)은 **2.1 에서 걷어냈다.** 이미 그런 화면이 있는 프로젝트는 사용자가 요청할 때만 정리한다
 
 #### 이름·연락처는 `sdk.account` 로 조회한다
 
@@ -748,34 +669,101 @@ const page = await sdk.account.list({ limit: 50, keyword: '구매' })
 ```
 
 - 이 프로젝트 소속 회원만 보인다. 스코프는 주입 토큰이 강제하므로 네가 걸지 않아도 된다
-- **인가는 이 표면이 하지 않는다.** 관리자 전용 화면에 쓰려면 위 `admins` 체크를 **먼저**
-  통과시킨 뒤 불러라. 플랫폼은 "같은 프로젝트 회원인가" 만 판정한다
+- **인가는 이 표면이 하지 않는다.** 운영자 전용 함수에 쓰려면 위 `requireOperator`(또는 `admins` 체크)를
+  **먼저** 통과시킨 뒤 불러라. 사장님 동작이면 `access:'owner'` 가 핸들러 앞에서 막는다. 플랫폼은
+  "같은 프로젝트 회원인가" 만 판정한다
 - 노출 범위는 플랫폼이 정한다 — `id`·`user_id`·`name`·`phone`·`status`·
   `is_profile_completed`·`created_at`. 자유형 `data`·과금·운영 메모는 오지 않는다
 
-### 소유자 화면 — 전체 목록·관리는 `access:'owner'` serverFn 이 읽는다
+### 관리 화면 — 사장님 동작은 `access:'owner'` serverFn, 화면은 `backend/admin.json`
 
-「사장님만 보는 전체 목록·관리 화면」(예약 관리·문의 목록·공지 작성)은 소유자 전용 serverFn 으로 만든다.
-데이터는 프로젝트 컬렉션이므로 `sdk.dyncol` 로 전체 범위를 읽고 쓴다.
+사장님의 운영 화면은 **AI Studio 관리 화면**이 그린다. 이 역할이 쓰는 것은 둘이다.
 
-```ts
-import type { BookingsRecord } from '../types/collections'   // extract.mjs 가 schema.json 에서 만든다
+| 무엇 | 어디 | 누가 부르나 |
+|---|---|---|
+| 상태를 바꾸는 사장님 동작(확정·거절·답장·일괄 처리·설정 저장) | `src/services/<파일>.ts` 의 `access:'owner'` serverFn | 관리 화면 버튼 |
+| 화면 구성(목록·숫자·일정·상세·폼·대화) | `backend/admin.json` | 관리 화면이 읽어 그린다 |
 
-/** 앱 트리는 `Sdk` 타입을 임포트할 수 없다 — 쓰는 만큼만 좁혀 쓴다. */
-type ListSdk = { dyncol: { list: <T>(c: string, o?: object) => Promise<{ items: { id: string; data: T }[] }> } }
-type Booking = BookingsRecord
+- **읽기는 serverFn 이 필요 없다.** 관리 화면이 사장님 본인 권한으로 `service` 전용 컬렉션까지 읽는다
+- **쓰기**: 규칙이 없는 컬렉션은 명세가 연 칸만 관리 화면이 직접 쓴다. 규칙이 걸린 컬렉션(`service`)은
+  owner serverFn 으로만 바꾼다. 공지처럼 **규칙 없이 사장님만 쓰는 콘텐츠**는 `service` 로 잠그고
+  명세 `owner_content` 에 올린다 — 손님 앱은 못 쓰고 관리 화면만 쓴다
+- 동작 이름은 **`<파일>.<export>`** 다(`src/services/booking.server.ts` 의 `adminConfirm` →
+  `booking.server.adminConfirm`). 파일 이름은 영문·숫자·`_`·`.` 만 쓴다 — 하이픈이 들어가면 명세가 그 이름을 받지 않는다
 
-export const listBookings = serverFn<{ from?: string }, { items: Booking[] }>(async (input, ctx) => {
-  const sdk = ctx.sdk as ListSdk
-  const page = await sdk.dyncol.list<Booking>('bookings', {
-    filter: input.from ? { starts_at: { gte: input.from } } : undefined, sort: '-starts_at', limit: 50,
-  })
-  return { items: page.items.map((r) => r.data) }
-}, { access: 'owner' })
+#### 사장님 동작 serverFn — 입력 계약과 상태 전이
+
+관리 화면이 보내는 입력은 정해져 있다. 이 모양대로 받는다.
+
+| 화면 | 입력 |
+|---|---|
+| 줄·상세 동작(`actions`) | `{ id, …입력값 }` — 입력값은 명세 `input` 의 `name` |
+| 일괄 동작(`bulk` 의 `call`) | `{ ids, …입력값 }` |
+| 폼 저장(`forms.<id>.save`) | `{ id?, data }` — 만들기면 `id` 가 없다 |
+| 대화 답장(`thread.reply`) | `{ id, <input>: 마크다운 }` |
+
+- **업무의 실제 상태로 만든다.** 「승인·거절」이 필요한 신청을 `received → in_review → done` 같은 범용
+  단계로 뭉개지 마라 — 사장님이 거절할 방법이 사라진다(2026-10-16 실측)
+- **상태 전이는 단건 `update(…, { if: { status: '<지금 상태>' } })`** 다. 둘이 동시에 눌러도 하나만 이긴다.
+  진 쪽은 409 를 받으므로 다시 읽어, **이미 원하는 상태면 그대로 돌려주고**(두 번 눌러도 오류가 아니다)
+  아니면 `ServerFnError('다른 처리로 상태가 이미 바뀌었습니다. 새로고침해 주세요', 409)` 를 던진다.
+  관리 화면은 이 문구를 그대로 보인다
+- 자리·재고를 되돌려야 하는 전이(거절·취소)는 **이긴 쪽만** 카운터를 되돌린다
+- 반환은 바뀐 레코드의 요약(`{ id, status }`)이면 충분하다 — 화면이 목록을 다시 읽는다
+- 참조 구현: `examples/booking.server.ts`
+
+#### 명세 — `backend/admin.json`
+
+serverFn 과 컬렉션이 정해진 뒤 쓰고, 그것들이 바뀌면 함께 고친다. 한 파일이다.
+
+```json
+{
+  "version": 1,
+  "title": "예약 관리",
+  "hidden": ["slots"],
+  "labels": { "bookings": { "name": "예약자", "visit_date": "방문일", "status": "상태", "submitted_at": "신청일" } },
+  "values": { "bookings": { "status": { "pending": "확인 대기", "approved": "승인", "rejected": "거절" } } },
+  "formats": { "bookings": { "submitted_at": "date" } },
+  "menu": ["bookings"],
+  "pages": {
+    "bookings": { "title": "예약", "widgets": [
+      { "type": "stat", "label": "확인 대기", "source": { "collection": "bookings", "filter": { "status": "pending" } } },
+      { "type": "list", "collection": "bookings", "columns": ["name", "visit_date", "status", "submitted_at"],
+        "tabs": { "field": "status" }, "sort": "-submitted_at", "search": ["name"],
+        "actions": [
+          { "label": "승인", "call": "booking.server.adminApprove", "when": { "status": "pending" } },
+          { "label": "거절", "call": "booking.server.adminReject", "when": { "status": "pending" }, "style": "danger",
+            "confirm": "거절할까요? 자리가 반환됩니다.",
+            "input": [{ "name": "reason", "label": "거절 사유", "type": "textarea", "required": true }] }
+        ] }
+    ] }
+  }
+}
 ```
 
-- 소유자 판정은 `access: 'owner'` 가 핸들러 앞에서 끝낸다. 본문에서 다시 검사하지 않는다
-- 공지·FAQ 처럼 소유자가 쓰고 누구나 읽는 데이터는 쓰기 serverFn(`owner`)과 읽기 serverFn(`public`)을 나눈다
+| 키 | 뜻 |
+|---|---|
+| `labels` · `values` | 칸·보기 값의 한국어 이름. **화면에 나오는 칸과 보기 값은 전부** 적는다 — 스키마에 없는 한국어는 여기뿐이다 |
+| `formats` | `money`·`phone`·`date`·`datetime`·`time`·`color`·`markdown`(본문 칸 — 상세는 마크다운으로, 폼은 서식 편집기로) |
+| `hidden` | 카운터 같은 내부 컬렉션. 페이지를 주지 않는다 |
+| `owner_content` | `service` 로 잠갔지만 관리 화면이 직접 쓰는 사장님 콘텐츠(공지 등) |
+| `pages.<id>.widgets` | `list`(탭·검색·필터·`actions`·`editable`·`create`/`edit`/`delete`/`bulk`) · `stat` · `agenda` · `timeline` · `settings` · `breakdown` · `trend` · `panel` |
+| `details.<컬렉션>` | 상세: `fields` · `related` · `actions` · `edit` · `delete` · `thread`(대화 말풍선 + 답장 owner serverFn) |
+| `forms.<id>` | `fields`(이름 · `{name, label, ui, help}` · `{group, columns, fields}`), `defaults`, `readonly`, `save`(있으면 그 owner serverFn 으로 저장). `ui` 에 `richtext`(서식 편집기, 값은 마크다운) |
+
+- 동작의 **`input` 은 리스트**다: `[{ "name", "label", "type", "options", "required" }]`. `type` 은
+  `text`·`textarea`·`richtext`·`number`·`money`·`select`·`date`. 칸 이름을 키로 한 객체로 쓰지 마라 — 명세 전체가 거부된다
+- `panel` 은 입력 폼으로 owner serverFn 을 부르고 결과를 그린다. 결과는
+  `{ kind: 'table', columns, rows }` · `{ kind: 'kv', items }` · `{ kind: 'cards', items }` · `{ kind: 'file', url }`
+- 조건(`filter`·`when`)은 `{칸: 값}` · `{칸: [값들]}` · `{칸: {gte|gt|lte|lt|ne: 값}}`, 날짜는 `@today`·
+  `@daysAgo(n)`·`@daysAhead(n)`. `created_at` 은 정렬만 되고 거를 수 없다 — 「최근」 화면에는 `submitted_at` 같은 날짜 칸을 둔다
+- **모르는 위젯·속성을 쓰면 명세 전체가 거부된다.** 위에 있는 것만 쓴다. 어휘 전문은 AI Studio 가 함께 주는
+  「관리 화면 명세」 지침이 정본이다
+
+**`node backend/extract.mjs` 가 명세를 검사한다.** 모양(모르는 속성·`input` 모양), 컬렉션·칸이
+`schema.json` 에 있는지, `call` 이 `serverfn-access.json` 의 `access:'owner'` 함수인지, 규칙 컬렉션을
+직접 쓰기로 열지 않았는지를 보고, 어긋나면 **빌드를 세운다.** 오류 문구대로 고치고 다시 돌린다 —
+사장님이 관리 화면을 열고서야 알게 두지 않는다.
 
 ### 관리자 알림 — 「X 가 생기면 알려 줘」는 `sdk.notify.owner`
 
@@ -859,7 +847,7 @@ return { status: 'booked' }
    꺼진 채 남아 있다(선언은 켜짐을 바꾸지 않는다) — 그때만 "예전에 꺼 두신 알림이에요. 다시 켤까요?"
    라고 묻고, 켜겠다고 하면 `baas notification enable <key>`
 2. 사용자에게 말한다 — "알림을 만들었어요. 가입하신 연락처로 카카오 알림톡이 먼저 가고, 안 되면
-   가입 이메일로 가요. 끄거나 이메일을 먼저 받게 바꿀 수 있고, 원하시면 관리자 페이지에 알림 설정도
+   가입 이메일로 가요. 끄거나 이메일을 먼저 받게 바꿀 수 있고, 원하시면 관리 화면에 알림 설정도
    넣어 드릴게요."
 
 받는 사람은 늘 프로젝트 관리자(소유자) 본인이라 따로 조회하지 않는다. 연락처는 기본이 **가입 계정의 이메일 ·
@@ -867,7 +855,7 @@ return { status: 'booked' }
 채팅에 옮겨 적지 마라 — 개인정보가 대화 기록에 남는다.
 
 **설정의 정본은 플랫폼 한 곳이다.** 알림마다 켬/끔과 채널 순서가 플랫폼에 저장되고, 아래 명령(채팅)과
-관리자 페이지(4번) 둘 다 **같은 값**을 바꾼다. 앱 컬렉션에 알림 켬/끔을 따로 두지 마라 — 두 값이 어긋나
+관리 화면(4번) 둘 다 **같은 값**을 바꾼다. 앱 컬렉션에 알림 켬/끔을 따로 두지 마라 — 두 값이 어긋나
 「화면은 켜짐인데 안 온다」가 된다.
 
 | 명령 | 쓰임 |
@@ -887,50 +875,66 @@ return { status: 'booked' }
 `recipient` 로 전화번호가 등록돼 있는지 확인하고, 번호를 그대로 보여 주지 말고 끝자리만 보여 주며 **그
 번호가 맞는지 사용자에게 확인받는다.** 번호가 없으면 서버가 거절한다(400).
 
-#### 4. 관리자 페이지의 「알림 설정」 — 요청이 있을 때만
+#### 4. 관리 화면의 「알림 설정」 — 요청이 있을 때만
 
-「관리자 페이지에서 알림을 켜고 끄게 해 줘」 같은 요청이 오면, 관리자 화면에 알림 목록과 토글·채널
-순서를 넣는다. 미리 만들어 두지 않는다 — 관리자 페이지는 사용자가 요청한 기능으로 구성된다.
+「관리 화면에서 알림을 켜고 끄게 해 줘」 같은 요청이 오면 owner serverFn 둘을 만들고 `admin.json` 에
+연결한다. 미리 만들어 두지 않는다 — 관리 화면은 사용자가 요청한 기능으로 구성된다.
 
-서버 SDK 의 `notify.list` · `notify.update` · `notify.recipient` 로 만든다. **이 셋은 관리자 페이지 전용이다.**
+서버 SDK 의 `notify.list` · `notify.update` · `notify.recipient` 로 만든다. **이 셋은 관리 화면 동작 전용이다.**
 
 - **serverFn 은 반드시 `access: 'owner'`.** 서버(`/service/notifications`)는 주입 토큰과 프로젝트만 보고,
   그 serverFn 을 누가 불렀는지는 모른다. 소유자 판정은 플랫폼 디스패처가 하고(`isProjectOwner`)
   `access: 'owner'` 가 그 값으로 막는다 — 이 선언을 빠뜨리면 손님·회원이 사장님 알림을 끌 수 있다
 - **손님 화면 코드에서 부르지 마라.** 브라우저에서는 열리지도 않는다(서버 간 전용)
 - `notify.owner` 와 달리 **실패를 던진다** — 지원하지 않는 채널·번호 없는 알림톡은 400, 선언되지 않은 키는
-  404. 메시지를 화면에 그대로 보여 준다
+  404. 관리 화면이 메시지를 그대로 보인다
 - 받는 곳(`recipient`)은 **가린 값**이다(`jj***@mbaas.kr` · `010-****-7122`). 보여 주기만 한다. 출처
   (`email_source` · `phone_source`)로 「가입 계정」 · 「따로 지정」을 붙여 준다. **화면에 「어디서 바꿀 수 있다」를
   적지 마라** — 콘솔 · 앱에 바꾸는 화면이 없다(실측 2026-10-13: 「문의 설정에서 바꿉니다」라고 적어 사용자가
   없는 메뉴를 찾았다). 바꾸는 길은 채팅의 `inquiry setting` 명령(3번 표)뿐이다
 
 ```ts
-// src/services/notifySettings.ts — 관리자 페이지 「알림 설정」
+// src/services/notifySettings.ts — 관리 화면 「알림 설정」
 import { serverFn } from './serverFn'
-import type { OwnerNotificationSetting, OwnerNotifyChannel, OwnerNotifyRecipient, OwnerNotifySdk,
-  OwnerNotificationKey } from '../types/notifications'
+import type { OwnerNotificationKey, OwnerNotificationSetting, OwnerNotifySdk } from '../types/notifications'
 
-type NotifySettings = { items: OwnerNotificationSetting[]; recipient: OwnerNotifyRecipient }
+type Table = { kind: 'table'; columns: string[]; rows: string[][] }
 
-export const getNotifySettings = serverFn<void, NotifySettings>(async (_input, ctx) => {
+// panel 결과 — 알림마다 이름·켜짐·채널 순서와 받는 곳을 표로 보인다
+export const getNotifySettings = serverFn<void, Table>(async (_input, ctx) => {
   const sdk = ctx.sdk as OwnerNotifySdk
   const [items, recipient] = await Promise.all([sdk.notify.list(), sdk.notify.recipient()])
-  return { items, recipient }
+  const to = recipient.phone ? `알림톡 ${recipient.phone} → 안 되면 ${recipient.email ?? '이메일 없음'}` : `이메일 ${recipient.email ?? '없음'}`
+  return {
+    kind: 'table',
+    columns: ['알림', '켜짐', '채널 순서', '받는 곳'],
+    rows: items.map((n) => [n.label, n.enabled ? '켬' : '끔', n.channels.join(' → '), to]),
+  }
 }, { access: 'owner' })
 
+// panel 입력 — 키·켬/끔·채널 순서를 받아 바꾼다
 export const updateNotifySetting = serverFn<
-  { key: OwnerNotificationKey; enabled?: boolean; channels?: OwnerNotifyChannel[] },
+  { key: OwnerNotificationKey; enabled: '켬' | '끔'; channels: string },
   OwnerNotificationSetting
 >(async (input, ctx) => {
   const sdk = ctx.sdk as OwnerNotifySdk
-  return sdk.notify.update(input.key, { enabled: input.enabled, channels: input.channels })
+  const channels = input.channels.split(',').map((c) => c.trim()).filter(Boolean) as OwnerNotificationSetting['channels']
+  return sdk.notify.update(input.key, { enabled: input.enabled === '켬', channels })
 }, { access: 'owner' })
 ```
 
-화면에는 알림마다 이름(`label`)·켬/끔 토글·채널 순서를 두고, 위에 「카카오 알림톡 010-****-7122 → 안 되면
-jj***@mbaas.kr」처럼 받는 곳을 보여 준다. `recipient.phone` 이 `null` 이면 "알림 받을 번호가 없어 이메일로만
-가요"라고 알린다.
+```json
+{ "type": "panel", "title": "알림 설정", "call": "notifySettings.getNotifySettings", "submit_label": "불러오기" },
+{ "type": "panel", "title": "알림 바꾸기", "call": "notifySettings.updateNotifySetting",
+  "input": [
+    { "name": "key", "label": "알림", "type": "select", "options": ["reservation.created"], "required": true },
+    { "name": "enabled", "label": "켜기", "type": "select", "options": ["켬", "끔"], "required": true },
+    { "name": "channels", "label": "채널 순서", "type": "text", "required": true }
+  ] }
+```
+
+`options` 에는 `schema.json` 에 선언한 알림 키를 그대로 적는다. `recipient.phone` 이 `null` 이면 표의 받는 곳이
+「이메일」만 보이므로 "알림 받을 번호가 없어 이메일로만 가요"라고 사용자에게도 알린다.
 
 ### 결제 — 금액은 DB 에서 읽고, 승인은 serverFn 이 한다 (`sdk.payments`)
 
@@ -1083,8 +1087,9 @@ export const resolveDeposit = serverFn<{ orderNo: string; action: 'settle' | 're
 - **끊긴 결제는 손님이 복귀 화면에 있을 때 끝낸다.** `confirmDeposit` 이 실패(5xx · 네트워크)하면 복귀 화면이
   같은 값으로 몇 번(간격을 늘려 3회 정도) 다시 부른다. 플랫폼 저장 실패는 웹훅이 몇 초 안에 PAID 로 복구하므로
   재시도한 `confirm` 은 PAID 를 받고 확정으로 넘어간다. 400(금액 불일치 · 가상계좌 · 취소된 결제)은 다시 부르지 않는다
-- **그래도 남은 것은 사장님이 처리한다.** 손님이 그 사이 창을 닫으면 결제만 남는다 — 관리 화면에
-  `listUnsettledDeposits` 로 보여 주고 `resolveDeposit` 버튼(확정 / 환불)을 둔다. **조회가 확정 · 환불을 하게
+- **그래도 남은 것은 사장님이 처리한다.** 손님이 그 사이 창을 닫으면 결제만 남는다 — 관리 화면 명세에
+  `listUnsettledDeposits` 를 `panel`(결과를 `{ kind: 'table', … }` 로 돌려준다)로 보여 주고 `resolveDeposit` 을
+  동작(확정 / 환불)으로 둔다. **조회가 확정 · 환불을 하게
   만들지 마라** — 목록을 열 때마다 돈이 움직이면 예측할 수 없고, 동시에 열면 경합한다. 손님 쪽 목록에는 이런
   주문을 「결제 확인 중」으로만 보여 준다
 - **가상계좌는 받지 않는다.** 입금 대기로 끝난 승인은 플랫폼이 토스에서 취소하고 400 을 던진다 —
@@ -1100,29 +1105,32 @@ export const resolveDeposit = serverFn<{ orderNo: string; action: 'settle' | 're
 
 ### 파일 업로드 — 누가 올리나는 serverFn 이 정한다 (`sdk.storage.presign`)
 
-사장님이 관리 화면에서 사진을 올리는 것처럼 **올릴 수 있는 사람이 정해진 업로드**는 serverFn 이 업로드
-주소를 받아 브라우저에 넘긴다(aiapp-service#904). 업로드 모듈은 형식 · 크기 · 저장 경로만 검사하고
+운영자가 앱에서 매장 사진을 올리는 것처럼 **올릴 수 있는 사람이 정해진 업로드**는 serverFn 이 업로드
+주소를 받아 브라우저에 넘긴다(aiapp-service#904). 관리 화면 서식 편집기의 사진(공지 본문 등)은 AI Studio 가
+직접 올리므로 serverFn 이 필요 없다. 업로드 모듈은 형식 · 크기 · 저장 경로만 검사하고
 **누가 올리는지는 판정하지 않는다** — 그 판정이 이 serverFn 의 `access` 다.
 
 ```ts
-// src/services/gallery.ts — 소유자만 업로드 주소를 받는다
+// src/services/gallery.ts — 운영자만 업로드 주소를 받는다(requireOperator 는 「회원 정보」 절)
 export const presignGalleryPhoto = serverFn<
   { filename: string; contentType: string; size: number },
   StorageUploadTarget
 >(async (input, ctx) => {
+  await requireOperator(ctx.sdk as Sdk, ctx)
   return ctx.sdk.storage.presign({ ...input, category: 'images' })
-}, { access: 'owner' })
+}, { access: 'member', authorizes: true })
 
 export const addGalleryPhoto = serverFn<{ cdnUrl: string }, { id: string }>(async (input, ctx) => {
+  await requireOperator(ctx.sdk as Sdk, ctx)
   const row = await ctx.sdk.dyncol.create('gallery', { image_url: input.cdnUrl })
   return { id: row.id }
-}, { access: 'owner' })
+}, { access: 'member', authorizes: true })
 ```
 
 - 프론트는 `useFileUpload().uploadTo(presignGalleryPhoto 의 응답, file)` 로 파일을 올리고, 돌려받은
-  `cdn_url` 을 `addGalleryPhoto` 에 넘긴다. 앱 회원 로그인이 없어도 된다 — 소유자 인증은 serverFn 이 받는다
-- **분류(`category`)는 `images`(기본) · `store` · `reservation`** 만 받는다. 게시판 첨부는 게시판 기능 몫이라
-  여기서 발급하지 않는다. `images` 는 이미지 확장자 · 최대 100MB, 실행 파일은 분류와 상관없이 거절(400 을 던진다)
+  `cdn_url` 을 `addGalleryPhoto` 에 넘긴다
+- **분류(`category`)는 `images` 하나다**(서버 SDK `StorageCategory` · 브라우저 `UploadCategory` 모두). `images` 는
+  이미지 확장자 · 최대 100MB, 실행 파일은 거절(400 을 던진다)
 - 받은 주소는 **곧 만료되는 일회용**이다. 저장해 두지 말고, 올린 뒤 남길 것은 `cdn_url` 이다
 - 회원이 자기 프로필 사진을 올리는 것처럼 **로그인 회원이면 누구나** 올리는 업로드는 serverFn 없이
   브라우저 `useFileUpload().upload` 로 충분하다
@@ -1229,7 +1237,7 @@ baas secret list          # 이름·시각만 나온다. 값은 나오지 않는
 표면이 없던 동안의 우회였고 두 가지가 나쁘다.
 
 1. **클라이언트가 쓰는 값이라 검증할 원본이 없다.** 회원이 자기 이름을 임의 문자열로 넣을
-   수 있고, 관리자 화면이 그 값을 믿는다
+   수 있고, 관리 화면이 그 값을 믿는다
 2. 같은 개인정보가 네이티브 회원 표와 프로젝트 컬렉션 **두 곳에 사본으로** 남고, 회원이
    네이티브에서 이름을 바꾸면 사본이 낡는다
 
@@ -1296,6 +1304,7 @@ try { ... } catch (e) {
 | 파일 | 무엇을 막는가 |
 |---|---|
 | `examples/slot-booking.ts` | 동시 예약이 같은 마지막 자리를 통과하는 것 → 한 트랜잭션에 **정원 `guard` + `slot_account_key` unique** 를 함께 보낸다 (조회로 판정하면 뚫린다) |
+| `examples/booking.server.ts` | 관리 화면 동작이 동시에 눌리거나 다시 눌릴 때 상태가 꼬이는 것 → 승인·거절을 단건 `update(…, { if })` 로 하고, 진 쪽은 다시 읽어 **이미 그 상태면 그대로**, 아니면 409. 거절은 이긴 쪽만 자리를 돌려준다 |
 | `examples/order-stock.ts` | 여러 메뉴를 한 번에 주문할 때 재고가 음수가 되거나 정원이 넘치는 것 → 메뉴 수만큼 `...lines.map(…)` 으로 펼친 재고 차감과 정원 `guard`·주문 생성을 한 트랜잭션에 보낸다 |
 
 예제는 **CI 에서 타입체크되고 추출기로도 돌려 본다**(`examples/tsconfig.json`,
@@ -1316,8 +1325,11 @@ try { ... } catch (e) {
 - [ ] 공개 조회·제출 serverFn 이 필요한 필드만 돌려준다
 - [ ] 외부 연동이 있으면 **키를 먼저 요청**했다
 - [ ] 관리자 알림은 `schema.json` 에 선언했고, 동작이 **성공한 뒤** serverFn 에서만 `notify.owner` 를 불렀다
-- [ ] 새 알림이 **켜진 채 카카오 알림톡 → 안 되면 이메일**로 온다는 것과 끄기·순서 바꾸기·관리자 페이지 설정을 사용자에게 알렸고, `baas notification list` 로 켜짐을 확인했다
-- [ ] 관리자 페이지에 알림 설정을 넣었다면 그 serverFn 이 **`access: 'owner'`** 이고, 앱 컬렉션에 알림 켬/끔을 따로 두지 않았다
+- [ ] 새 알림이 **켜진 채 카카오 알림톡 → 안 되면 이메일**로 온다는 것과 끄기·순서 바꾸기·관리 화면 설정을 사용자에게 알렸고, `baas notification list` 로 켜짐을 확인했다
+- [ ] 관리 화면에 알림 설정을 넣었다면 그 serverFn 이 **`access: 'owner'`** 이고, 앱 컬렉션에 알림 켬/끔을 따로 두지 않았다
+- [ ] 앱 안에 `/admin`·관리자 셸·사장님 로그인 링크를 만들지 않았다 — 사장님 화면은 `backend/admin.json` 이다
+- [ ] 사장님 동작은 `access:'owner'` serverFn 이고, 업무의 실제 상태(승인·거절 등)로 전이하며 `if` 를 붙였다
+- [ ] `admin.json` 의 화면에 나오는 칸·보기 값에 라벨이 있고, `node backend/extract.mjs` 가 명세 검사를 통과했다
 - [ ] 본문이 403 을 던지는 함수에 `authorizes: true` 를 선언했다
 - [ ] 역할 표를 만들었으면 **첫 행을 넣는 경로**를 정하고 사용자에게 알렸다
 - [ ] 브리프에서 **구현하지 않은 항목**을 보고에 적었다 (스케줄처럼 아직 제공되지 않는 것 포함)

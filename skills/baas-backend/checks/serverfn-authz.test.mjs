@@ -28,7 +28,7 @@ function project(serviceSource) {
   // 저작 마커 사본 — §0 이 하는 것과 같다
   fs.copyFileSync(path.join(BOILERPLATE, 'src', 'serverFn.ts'),
                   path.join(root, 'src', 'services', 'serverFn.ts'))
-  for (const f of ['extract.mjs', 'schema.mjs', 'build.mjs', 'package.json', 'tsconfig.json']) {
+  for (const f of ['extract.mjs', 'schema.mjs', 'admin-spec.mjs', 'admin.schema.json', 'build.mjs', 'package.json', 'tsconfig.json']) {
     fs.copyFileSync(path.join(BOILERPLATE, f), path.join(root, 'backend', f))
   }
   // ESM 은 NODE_PATH 를 보지 않는다 — 실제 해석 경로를 만들어 준다
