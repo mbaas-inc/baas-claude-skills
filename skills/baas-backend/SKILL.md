@@ -716,6 +716,20 @@ const page = await sdk.account.list({ limit: 50, keyword: '구매' })
 
 serverFn 과 컬렉션이 정해진 뒤 쓰고, 그것들이 바뀌면 함께 고친다. 한 파일이다.
 
+로그인·가입의 회원관리는 고정 페이지다. `pages.<id>.component: "members"`와 `widgets: []`를 선언하고
+그 ID를 `menu`에 넣는다. 회원 목록·검색·상세·승인·거부는 Studio가 기존 BaaS API로 처리하므로
+회원 복제 컬렉션이나 관리용 serverFn/Lambda를 만들지 않는다. 로그인 배선의 `sync-admin.mjs`가
+공식 SDK 사용 분석으로 이를 멱등 구성한다(`baas-integration-sdk/scaffold/wiring.md` §5).
+
+`pages.<id>.widgets`는 고정 목록 아래, `pages.<id>.member_detail.widgets`는 고정 상세 아래에 표시한다.
+상세 확장은 `member_detail.bindings: {"member_notes": "member_id"}`처럼 실제 업무 컬렉션의 string
+필드와 회원 UUID를 연결한다. 컬렉션 기반 상세 위젯과 연결된 레코드의 related/thread에는 바인딩이
+필수다. `settings`에도 선택 `filter`를 쓸 수 있다. 기존 필터와 회원 조건은 함께 적용된다.
+상세에서 연 폼의 연결 필드는 서버가 생성 시 채우고 변경을 막는다. 수정·삭제 대상도 회원 소속을
+확인한다. `panel`, 액션, 폼의 owner serverFn에는 검증한 `member_id`가 전달된다. 함수는 이 문맥으로
+업무 규칙을 적용한다. 네이티브 회원 테이블을 동적 reference로 참조하거나, 요청하지 않은 메모·태그
+컬렉션을 자동 생성하지 않는다. 이 페이지와 확장은 소유자만 사용하며 미리보기는 조회만 가능하다.
+
 ```json
 {
   "version": 1,

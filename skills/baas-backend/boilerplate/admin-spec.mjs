@@ -130,6 +130,8 @@ function shape(value, schemaIn, where, errors) {
 
 // ── 2. 참조 ──────────────────────────────────────────────────────────────
 
+const allWidgets = page => [...page.widgets, ...(page.member_detail?.widgets ?? [])]
+
 const asList = (v) => (v === undefined || v === null ? [] : Array.isArray(v) ? v : [v])
 
 /** `access` 한 연산 값에 `service` 가 들어 있는가(문자열·배열 모두). */
@@ -207,7 +209,27 @@ function references(spec, collections, serviceOps, access) {
   }
 
   for (const [pid, page] of Object.entries(spec.pages ?? {})) {
-    page.widgets.forEach((w, i) => {
+    const detail = page.member_detail
+    if (detail) {
+      const where = `pages.${pid}.member_detail`
+      if (page.component !== 'members') err(where, '회원 상세는 component=members 페이지에만 선언할 수 있습니다')
+      const bindings = detail.bindings ?? {}
+      for (const [name, link] of Object.entries(bindings)) {
+        const fields = fieldsOf(name)
+        if (!fields || fields.get(link)?.type !== 'string' || (spec.hidden ?? []).includes(name)) {
+          err(`${where}.bindings`, `'${name}.${link}'은 표시 가능한 컬렉션의 문자열 칸이어야 합니다`)
+        }
+        const recordDetail = spec.details?.[name]
+        const related = [...(recordDetail?.related ?? []), ...(recordDetail?.thread ? [recordDetail.thread] : [])]
+        for (const target of related) if (!(target.collection in bindings)) err(where, `'${target.collection}'의 회원 바인딩이 필요합니다`)
+      }
+      for (const widget of detail.widgets ?? []) {
+        const names = widget.type === 'panel' ? [] : widget.type === 'stat'
+          ? [widget.source?.collection, widget.minus?.collection].filter(Boolean) : [widget.collection]
+        for (const name of names) if (!(name in bindings)) err(where, `'${name}'의 회원 바인딩이 필요합니다`)
+      }
+    }
+    allWidgets(page).forEach((w, i) => {
       const where = `pages.${pid}.widgets[${i}](${w.type})`
       if (w.type === 'stat') {
         for (const src of [w.source, w.minus].filter(Boolean)) {
@@ -313,7 +335,7 @@ function references(spec, collections, serviceOps, access) {
       open(name, del.archive ? 'update' : 'delete', where)
     }
     for (const [pid, page] of Object.entries(spec.pages ?? {})) {
-      page.widgets.forEach((w, i) => {
+      allWidgets(page).forEach((w, i) => {
         if (w.type !== 'list') return
         const where = `pages.${pid}.widgets[${i}](list)`
         if (w.create) viaForm(w.create.form, 'create', where)
@@ -364,7 +386,7 @@ export function declaredCalls(spec) {
   const out = []
   const add = (name, where) => name && out.push({ name, where })
   for (const [pid, page] of Object.entries(spec.pages ?? {})) {
-    page.widgets.forEach((w, i) => {
+    allWidgets(page).forEach((w, i) => {
       const where = `pages.${pid}.widgets[${i}](${w.type})`
       for (const a of w.actions ?? []) add(a.call, `${where}.actions`)
       for (const b of w.bulk ?? []) add(b.call, `${where}.bulk`)

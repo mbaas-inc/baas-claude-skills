@@ -1152,6 +1152,62 @@
    ],
    "type": "object"
   },
+  "MemberDetail": {
+   "additionalProperties": false,
+   "properties": {
+    "bindings": {
+     "additionalProperties": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "widgets": {
+     "items": {
+      "discriminator": {
+       "mapping": {
+        "agenda": "#/$defs/AgendaW",
+        "breakdown": "#/$defs/BreakdownW",
+        "list": "#/$defs/ListW",
+        "panel": "#/$defs/PanelW",
+        "settings": "#/$defs/SettingsW",
+        "stat": "#/$defs/StatW",
+        "timeline": "#/$defs/TimelineW",
+        "trend": "#/$defs/TrendW"
+       },
+       "propertyName": "type"
+      },
+      "oneOf": [
+       {
+        "$ref": "#/$defs/ListW"
+       },
+       {
+        "$ref": "#/$defs/StatW"
+       },
+       {
+        "$ref": "#/$defs/AgendaW"
+       },
+       {
+        "$ref": "#/$defs/TimelineW"
+       },
+       {
+        "$ref": "#/$defs/SettingsW"
+       },
+       {
+        "$ref": "#/$defs/BreakdownW"
+       },
+       {
+        "$ref": "#/$defs/TrendW"
+       },
+       {
+        "$ref": "#/$defs/PanelW"
+       }
+      ]
+     },
+     "type": "array"
+    }
+   },
+   "type": "object"
+  },
   "OfField": {
    "additionalProperties": false,
    "properties": {
@@ -1230,6 +1286,27 @@
       ]
      },
      "type": "array"
+    },
+    "component": {
+     "anyOf": [
+      {
+       "const": "members",
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "member_detail": {
+     "anyOf": [
+      {
+       "$ref": "#/$defs/MemberDetail"
+      },
+      {
+       "type": "null"
+      }
+     ]
     }
    },
    "required": [
@@ -1435,6 +1512,10 @@
        "type": "null"
       }
      ]
+    },
+    "filter": {
+     "additionalProperties": true,
+     "type": "object"
     }
    },
    "required": [
