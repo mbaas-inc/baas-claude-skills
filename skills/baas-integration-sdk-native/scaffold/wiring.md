@@ -100,3 +100,26 @@ products.map(...);                 // ✅ tsc 통과 — 그러나 런타임 크
 - 새 훅/기능을 붙이면 코드만 바꾸면 되고 manifest 는 다음 build 에서 자동 반영된다(에이전트가 manifest 를
   손대야 한다는 규약 자체가 불필요해진다). 단 **신규 훅을 SDK 에 추가할 때는 `features.json.hook_groups` 에
   그 훅→group 매핑을 넣어야** 한다(매핑 없으면 sync 가 경고).
+
+## 5. 로그인·가입의 고정 회원관리
+
+로그인·가입을 붙이면 `backend/admin.json`에 `component: "members"`인 페이지와 메뉴를 함께 둔다.
+회원 목록·검색·상세·승인·거부는 Studio 고정 컴포넌트가 기존 BaaS 회원 API를 사용한다.
+이를 위한 회원 복제 컬렉션, 앱 내부 관리자 화면, serverFn, Lambda는 만들지 않는다.
+
+공식 `features.json.admin_components.members.usage_symbols`와 `scaffold/sync-admin.mjs`가 사용 판정의 정본이다.
+실제 SDK 호출을 AST로 분석하며 `AuthProvider`·`useAuth`·승인 설정만으로는 회원 페이지를 만들지 않는다.
+Studio는 validate와 작업공간 저장 전에 이 도구를 실행한다. 다른 코딩 환경에서는 다음을 실행한다:
+
+```bash
+node skills/baas-integration-sdk-native/scaffold/sync-admin.mjs --root . --metadata skills/baas-integration-sdk-native/features.json --checker skills/baas-backend/boilerplate/admin-spec.mjs --install
+```
+
+- 기존 `component: "members"` 페이지를 재사용한다. 페이지 ID 충돌, 메뉴 순서, 기존 위젯·상세 확장을 보존한다.
+- 로그인만 있는 앱에도 `backend/admin.json`만 만든다. 백엔드 추출이나 프로비저닝은 필요하지 않다.
+- `scripts/baas-admin/`에는 검증된 도구·메타데이터·JSON Schema를 저장하고 validate/prebuild에 `--check`를 연결한다.
+  이 사본은 출시 버전의 계약이다. 출시에서는 저장된 버전을 검사만 하며 과거 `admin.json`을 자동 수정하지 않는다.
+- 로그인 코드를 수정한 뒤 위 명령으로 동기화하고 저장한다. `--check` 실패를 없애기 위해 검사를 삭제하지 않는다.
+- 사용자 요청에 추가 회원 데이터가 있을 때만 업무 컬렉션을 설계한다. 회원 UUID는 string 필드로 연결한다.
+  고정 페이지 아래는 `widgets`, 회원 상세 아래는 `member_detail.bindings`와 `member_detail.widgets`로 확장한다.
+  네이티브 회원 테이블을 동적 `reference` 대상으로 선언하지 않는다.

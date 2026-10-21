@@ -5,6 +5,19 @@
   "surface_ref": "reference/sdk-surface.md",
   "scaffold_ref": "scaffold/wiring.md",
   "fallback": "표면에 없는 기능은 이 스킬 범위 밖입니다. 임의 fetch 코드를 만들지 말고 사용자에게 미지원임을 알리세요(raw API 이스케이프 해치 없음 — 모든 백엔드 호출은 SDK 경유).",
+  "admin_components": {
+    "members": {
+      "usage_symbols": [
+        "useLogin",
+        "useSignup",
+        "useSmsLogin",
+        "loginWithSms",
+        "signupWithSms",
+        "getSnsProviders"
+      ],
+      "description": "실제 SDK 로그인·가입 호출을 사용하면 고정 회원관리 페이지를 구성한다. AuthProvider·useAuth 또는 승인 설정만으로는 구성하지 않는다."
+    }
+  },
   "hook_groups": {
     "useAuth": "account",
     "useLogin": "account",
